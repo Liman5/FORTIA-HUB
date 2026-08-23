@@ -1,0 +1,732 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: #021231;
+    color: #f8fafc;
+    overflow-x: hidden;
+  }
+
+  img {
+    content-visibility: auto;
+  }
+}
+
+/* ===== MODE CLAIR GLOBAL =====
+   En mode clair (html.light), on remplace les fonds sombres
+   par un gris très léger pour les sections et un blanc pur
+   pour les cartes, avec des bordures et ombres visibles.
+*/
+html.light {
+  background-color: #f8fafc;
+}
+
+html.light body,
+html.light .min-h-screen {
+  background-color: #f8fafc !important;
+  color: #0f172a;
+}
+
+/* --- Fonds sombres des sections -> gris très léger pour contraster --- */
+html.light [class*="bg-[#021231]"] {
+  background-color: #f8fafc !important;
+}
+html.light [class*="bg-[#011D46]"]:not(.vendor-header-banner) {
+  background-color: #f8fafc !important;
+}
+html.light [class*="bg-[#010d24]"] {
+  background-color: #ffffff !important;
+}
+html.light [class*="bg-slate-900"] {
+  background-color: #f8fafc !important;
+}
+html.light [class*="bg-gradient-to-b from-[#021231]"] {
+  background-color: #f8fafc !important;
+  background-image: none !important;
+}
+
+/* --- Textes clairs -> sombres --- */
+html.light [class*="text-white"] {
+  color: #0f172a !important;
+}
+html.light [class*="text-slate-100"] {
+  color: #0f172a !important;
+}
+html.light [class*="text-slate-200"] {
+  color: #1e293b !important;
+}
+html.light [class*="text-slate-300"] {
+  color: #334155 !important;
+}
+html.light [class*="text-slate-400"] {
+  color: #64748b !important;
+}
+html.light [class*="text-slate-500"] {
+  color: #64748b !important;
+}
+
+/* --- Bordures sombres -> bordure visible --- */
+html.light [class*="border-slate-800"] {
+  border-color: #cbd5e1 !important;
+}
+html.light [class*="border-slate-700"] {
+  border-color: #cbd5e1 !important;
+}
+
+/* --- Cartes glassmorphism -> blanc pur avec bordure grise + ombre --- */
+html.light [class*="bg-white/[0.02]"],
+html.light [class*="bg-white/[0.03]"],
+html.light [class*="bg-white/[0.04]"],
+html.light [class*="bg-white/[0.05]"],
+html.light [class*="bg-white/[0.06]"],
+html.light [class*="bg-white/[0.08]"],
+html.light [class*="bg-white/5"],
+html.light [class*="bg-white/10"] {
+  background-color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* --- Bordures blanches des cartes -> gris bien visible --- */
+html.light [class*="border-white/5"],
+html.light [class*="border-white/10"],
+html.light [class*="border-white/15"],
+html.light [class*="border-white/20"] {
+  border-color: #cbd5e1 !important;
+}
+
+/* --- Overlays sombres sur images -> légers en mode clair --- */
+html.light [class*="bg-[#021231]/30"],
+html.light [class*="bg-[#021231]/40"],
+html.light [class*="bg-[#021231]/50"],
+html.light [class*="bg-[#021231]/60"],
+html.light [class*="bg-[#021231]/70"],
+html.light [class*="bg-[#021231]/80"],
+html.light [class*="bg-[#021231]/85"],
+html.light [class*="bg-[#021231]/90"] {
+  background-color: rgba(15, 23, 42, 0.15) !important;
+}
+
+/* --- Cartes hover shadow plus prononcée --- */
+html.light [class*="hover:shadow-["] {
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* --- Inputs et selects en mode clair --- */
+html.light [class*="bg-white/5"] input,
+html.light [class*="bg-white/5"] select,
+html.light [class*="bg-transparent"] {
+  color: #0f172a !important;
+}
+html.light [class*="placeholder-slate-500"]::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* --- Chips / badges / skills en mode clair --- */
+html.light [class*="text-slate-600"] {
+  color: #475569 !important;
+}
+
+/* --- Lignes de séparation --- */
+html.light [class*="border-white/10"] {
+  border-color: #cbd5e1 !important;
+}
+
+html.light .animated-gradient-text {
+  background-image: linear-gradient(
+    90deg,
+    #d69e25,
+    #f6e05e,
+    #ab6f10,
+    #d69e25
+  ) !important;
+}
+
+/* ===== Header Navbar protégé du mode clair ===== */
+.navbar-header {
+  background-color: #021231 !important;
+  border-color: rgba(214, 158, 37, 0.3) !important;
+  color: #ffffff !important;
+}
+html.light .navbar-header {
+  background-color: #021231 !important;
+  border-color: rgba(214, 158, 37, 0.3) !important;
+  color: #ffffff !important;
+}
+html.light .navbar-header .text-white,
+html.light .navbar-header [class*="text-slate-"] {
+  color: #e2e8f0 !important;
+}
+html.light .navbar-header input {
+  background-color: #011d46 !important;
+  color: #ffffff !important;
+  border-color: rgba(214, 158, 37, 0.4) !important;
+}
+html.light .navbar-header input::placeholder {
+  color: #94a3b8 !important;
+}
+html.light .navbar-header button {
+  color: #e2e8f0 !important;
+}
+
+/* ===== Header Vendor Boutique protégé (fond épais) ===== */
+.vendor-header-banner {
+  background-color: #011d46 !important;
+  border-color: rgba(214, 158, 37, 0.4) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4) !important;
+  color: #ffffff !important;
+}
+html.light .vendor-header-banner,
+html.light .vendor-header-banner[class*="bg-[#011D46]"] {
+  background-color: #011d46 !important;
+  border-color: rgba(214, 158, 37, 0.4) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3) !important;
+  color: #ffffff !important;
+}
+html.light .vendor-header-banner .text-white,
+html.light .vendor-header-banner [class*="text-slate-"] {
+  color: #e2e8f0 !important;
+}
+html.light .vendor-header-banner h1,
+html.light .vendor-header-banner h2,
+html.light .vendor-header-banner h3,
+html.light .vendor-header-banner p,
+html.light .vendor-header-banner span,
+html.light .vendor-header-banner strong,
+html.light .vendor-header-banner button {
+  color: #ffffff !important;
+}
+html.light .vendor-header-banner .text-slate-400,
+html.light .vendor-header-banner .text-slate-500 {
+  color: #94a3b8 !important;
+}
+html.light .vendor-header-banner [class*="text-[#D69E25]"] {
+  color: #d69e25 !important;
+}
+html.light .vendor-header-banner input {
+  background-color: #021231 !important;
+  color: #ffffff !important;
+  border-color: rgba(214, 158, 37, 0.4) !important;
+}
+html.light .vendor-header-banner input::placeholder {
+  color: #94a3b8 !important;
+}
+html.light .vendor-header-banner select,
+html.light .vendor-header-banner textarea {
+  background-color: #021231 !important;
+  color: #ffffff !important;
+  border-color: rgba(214, 158, 37, 0.4) !important;
+}
+html.light .vendor-header-banner [class*="bg-white/"] {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+html.light .vendor-header-banner [class*="border-white/"] {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* ===== Bouton hamburger Sidebar protégé ===== */
+.sidebar-menu-btn {
+  background-color: rgba(214, 158, 37, 0.2) !important;
+  border-color: rgba(214, 158, 37, 0.4) !important;
+}
+html.light .sidebar-menu-btn {
+  background-color: rgba(214, 158, 37, 0.2) !important;
+  border-color: rgba(214, 158, 37, 0.4) !important;
+}
+.sidebar-menu-btn svg line {
+  stroke: #d69e25 !important;
+}
+html.light .sidebar-menu-btn svg line {
+  stroke: #d69e25 !important;
+}
+.sidebar-menu-btn:hover,
+html.light .sidebar-menu-btn:hover {
+  background-color: #d69e25 !important;
+  border-color: #d69e25 !important;
+}
+.sidebar-menu-btn:hover svg line,
+html.light .sidebar-menu-btn:hover svg line {
+  stroke: #021231 !important;
+}
+
+/* ===== Protection logo FORTIA HUB du mode clair ===== */
+.fortia-logo-container {
+  background-color: transparent;
+}
+html.light .fortia-logo-container {
+  background-color: #011d46 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+}
+html.light .fortia-logo-container:hover {
+  background-color: #0f2d5e !important;
+}
+.fortia-logo-text {
+  color: #ffffff !important;
+}
+html.light .navbar-header .fortia-logo-text {
+  color: #ffffff !important;
+}
+.fortia-logo-sub {
+  color: #cbd5e1 !important;
+}
+html.light .fortia-logo-sub {
+  color: #cbd5e1 !important;
+}
+html.light .fortia-logo-sub span {
+  color: #cbd5e1 !important;
+}
+html.light .fortia-logo-sub span:not([class*="bg-"]) {
+  color: #cbd5e1 !important;
+}
+html.light [class*="bg-[#D69E25]"]:not([class*="bg-[#D69E25]/"]) {
+  background-color: #d69e25 !important;
+}
+
+/* ===== Sidebar en mode clair ===== */
+html.light [class*="bg-[#011D46]"] {
+  background-color: #ffffff !important;
+}
+html.light .sidebar-panel {
+  background-color: #ffffff !important;
+  border-color: #d69e25 !important;
+}
+html.light .sidebar-header {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+html.light .sidebar-section {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+html.light .sidebar-footer {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+html.light .sidebar-link {
+  color: #334155 !important;
+}
+html.light .sidebar-link:hover {
+  background-color: #f1f5f9 !important;
+  color: #d69e25 !important;
+}
+html.light .sidebar-link-icon {
+  color: #d69e25 !important;
+}
+html.light .sidebar-link-text {
+  color: #334155 !important;
+}
+html.light .sidebar-link-text:hover {
+  color: #d69e25 !important;
+}
+html.light .sidebar-label {
+  color: #94a3b8 !important;
+}
+html.light .sidebar-title {
+  color: #d69e25 !important;
+}
+html.light .sidebar-close-btn {
+  color: #64748b !important;
+  background-color: #f1f5f9 !important;
+}
+html.light .sidebar-close-btn:hover {
+  color: #ef4444 !important;
+  background-color: #fee2e2 !important;
+}
+html.light .sidebar-divider {
+  border-color: #e2e8f0 !important;
+}
+html.light .sidebar-footer-text {
+  color: #64748b !important;
+}
+html.light .sidebar-footer-sub {
+  color: #94a3b8 !important;
+}
+html.light .sidebar-backdrop {
+  background-color: rgba(15, 23, 42, 0.5) !important;
+}
+html.light .sidebar-btn-auth {
+  color: #d69e25 !important;
+  border-color: #d69e25 !important;
+  background-color: #fffbeb !important;
+}
+html.light .sidebar-btn-auth:hover {
+  color: #021231 !important;
+  background-color: #d69e25 !important;
+}
+html.light .sidebar-btn-connect {
+  background-color: #d69e25 !important;
+  color: #021231 !important;
+}
+html.light .sidebar-btn-connect:hover {
+  background-color: #f6e05e !important;
+}
+html.light .sidebar-link-hover {
+  background-color: #f1f5f9 !important;
+}
+html.light .sidebar-link-hover:hover {
+  background-color: #e2e8f0 !important;
+  color: #d69e25 !important;
+}
+html.light .sidebar-account-btn {
+  background-color: #fffbeb !important;
+  border-color: #d69e25 !important;
+  color: #d69e25 !important;
+}
+html.light .sidebar-account-btn:hover {
+  background-color: #d69e25 !important;
+  color: #021231 !important;
+}
+
+/* ===== Bouton Panier Marketplace & Formations - Protégé du mode clair ===== */
+/* Spécificité maximale pour surpasser html.light [class*="bg-[#021231]"] */
+.shop-cart-btn,
+html.light .shop-cart-btn,
+html.light .shop-cart-btn:not([class]),
+html.light .shop-cart-btn[class*="rounded"],
+html.light section .shop-cart-btn,
+html.light div .shop-cart-btn,
+html.light .shop-cart-btn:hover,
+html.light section .shop-cart-btn:hover {
+  background-color: #021231 !important;
+  border-color: rgba(214, 158, 37, 0.8) !important;
+  color: #d69e25 !important;
+}
+.shop-cart-btn svg,
+html.light .shop-cart-btn svg,
+html.light section .shop-cart-btn svg {
+  color: #d69e25 !important;
+}
+.shop-cart-btn:hover,
+html.light .shop-cart-btn:hover,
+html.light section .shop-cart-btn:hover {
+  background-color: #d69e25 !important;
+  border-color: #d69e25 !important;
+  color: #021231 !important;
+}
+.shop-cart-btn:hover svg,
+html.light .shop-cart-btn:hover svg,
+html.light section .shop-cart-btn:hover svg {
+  color: #021231 !important;
+}
+
+/* ===== Panneau Admin Moderne - Mode clair uniforme ===== */
+.admin-page-shell {
+  min-height: 100vh;
+}
+
+/* En mode clair, tout l'admin suit le thème clair :
+   fonds convertis en clair, textes en sombres par le CSS global. */
+
+/* Charts SVG admin - couleurs de texte adaptatives */
+html.light .admin-page-shell svg text,
+html.light .admin-page-shell svg tspan {
+  fill: #0f172a !important;
+}
+
+/* Tous les inputs admin suivent le mode clair */
+html.light .admin-page-shell input,
+html.light .admin-page-shell select,
+html.light .admin-page-shell textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+html.light .admin-page-shell input::placeholder,
+html.light .admin-page-shell textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* ===== Header Admin PROTÉGÉ du mode clair =====
+   Le header admin garde son fond sombre et ses boutons sombres
+   pour rester élégant et lisible en mode clair comme en mode nuit. */
+.admin-header-protected {
+  background-color: #021231 !important;
+  border-color: rgba(214, 158, 37, 0.3) !important;
+  color: #ffffff !important;
+}
+html.light .admin-header-protected,
+html.light .admin-header-protected[class*="bg-[#021231]"] {
+  background-color: #021231 !important;
+  border-color: rgba(214, 158, 37, 0.3) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4) !important;
+  color: #ffffff !important;
+}
+
+/* Conteneur d'actions du header protégé */
+html.light .admin-header-protected [class*="bg-[#011D46]"],
+html.light .admin-header-protected [class*="bg-[#011D46]/80"],
+html.light .admin-header-protected [class*="bg-[#011D46]/90"] {
+  background-color: #011d46 !important;
+}
+
+/* Textes du header admin protégés */
+html.light .admin-header-protected .text-white,
+html.light .admin-header-protected [class*="text-slate-"],
+html.light .admin-header-protected h1,
+html.light .admin-header-protected h2,
+html.light .admin-header-protected h3,
+html.light .admin-header-protected p,
+html.light .admin-header-protected span,
+html.light .admin-header-protected strong,
+html.light .admin-header-protected button {
+  color: #e2e8f0 !important;
+}
+html.light .admin-header-protected .text-emerald-400 {
+  color: #34d399 !important;
+}
+html.light .admin-header-protected .text-red-400 {
+  color: #f87171 !important;
+}
+
+/* Icônes et éléments dorés du header admin */
+html.light .admin-header-protected svg {
+  color: #d69e25 !important;
+}
+html.light .admin-header-protected .admin-gold-text,
+html.light .admin-header-protected span[style*="color"],
+html.light .admin-header-protected [class*="text"][class*="D69E25"] {
+  color: #d69e25 !important;
+}
+
+/* Boutons du header admin */
+html.light .admin-header-protected button:not([class*="bg-"]) {
+  background-color: #011d46 !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(214, 158, 37, 0.4) !important;
+}
+html.light .admin-header-protected button:hover {
+  color: #ffffff !important;
+}
+html.light .admin-header-protected button:hover svg {
+  color: #d69e25 !important;
+}
+
+/* Popup notifications du header admin */
+html.light .admin-header-protected [class*="bg-[#021231]"] {
+  background-color: #021231 !important;
+}
+html.light .admin-header-protected [class*="border-white/"] {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+html.light .admin-header-protected [class*="hover:bg-white/"] {
+  background-color: transparent !important;
+}
+html.light .admin-header-protected [class*="hover:bg-white/"]:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* GPU hardware acceleration & performance optimizations */
+.gpu-layer {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* Prevent image dragging jitter */
+img {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Custom scrollbar optimization for catalog and shop filters */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ===== Marquee animation for Stores Carousel ===== */
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  width: max-content;
+  animation: marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* ===== Animated Gradient Text ===== */
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animated-gradient-text {
+  background: linear-gradient(
+    90deg,
+    #d69e25,
+    #f6e05e,
+    #ab6f10,
+    #d69e25
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: gradient-shift 4s ease infinite;
+  filter: drop-shadow(0 0 20px rgba(214, 158, 37, 0.3));
+}
+
+/* ===== Grid Pattern Background ===== */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(rgba(214, 158, 37, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(214, 158, 37, 0.07) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse at center, black 40%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 70%);
+}
+
+/* ===== Shine Effect for Buttons ===== */
+@keyframes shine {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shine::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  animation: shine 1.5s ease infinite;
+}
+
+/* ===== Custom Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #011d46;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #d69e25, #ab6f10);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #f6e05e, #d69e25);
+}
+
+/* ===== Premium Card Hover ===== */
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(214, 158, 37, 0.4);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 40px rgba(214, 158, 37, 0.1);
+  transform: translateY(-8px);
+}
+
+/* ===== Light mode : cartes glass-card ===== */
+html.light .glass-card {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+html.light .glass-card:hover {
+  border-color: #d69e25 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1), 0 0 20px rgba(214, 158, 37, 0.15) !important;
+}
+
+/* ===== Animation formulaire prestataire ===== */
+@keyframes providerFormIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.provider-form-animate {
+  animation: providerFormIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ===== Smooth Entrance Animations ===== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-15px);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(214, 158, 37, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(214, 158, 37, 0.4);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}

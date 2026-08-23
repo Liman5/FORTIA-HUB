@@ -1,0 +1,1165 @@
+// ============================================================
+// FORTIA HUB — PRISMA SCHEMA
+// Reflet fidèle des 16 fichiers SQL (sql/)
+// Base cible : PostgreSQL (compatible Supabase / Neon / Vercel Postgres)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+enum UserRole {
+  buyer
+  freelance
+  enterprise
+  admin
+
+  @@map("user_role")
+}
+
+enum BadgeType {
+  green
+  gold
+  none
+
+  @@map("badge_type")
+}
+
+enum KycStatus {
+  non_soumis
+  en_attente
+  approuve
+  rejete
+
+  @@map("kyc_status")
+}
+
+enum LessonType {
+  video
+  article
+  quiz
+
+  @@map("lesson_type")
+}
+
+enum CourseLevel {
+  Debutant
+  Intermediaire
+  Avance
+  Expert
+  Tous_niveaux
+
+  @@map("course_level")
+}
+
+enum ProductType {
+  ebook
+  canva_template
+  ai_prompts
+  whitepaper
+  business_plan
+  contract
+  pitch_deck
+  premium_pack
+  course
+  service
+  software
+  template
+
+  @@map("product_type")
+}
+
+enum StoreStatus {
+  active
+  pending
+  suspended
+
+  @@map("store_status")
+}
+
+enum OrderStatus {
+  Paye
+  En_attente_API
+  Echoue
+  Rembourse
+
+  @@map("order_status")
+}
+
+enum PaymentStatus {
+  Valide
+  En_attente
+  Echoue
+  Rembourse
+
+  @@map("payment_status")
+}
+
+enum PaymentGatewayCode {
+  wave
+  orange_money
+  mtn_money
+  card_stripe
+  paypal
+  crypto_usdt_trc20
+
+  @@map("payment_gateway_code")
+}
+
+enum PayoutStatus {
+  En_attente
+  Paye
+  Rejete
+
+  @@map("payout_status")
+}
+
+enum ApplicantType {
+  freelance
+  enterprise
+
+  @@map("applicant_type")
+}
+
+enum ApprovalStatus {
+  En_attente
+  Approuve
+  Rejete
+
+  @@map("approval_status")
+}
+
+enum SupportStatus {
+  Transmis_Enregistre
+  En_cours
+  Resolu
+
+  @@map("support_status")
+}
+
+enum QuoteStatus {
+  Recu
+  En_cours_analyse
+  Devis_valide
+  En_realisation
+
+  @@map("quote_status")
+}
+
+enum NotificationType {
+  info
+  success
+  warning
+
+  @@map("notification_type")
+}
+
+enum GatewayFeeStruct {
+  percentage
+  fixed
+  mixed
+
+  @@map("gateway_fee_struct")
+}
+
+// ============================================================
+// UTILISATEURS & AUTH
+// ============================================================
+model User {
+  id                    String   @id @default(uuid())
+  email                 String   @unique
+  passwordHash          String   @map("password_hash")
+  name                  String
+  phone                 String   @default("")
+  avatar                String   @default("")
+  accountType           UserRole @default(buyer) @map("account_type")
+  badge                 BadgeType @default(none)
+  badgeLabel            String   @default("") @map("badge_label")
+  kycStatus             KycStatus @default(non_soumis) @map("kyc_status")
+  isActive              Boolean  @default(true) @map("is_active")
+  enrolledCourseIds     String[] @default([]) @map("enrolled_course_ids")
+  courseProgress        Json     @default("{}") @map("course_progress")
+  purchasedProductIds   String[] @default([]) @map("purchased_product_ids")
+  earnedCertificates    Json     @default("[]") @map("earned_certificates")
+  paymentHistory        Json     @default("[]") @map("payment_history")
+  deletionRequestedAt   DateTime? @map("deletion_requested_at")
+  deletionScheduledFor  DateTime? @map("deletion_scheduled_for")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  sessions              Session[]
+  enrollments           CourseEnrollment[]
+  courseReviews         CourseReview[]
+  productReviews        ProductReview[]
+  certificates          Certificate[]
+  stores                Store[]
+  products              Product[]
+  vendorApplications    VendorApplication[]
+  kycSubmissions        KycSubmission[]
+  freelanceProfile      FreelanceProfile?
+  enterpriseProfile     EnterpriseProfile?
+  notifications         Notification[]
+  paymentTransactions   PaymentTransaction[]
+  pendingDeletions      PendingDeletion[]
+  purchases             MarketplaceOrder[]
+  trainingCenters       TrainingCenter[]     @relation("TrainingCenters")
+  teachingCourses       Course[]            @relation("TeachingCourses")
+
+
+  @@index([accountType])
+  @@index([badge])
+  @@index([kycStatus])
+  @@map("users")
+}
+
+model AdminUser {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         String   @default("super_admin")
+  isActive     Boolean  @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  sessions     Session[]
+
+  @@map("admin_users")
+}
+
+model Session {
+  id           String    @id @default(uuid())
+  userId       String?   @map("user_id")
+  adminUserId  String?   @map("admin_user_id")
+  token        String    @unique
+  userAgent    String?   @map("user_agent")
+  ipAddress    String?   @map("ip_address")
+  expiresAt    DateTime  @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adminUser    AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  email     String
+  otpCode   String   @map("otp_code")
+  sender    String
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@index([expiresAt])
+  @@map("otp_codes")
+}
+
+model PendingDeletion {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  email       String
+  requestedAt DateTime @default(now()) @map("requested_at")
+  deleteAt    DateTime @map("delete_at")
+  processed   Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([deleteAt])
+  @@index([processed])
+  @@map("pending_deletions")
+}
+
+// ============================================================
+// ACADÉMIE / FORMATIONS
+// ============================================================
+model CourseCategory {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  label       String
+  description String   @default("")
+  iconName    String   @default("") @map("icon_name")
+  displayOrder Int     @default(0) @map("display_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  courses     Course[]
+
+  @@map("course_categories")
+}
+
+model Course {
+  id               String       @id @default(uuid())
+  title            String
+  slug             String       @unique
+  instructorId     String?      @map("instructor_id")
+  centerId         String?      @map("center_id")
+  categoryId       String?      @map("category_id")
+  categoryLabel    String       @map("category_label")
+  description      String       @default("")
+  fullDescription  String       @default("") @map("full_description")
+  level            CourseLevel  @default(Tous_niveaux)
+  durationHours    Int          @default(0) @map("duration_hours")
+  lessonsCount     Int          @default(0) @map("lessons_count")
+  price            Decimal      @default(0) @db.Decimal(10, 2)
+  rating           Decimal      @default(5.0) @db.Decimal(3, 2)
+  reviewsCount     Int          @default(0) @map("reviews_count")
+  studentsCount    Int          @default(0) @map("students_count")
+  image            String       @default("")
+  badge            String       @default("")
+  instructorName   String       @default("") @map("instructor_name")
+  instructorRole   String       @default("") @map("instructor_role")
+  instructorAvatar String       @default("") @map("instructor_avatar")
+  learningOutcomes Json         @default("[]") @map("learning_outcomes")
+  isPublished      Boolean      @default(true) @map("is_published")
+  isFeatured       Boolean      @default(false) @map("is_featured")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  category         CourseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  instructor       User?           @relation("TeachingCourses", fields: [instructorId], references: [id], onDelete: SetNull)
+  center           TrainingCenter? @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  chapters         CourseChapter[]
+  quizzes          CourseQuiz[]
+  enrollments      CourseEnrollment[]
+  reviews          CourseReview[]
+  certificates     Certificate[]
+
+  @@index([categoryId])
+  @@map("courses")
+}
+
+model TrainingCenter {
+  id               String    @id @default(uuid())
+  ownerId          String?   @map("owner_id")
+  centerName       String    @map("center_name")
+  slug             String    @unique
+  description      String    @default("")
+  logo             String    @default("")
+  banner           String    @default("")
+  status           String    @default("pending")
+  isVerified       Boolean   @default(false) @map("is_verified")
+  feePaid          Boolean   @default(false) @map("fee_paid")
+  feeAmountUsd     Decimal   @default(2) @db.Decimal(10, 2) @map("fee_amount_usd")
+  storageQuotaGb   Int       @default(4) @map("storage_quota_gb")
+  storageUsedBytes BigInt    @default(0) @map("storage_used_bytes")
+  pricingConfig    Json      @default("{}") @map("pricing_config")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  owner            User?      @relation("TrainingCenters", fields: [ownerId], references: [id], onDelete: Cascade)
+  courses          Course[]
+  commissions      InstructorCommission[]
+  storagePurchases InstructorStoragePurchase[]
+
+  @@index([ownerId])
+  @@map("training_centers")
+}
+
+model InstructorCommission {
+  id                     String   @id @default(uuid())
+  instructorId           String   @map("instructor_id")
+  centerId               String?  @map("center_id")
+  orderId                String?  @map("order_id")
+  courseId               String?  @map("course_id")
+  courseTitle            String   @map("course_title")
+  amountPaidUsd          Decimal  @default(0) @db.Decimal(10, 2) @map("amount_paid_usd")
+  platformFeeUsd         Decimal  @default(0) @db.Decimal(10, 2) @map("platform_fee_usd")
+  instructorEarningsUsd  Decimal  @default(0) @db.Decimal(10, 2) @map("instructor_earnings_usd")
+  status                 String   @default("En_attente")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  center                 TrainingCenter? @relation(fields: [centerId], references: [id], onDelete: SetNull)
+
+  @@index([instructorId])
+  @@index([courseId])
+  @@map("instructor_commissions")
+}
+
+model InstructorStoragePurchase {
+  id           String   @id @default(uuid())
+  instructorId String   @map("instructor_id")
+  centerId     String?  @map("center_id")
+  amountGb     Int      @map("amount_gb")
+  amountUsd    Decimal  @default(0) @db.Decimal(10, 2) @map("amount_usd")
+  status       String   @default("Paye")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  center       TrainingCenter? @relation(fields: [centerId], references: [id], onDelete: SetNull)
+
+  @@index([instructorId])
+  @@map("instructor_storage_purchases")
+}
+
+model CourseChapter {
+  id           String       @id @default(uuid())
+  courseId     String       @map("course_id")
+  title        String
+  displayOrder Int          @default(0) @map("display_order")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  course       Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons      CourseLesson[]
+
+  @@index([courseId])
+  @@map("course_chapters")
+}
+
+model CourseLesson {
+  id           String      @id @default(uuid())
+  chapterId    String      @map("chapter_id")
+  title        String
+  duration     String      @default("15 min")
+  type         LessonType  @default(video)
+  videoUrl     String      @default("") @map("video_url")
+  content      String      @default("")
+  displayOrder Int         @default(0) @map("display_order")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  chapter      CourseChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId])
+  @@map("course_lessons")
+}
+
+model CourseQuiz {
+  id           String       @id @default(uuid())
+  courseId     String       @map("course_id")
+  question     String
+  explanation  String       @default("")
+  displayOrder Int          @default(0) @map("display_order")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  course       Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  options      QuizOption[]
+
+  @@index([courseId])
+  @@map("course_quizzes")
+}
+
+model QuizOption {
+  id          String     @id @default(uuid())
+  quizId      String     @map("quiz_id")
+  optionText  String     @map("option_text")
+  isCorrect   Boolean    @default(false) @map("is_correct")
+  displayOrder Int       @default(0) @map("display_order")
+
+  quiz        CourseQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([quizId])
+  @@map("quiz_options")
+}
+
+model CourseEnrollment {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  courseId    String    @map("course_id")
+  progress    Int       @default(0)
+  enrolledAt  DateTime  @default(now()) @map("enrolled_at")
+  completedAt DateTime? @map("completed_at")
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+  @@map("course_enrollments")
+}
+
+model CourseReview {
+  id        String   @id @default(uuid())
+  courseId  String   @map("course_id")
+  userId    String   @map("user_id")
+  rating    Int      @default(5)
+  comment   String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, userId])
+  @@index([courseId])
+  @@map("course_reviews")
+}
+
+model Certificate {
+  id                String   @id @default(uuid())
+  certificateNumber String   @unique @map("certificate_number")
+  userId            String?  @map("user_id")
+  courseId          String?  @map("course_id")
+  studentName       String   @map("student_name")
+  courseTitle       String   @map("course_title")
+  category          String
+  issueDate         String   @map("issue_date")
+  grade             String
+  qrCodeUrl         String   @default("") @map("qr_code_url")
+  verified          Boolean  @default(false)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user              User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  course            Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([courseId])
+  @@map("certificates")
+}
+
+// ============================================================
+// MARKETPLACE & PRODUITS
+// ============================================================
+model Store {
+  id              String       @id @default(uuid())
+  vendorId        String?      @map("vendor_id")
+  ownerName       String       @map("owner_name")
+  ownerEmail      String       @map("owner_email")
+  ownerPhone      String       @default("") @map("owner_phone")
+  name            String
+  slug            String       @unique
+  logo            String       @default("")
+  banner          String       @default("")
+  description     String       @default("")
+  categories      String[]     @default([])
+  status          StoreStatus  @default(pending)
+  isVerified      Boolean      @default(false) @map("is_verified")
+  salesCount      Int          @default(0) @map("sales_count")
+  totalRevenueUsd Decimal      @default(0) @db.Decimal(12, 2) @map("total_revenue_usd")
+  rating          Decimal      @default(5.0) @db.Decimal(3, 2)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  vendor          User?        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  payoutInfo      StorePayoutInfo?
+  products        Product[]
+  orders          MarketplaceOrder[]
+  payoutRequests  PayoutRequest[]
+
+  @@index([vendorId])
+  @@map("stores")
+}
+
+model StorePayoutInfo {
+  id            String   @id @default(uuid())
+  storeId       String   @unique @map("store_id")
+  method        String   @default("mobile_money")
+  accountName   String   @map("account_name")
+  accountNumber String   @map("account_number")
+  providerName  String   @default("") @map("provider_name")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("store_payout_info")
+}
+
+model Product {
+  id              String       @id @default(uuid())
+  storeId         String?      @map("store_id")
+  vendorId        String?      @map("vendor_id")
+  storeName       String       @default("FORTIA Digital Official Store") @map("store_name")
+  storeLogo       String       @default("") @map("store_logo")
+  title           String
+  slug            String       @unique
+  type            ProductType  @default(ebook)
+  typeLabel       String       @map("type_label")
+  description     String       @default("")
+  fullDescription String       @default("") @map("full_description")
+  price           Decimal      @default(0) @db.Decimal(10, 2)
+  originalPrice   Decimal?     @db.Decimal(10, 2) @map("original_price")
+  fileFormat      String       @default("PDF") @map("file_format")
+  fileSize        String       @default("10 MB") @map("file_size")
+  image           String       @default("")
+  bannerImage     String       @default("") @map("banner_image")
+  features        Json         @default("[]")
+  downloadUrl     String       @default("#") @map("download_url")
+  isPublished     Boolean      @default(false) @map("is_published")
+  isApproved      Boolean      @default(false) @map("is_approved")
+  isPopular       Boolean      @default(false) @map("is_popular")
+  rating          Decimal      @default(5.0) @db.Decimal(3, 2)
+  reviewsCount    Int          @default(0) @map("reviews_count")
+  salesCount      Int          @default(0) @map("sales_count")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  store           Store?       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  vendor          User?        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  files           ProductFile[]
+  reviews         ProductReview[]
+  orders          MarketplaceOrder[]
+
+  @@index([storeId])
+  @@index([type])
+  @@map("products")
+}
+
+model ProductFile {
+  id          String   @id @default(uuid())
+  productId   String   @map("product_id")
+  fileName    String   @map("file_name")
+  fileUrl     String   @map("file_url")
+  fileSize    String   @default("") @map("file_size")
+  mimeType    String   @default("") @map("mime_type")
+  displayOrder Int     @default(0) @map("display_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_files")
+}
+
+model ProductReview {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  userId    String?  @map("user_id")
+  rating    Int      @default(5)
+  comment   String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+  @@map("product_reviews")
+}
+
+model VendorApplication {
+  id               String         @id @default(uuid())
+  userId           String?        @map("user_id")
+  applicantName    String         @map("applicant_name")
+  email            String
+  phone            String         @default("")
+  storeName        String         @map("store_name")
+  storeCategory    String         @map("store_category")
+  storeDescription String         @default("") @map("store_description")
+  experienceBio    String         @default("") @map("experience_bio")
+  submittedAt      DateTime       @default(now()) @map("submitted_at")
+  status           ApprovalStatus @default(En_attente)
+  adminNotes       String         @default("") @map("admin_notes")
+
+  user             User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("vendor_applications")
+}
+
+model MarketplaceOrder {
+  id                   String      @id @default(uuid())
+  orderNumber          String      @unique @map("order_number")
+  buyerName            String      @map("buyer_name")
+  buyerEmail           String      @map("buyer_email")
+  buyerPhone           String      @default("") @map("buyer_phone")
+  buyerUserId          String?     @map("buyer_user_id")
+  storeId              String?     @map("store_id")
+  storeName            String      @map("store_name")
+  productId            String?     @map("product_id")
+  productTitle         String      @map("product_title")
+  amountUsd            Decimal     @default(0) @db.Decimal(10, 2) @map("amount_usd")
+  platformCommissionUsd Decimal    @default(0) @db.Decimal(10, 2) @map("platform_commission_usd")
+  vendorEarningsUsd    Decimal     @default(0) @db.Decimal(10, 2) @map("vendor_earnings_usd")
+  paymentGateway       String      @default("Wave API") @map("payment_gateway")
+  transactionRef       String      @default("") @map("transaction_ref")
+  status               OrderStatus @default(En_attente_API)
+  createdAt            DateTime    @default(now()) @map("created_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
+
+  store                Store?      @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  product              Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  buyer                User?       @relation(fields: [buyerUserId], references: [id], onDelete: SetNull)
+  paymentTransaction   PaymentTransaction?
+
+  @@index([storeId])
+  @@index([buyerEmail])
+  @@index([buyerUserId])
+  @@map("marketplace_orders")
+}
+
+model PayoutRequest {
+  id                 String       @id @default(uuid())
+  storeId            String?      @map("store_id")
+  storeName          String       @map("store_name")
+  vendorName         String       @map("vendor_name")
+  amountUsd          Decimal      @default(0) @db.Decimal(10, 2) @map("amount_usd")
+  amountFcfa         Decimal      @default(0) @db.Decimal(14, 2) @map("amount_fcfa")
+  payoutMethod       String       @default("") @map("payout_method")
+  accountDetails     String       @default("") @map("account_details")
+  requestedAt        DateTime     @default(now()) @map("requested_at")
+  status             PayoutStatus @default(En_attente)
+  transactionHashOrRef String     @default("") @map("transaction_hash_or_ref")
+
+  store              Store?       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@map("payout_requests")
+}
+
+model PostPurchaseSupport {
+  id            String        @id @default(uuid())
+  orderNumber   String        @default("") @map("order_number")
+  productTitle  String        @map("product_title")
+  lastName      String        @map("last_name")
+  firstName     String        @map("first_name")
+  phoneContact  String        @map("phone_contact")
+  email         String
+  notes         String        @default("")
+  submittedAt   DateTime      @default(now()) @map("submitted_at")
+  forwardedEmail String       @default("") @map("forwarded_email")
+  status        SupportStatus @default(Transmis_Enregistre)
+
+  @@map("post_purchase_support")
+}
+
+// ============================================================
+// FREELANCE
+// ============================================================
+model FreelanceProfile {
+  id                 String         @id @default(uuid())
+  userId             String?        @unique @map("user_id")
+
+  name               String
+  title              String         @default("")
+  bio                String         @default("")
+  avatar             String         @default("")
+  badge              BadgeType      @default(none)
+  badgeLabel         String         @default("") @map("badge_label")
+  category           String         @default("")
+  rating             Decimal        @default(5.0) @db.Decimal(3, 2)
+  completedJobs      Int            @default(0) @map("completed_jobs")
+  hourlyRate         Decimal        @default(0) @db.Decimal(10, 2) @map("hourly_rate")
+  skills             String[]       @default([])
+  kycVerified        Boolean        @default(false) @map("kyc_verified")
+  registrationFeePaid Boolean       @default(false) @map("registration_fee_paid")
+  canReceivePayments Boolean        @default(false) @map("can_receive_payments")
+  canSellServices    Boolean        @default(false) @map("can_sell_services")
+  location           String         @default("")
+  isVisible          Boolean        @default(true) @map("is_visible")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  user               User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services           FreelanceService[]
+  portfolio          FreelancePortfolio[]
+
+  @@index([userId])
+  @@index([category])
+  @@map("freelance_profiles")
+}
+
+model FreelanceService {
+  id              String          @id @default(uuid())
+  freelanceId     String          @map("freelance_id")
+  title           String
+  category        String          @default("")
+  description     String          @default("")
+  startingPrice   Decimal         @default(0) @db.Decimal(10, 2) @map("starting_price")
+  deliveryDays    Int             @default(3) @map("delivery_days")
+  image           String          @default("")
+  ordersCompleted Int             @default(0) @map("orders_completed")
+  rating          Decimal         @default(5.0) @db.Decimal(3, 2)
+  isActive        Boolean         @default(true) @map("is_active")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  freelance       FreelanceProfile @relation(fields: [freelanceId], references: [id], onDelete: Cascade)
+
+  @@index([freelanceId])
+  @@map("freelance_services")
+}
+
+model FreelancePortfolio {
+  id          String           @id @default(uuid())
+  freelanceId String           @map("freelance_id")
+  title       String
+  image       String           @default("")
+  link        String           @default("")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  freelance   FreelanceProfile @relation(fields: [freelanceId], references: [id], onDelete: Cascade)
+
+  @@index([freelanceId])
+  @@map("freelance_portfolio")
+}
+
+// ============================================================
+// ENTREPRISES
+// ============================================================
+model EnterpriseProfile {
+  id                 String       @id @default(uuid())
+  userId             String?      @unique @map("user_id")
+
+  companyName        String       @map("company_name")
+  tagline            String       @default("")
+  description        String       @default("")
+  logo               String       @default("")
+  badge              BadgeType    @default(none)
+  badgeLabel         String       @default("Badge Doré (Société Certifiée)") @map("badge_label")
+  sector             String       @default("")
+  country            String       @default("")
+  verifiedDocuments  Boolean      @default(false) @map("verified_documents")
+  registrationFeePaid Boolean     @default(false) @map("registration_fee_paid")
+  canReceivePayments Boolean      @default(false) @map("can_receive_payments")
+  canSellServices    Boolean      @default(false) @map("can_sell_services")
+  contactEmail       String       @map("contact_email")
+  contactPhone       String       @default("") @map("contact_phone")
+  website            String       @default("")
+  isVisible          Boolean      @default(true) @map("is_visible")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  user               User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team               EnterpriseTeamMember[]
+  portfolio          EnterprisePortfolio[]
+  services           EnterpriseService[]
+
+  @@index([userId])
+  @@index([sector])
+  @@map("enterprise_profiles")
+}
+
+model EnterpriseTeamMember {
+  id           String            @id @default(uuid())
+  enterpriseId String            @map("enterprise_id")
+  name         String
+  role         String            @default("")
+  avatar       String            @default("")
+  displayOrder Int               @default(0) @map("display_order")
+
+  enterprise   EnterpriseProfile @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+
+  @@index([enterpriseId])
+  @@map("enterprise_team")
+}
+
+model EnterprisePortfolio {
+  id           String            @id @default(uuid())
+  enterpriseId String            @map("enterprise_id")
+  title        String
+  category     String            @default("")
+  image        String            @default("")
+  link         String            @default("")
+  displayOrder Int               @default(0) @map("display_order")
+
+  enterprise   EnterpriseProfile @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+
+  @@index([enterpriseId])
+  @@map("enterprise_portfolio")
+}
+
+model EnterpriseService {
+  id           String            @id @default(uuid())
+  enterpriseId String            @map("enterprise_id")
+  title        String
+  startingPrice Decimal          @default(0) @db.Decimal(10, 2) @map("starting_price")
+  description  String            @default("")
+  displayOrder Int               @default(0) @map("display_order")
+
+  enterprise   EnterpriseProfile @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+
+  @@index([enterpriseId])
+  @@map("enterprise_services")
+}
+
+model KycSubmission {
+  id              String         @id @default(uuid())
+  applicantType   ApplicantType  @map("applicant_type")
+  applicantId     String?        @map("applicant_id")
+  applicantName   String         @map("applicant_name")
+  firstName       String         @default("") @map("first_name")
+  lastName        String         @default("") @map("last_name")
+  repRole         String         @default("") @map("rep_role")
+  email           String
+  phone           String         @default("")
+  country         String         @default("")
+  address         String         @default("")
+  documentType    String         @map("document_type")
+  documentNumber  String         @map("document_number")
+  idExpirationDate String        @default("") @map("id_expiration_date")
+  idRectoUrl      String         @default("") @map("id_recto_url")
+  idVersoUrl      String         @default("") @map("id_verso_url")
+  selfieUrl       String         @default("") @map("selfie_url")
+  companyName     String         @default("") @map("company_name")
+  legalForm       String         @default("") @map("legal_form")
+  rccmNumber      String         @default("") @map("rccm_number")
+  companyDocUrl   String         @default("") @map("company_doc_url")
+  documentFileUrl String         @default("") @map("document_file_url")
+  submittedAt     DateTime       @default(now()) @map("submitted_at")
+  status          ApprovalStatus @default(En_attente)
+  adminNotes      String         @default("") @map("admin_notes")
+  rejectionReason String         @default("") @map("rejection_reason")
+
+  applicant       User?          @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([applicantId])
+  @@map("kyc_submissions")
+}
+
+// ============================================================
+// SERVICES AGENCE
+// ============================================================
+model ServicePackage {
+  id            String           @id @default(uuid())
+  title         String
+  category      String           @default("")
+  description   String           @default("")
+  startingPrice Decimal          @default(0) @db.Decimal(10, 2) @map("starting_price")
+  estimatedDays String           @default("3 à 5 jours") @map("estimated_days")
+  iconName      String           @default("Palette") @map("icon_name")
+  deliverables  String[]         @default([])
+  borderStyle   String           @default("gold") @map("border_style")
+  cardAnimation String           @default("fade-up") @map("card_animation")
+  accentColor   String           @default("#D69E25") @map("accent_color")
+  badgeText     String           @default("") @map("badge_text")
+  featured      Boolean          @default(false)
+  isActive      Boolean          @default(true) @map("is_active")
+  displayOrder  Int              @default(0) @map("display_order")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  options       ServiceOption[]
+  quotes        ServiceQuote[]
+
+  @@map("service_packages")
+}
+
+model ServiceOption {
+  id           String         @id @default(uuid())
+  serviceId    String         @map("service_id")
+  name         String
+  price        Decimal        @default(0) @db.Decimal(10, 2)
+  displayOrder Int            @default(0) @map("display_order")
+
+  service      ServicePackage @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@map("service_options")
+}
+
+model ServiceQuote {
+  id            String      @id @default(uuid())
+  clientName    String      @map("client_name")
+  clientEmail   String      @map("client_email")
+  clientPhone   String      @default("") @map("client_phone")
+  serviceId     String?     @map("service_id")
+  serviceTitle  String      @map("service_title")
+  estimatedPrice Decimal    @default(0) @db.Decimal(10, 2) @map("estimated_price")
+  details       String      @default("")
+  deadline      String      @default("")
+  status        QuoteStatus @default(Recu)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  service       ServicePackage? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@map("service_quotes")
+}
+
+// ============================================================
+// BLOG
+// ============================================================
+model BlogCategory {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  slug        String     @unique
+  description String     @default("")
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  posts       BlogPost[]
+
+  @@map("blog_categories")
+}
+
+model BlogPost {
+  id          String       @id @default(uuid())
+  title       String
+  slug        String       @unique
+  excerpt     String       @default("")
+  content     String       @default("")
+  authorName  String       @default("") @map("author_name")
+  authorAvatar String      @default("") @map("author_avatar")
+  authorRole  String       @default("") @map("author_role")
+  categoryId  String?      @map("category_id")
+  category    String       @default("")
+  date        String       @default("")
+  readTime    String       @default("5 min") @map("read_time")
+  image       String       @default("")
+  tags        String[]     @default([])
+  isPublished Boolean      @default(true) @map("is_published")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  blogCategory BlogCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([categoryId])
+  @@map("blog_posts")
+}
+
+// ============================================================
+// NOTIFICATIONS & CONTENU
+// ============================================================
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String?          @map("user_id")
+  title     String
+  message   String           @default("")
+  type      NotificationType @default(info)
+  linkTab   String           @default("") @map("link_tab")
+  isRead    Boolean          @default(false) @map("is_read")
+  isGlobal  Boolean          @default(false) @map("is_global")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model SiteContent {
+  id                 String   @id @default(uuid())
+  heroBadgeText      String   @default("Plateforme Web Premium de Formation & Services Numériques") @map("hero_badge_text")
+  heroTitleText      String   @default("Excellence, Réussite & Prestige :") @map("hero_title_text")
+  heroTitleGradient  String   @default("Maîtrisez les Métiers du Futur") @map("hero_title_gradient")
+  heroSubtitle       String   @default("") @map("hero_subtitle")
+  heroImageUrl       String   @default("") @map("hero_image_url")
+  heroVideoUrl       String   @default("") @map("hero_video_url")
+  heroAudioUrl       String   @default("") @map("hero_audio_url")
+  heroPrimaryCta     String   @default("Explorer les Formations") @map("hero_primary_cta")
+  heroSecondaryCta   String   @default("Explorer la Boutique & Produits") @map("hero_secondary_cta")
+  topAnnouncementBanner String @default("") @map("top_announcement_banner")
+  statStudents       String   @default("15k+") @map("stat_students")
+  statSuccessRate    String   @default("98%") @map("stat_success_rate")
+  statModules        String   @default("45+") @map("stat_modules")
+  footerAboutText    String   @default("") @map("footer_about_text")
+  contactEmail       String   @default("contact@fortia-hub.com") @map("contact_email")
+  contactPhone       String   @default("+228 90 88 99 00") @map("contact_phone")
+  supportHours       String   @default("7J/7 • 08h00 - 22h00 GMT") @map("support_hours")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("site_content")
+}
+
+model PlatformStats {
+  id                           String   @id @default(uuid())
+  totalUsers                   Int      @default(0) @map("total_users")
+  totalAdmins                  Int      @default(0) @map("total_admins")
+  totalCourses                 Int      @default(0) @map("total_courses")
+  totalProducts                Int      @default(0) @map("total_products")
+  totalStores                  Int      @default(0) @map("total_stores")
+  totalOrders                  Int      @default(0) @map("total_orders")
+  totalRevenueUsd              Decimal  @default(0) @db.Decimal(14, 2) @map("total_revenue_usd")
+  totalCommissionsUsd          Decimal  @default(0) @db.Decimal(14, 2) @map("total_commissions_usd")
+  totalPayoutsUsd              Decimal  @default(0) @db.Decimal(14, 2) @map("total_payouts_usd")
+  totalCertificates            Int      @default(0) @map("total_certificates")
+  totalKycPending              Int      @default(0) @map("total_kyc_pending")
+  totalVendorApplicationsPending Int   @default(0) @map("total_vendor_applications_pending")
+  totalSupportSubmissions      Int      @default(0) @map("total_support_submissions")
+  totalServiceQuotes           Int      @default(0) @map("total_service_quotes")
+  updatedAt                    DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_stats")
+}
+
+// ============================================================
+// PAIEMENTS & TRANSACTIONS
+// ============================================================
+model PaymentGateway {
+  id               String             @id @default(uuid())
+  code             PaymentGatewayCode @unique
+  name             String
+  description      String             @default("")
+  isActive         Boolean            @default(false) @map("is_active")
+  isDefault        Boolean            @default(false) @map("is_default")
+  displayOrder     Int                @default(0) @map("display_order")
+  config           Json               @default("{}")
+  feeStructure     GatewayFeeStruct   @default(percentage) @map("fee_structure")
+  feeValue         Decimal            @default(0) @db.Decimal(6, 2) @map("fee_value")
+  feeCurrency      String             @default("USD") @map("fee_currency")
+  minAmountUsd     Decimal            @default(0) @db.Decimal(10, 2) @map("min_amount_usd")
+  maxAmountUsd     Decimal?           @db.Decimal(10, 2) @map("max_amount_usd")
+  supportedCountries String[]         @default([]) @map("supported_countries")
+  bankAccountName  String             @default("") @map("bank_account_name")
+  bankAccountNumber String            @default("") @map("bank_account_number")
+  bankProviderName String             @default("") @map("bank_provider_name")
+  isTestMode       Boolean            @default(true) @map("is_test_mode")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  transactions     PaymentTransaction[]
+
+  @@map("payment_gateways")
+}
+
+model PaymentTransaction {
+  id             String          @id @default(uuid())
+  orderId        String?         @unique @map("order_id")
+
+  gatewayId      String?         @map("gateway_id")
+  userId         String?         @map("user_id")
+  amountUsd      Decimal         @default(0) @db.Decimal(10, 2) @map("amount_usd")
+  amountFcfa     Decimal         @default(0) @db.Decimal(14, 2) @map("amount_fcfa")
+  currency       String          @default("USD")
+  transactionRef String          @unique @map("transaction_ref")
+  providerRef    String          @default("") @map("provider_ref")
+  status         PaymentStatus   @default(En_attente)
+  gatewayResponse Json           @default("{}") @map("gateway_response")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  order          MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  gateway        PaymentGateway?   @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
+  user           User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([gatewayId])
+  @@map("payment_transactions")
+}
+
+model PaymentWebhook {
+  id              String            @id @default(uuid())
+  gatewayCode     PaymentGatewayCode @map("gateway_code")
+  eventType       String            @default("") @map("event_type")
+  payload         Json              @default("{}")
+  receivedAt      DateTime          @default(now()) @map("received_at")
+  processed       Boolean           @default(false)
+  processingError String            @default("") @map("processing_error")
+
+  @@index([gatewayCode])
+  @@index([processed])
+  @@map("payment_webhooks")
+}
+
+model RegistrationFeeConfig {
+  id               String   @id @default(uuid())
+  freelanceFeeUsd  Decimal  @default(15) @db.Decimal(10, 2) @map("freelance_fee_usd")
+  freelanceFeeFcfa Decimal  @default(10000) @db.Decimal(10, 2) @map("freelance_fee_fcfa")
+  enterpriseFeeUsd Decimal  @default(50) @db.Decimal(10, 2) @map("enterprise_fee_usd")
+  enterpriseFeeFcfa Decimal @default(30000) @db.Decimal(10, 2) @map("enterprise_fee_fcfa")
+  buyerFeeUsd      Decimal  @default(0) @db.Decimal(10, 2) @map("buyer_fee_usd")
+  feeEnabled       Boolean  @default(true) @map("fee_enabled")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("registration_fee_config")
+}
+
+model PlatformConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json     @default("{}")
+  description String   @default("")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_config")
+}

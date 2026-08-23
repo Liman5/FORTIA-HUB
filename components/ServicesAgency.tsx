@@ -1,0 +1,480 @@
+"use client";
+
+import React, { useState } from 'react';
+import { motion } from 'motion/react';
+import { ServicePackage, ServiceQuoteRequest } from '../types';
+import { apiWritePlatform } from '../lib/services/platformWrite';
+import {
+  Briefcase,
+  Palette,
+  Image,
+  FileText,
+  Video,
+  Share2,
+  UserCheck,
+  Clock,
+  Check,
+  Calculator,
+  CheckCircle2,
+  ShoppingCart,
+  X,
+  Sparkles,
+  ArrowRight,
+} from 'lucide-react';
+
+interface ServicesAgencyProps {
+  services: ServicePackage[];
+  onSubmitQuote: (quote: ServiceQuoteRequest) => void;
+}
+
+export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
+  services = [],
+  onSubmitQuote
+}) => {
+  const [selectedService, setSelectedService] = useState<ServicePackage | null>(null);
+  const [clientName, setClientName] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [projectDetails, setProjectDetails] = useState('');
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [submittedSuccess, setSubmittedSuccess] = useState(false);
+
+  // Map icon strings to Lucide icon components
+  const getServiceIcon = (name: string) => {
+    switch (name) {
+      case 'Palette': return Palette;
+      case 'Image': return Image;
+      case 'FileText': return FileText;
+      case 'Video': return Video;
+      case 'Share2': return Share2;
+      case 'UserCheck': return UserCheck;
+      default: return Briefcase;
+    }
+  };
+
+  const getBorderClasses = (s?: string) => {
+    switch (s) {
+      case "emerald": return "hover:border-emerald-500/50";
+      case "blue": return "hover:border-blue-500/50";
+      case "purple": return "hover:border-purple-500/50";
+      case "rose": return "hover:border-rose-500/50";
+      case "gradient": return "hover:border-transparent";
+      case "double": return "hover:border-[#D69E25]/60";
+      case "none": return "hover:border-white/30";
+      default: return "hover:border-[#D69E25]/50";
+    }
+  };
+
+  const getAnimationClasses = (a?: string) => {
+    switch (a) {
+      case "fade-up": return "hover:-translate-y-2 transition-all duration-300 hover:shadow-2xl";
+      case "zoom-in": return "hover:scale-105 transition-transform duration-300 hover:shadow-2xl";
+      case "flip": return "hover:rotate-1 hover:scale-[1.02] transition-all duration-300 hover:shadow-2xl";
+      case "slide-in": return "hover:translate-x-2 transition-all duration-300 hover:shadow-2xl";
+      case "pulse": return "hover:animate-pulse transition-all duration-300 hover:shadow-2xl";
+      default: return "transition-all duration-300 hover:shadow-2xl";
+    }
+  };
+
+  const getGlowColor = (s?: string) => {
+    switch (s) {
+      case "emerald": return "rgba(16,185,129,0.15)";
+      case "blue": return "rgba(59,130,246,0.15)";
+      case "purple": return "rgba(168,85,247,0.15)";
+      case "rose": return "rgba(244,63,94,0.15)";
+      default: return "rgba(214,158,37,0.15)";
+    }
+  };
+
+  const activeServices = services.filter(s => s.isActive !== false);
+  
+  const basePrice = selectedService ? Number(selectedService.startingPrice) || 0 : 0;
+  const optionsTotal = selectedService?.options
+    ? selectedService.options
+        .filter(opt => selectedOptions.includes(opt.name))
+        .reduce((sum, opt) => sum + (Number(opt.price) || 0), 0)
+    : 0;
+  
+  const totalEstimate = basePrice + optionsTotal;
+
+  const handleToggleOption = (optName: string) => {
+    if (selectedOptions.includes(optName)) {
+      setSelectedOptions(selectedOptions.filter(o => o !== optName));
+    } else {
+      setSelectedOptions([...selectedOptions, optName]);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedService || !clientName || !clientEmail) return;
+
+    apiWritePlatform("order-service", {
+      clientName,
+      clientEmail,
+      clientPhone,
+      serviceId: selectedService.id,
+      serviceTitle: selectedService.title,
+      estimatedPrice: totalEstimate,
+      details: projectDetails,
+      deadline: selectedService.estimatedDays,
+    });
+
+    const newQuote: ServiceQuoteRequest = {
+      id: `DEV-${Math.floor(100000 + Math.random() * 900000)}`,
+      clientName,
+      clientEmail,
+      clientPhone,
+      serviceId: selectedService.id,
+      serviceTitle: selectedService.title,
+      estimatedPrice: totalEstimate,
+      details: projectDetails,
+      deadline: selectedService.estimatedDays,
+      status: 'Reçu',
+      date: new Date().toLocaleDateString('fr-FR')
+    };
+    onSubmitQuote(newQuote);
+
+    setSubmittedSuccess(true);
+  };
+
+  const closeModal = () => {
+    setSelectedService(null);
+    setSelectedOptions([]);
+    setSubmittedSuccess(false);
+  };
+
+  return (
+    <section className="py-14 bg-[#021231] min-h-[600px] relative overflow-hidden" id="services-section">
+      {/* Background decorations */}
+      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/20 to-transparent" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(214,158,37,0.04)_0%,transparent_50%)]" />
+      <div className="absolute inset-0 bg-grid-pattern opacity-10" />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 relative z-10">
+        {/* Section Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.6 }}
+          className="text-center max-w-3xl mx-auto space-y-4"
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            whileInView={{ scale: 1, opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="inline-flex items-center gap-2 bg-white/5 backdrop-blur-xl border border-[#D69E25]/40 px-4 py-2 rounded-full text-xs font-bold text-[#D69E25] mb-2"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Prestations Sur-Mesure & Agence</span>
+          </motion.div>
+          <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+            Services Professionnels &{" "}
+            <span className="animated-gradient-text inline-block">Conseil Entrepreneurial</span>
+          </h2>
+          <p className="text-slate-400 text-sm leading-relaxed">
+            Profitez de l'expertise de notre équipe créative et stratégique pour concevoir vos logos, affiches, livres blancs, montages vidéo et piloter la croissance de votre entreprise.
+          </p>
+        </motion.div>
+
+        {/* Services Cards Grid */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 max-w-4xl mx-auto">
+          {activeServices.map((serv, index) => {
+            const IconComp = getServiceIcon(serv.iconName);
+            const isSelected = selectedService?.id === serv.id;
+            const accent = serv.accentColor || '#D69E25';
+            const glowColor = getGlowColor(serv.borderStyle);
+            const borderHover = getBorderClasses(serv.borderStyle);
+
+            return (
+              <motion.div
+                key={serv.id}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ duration: 0.5, delay: index * 0.08, ease: "easeOut" }}
+                whileHover={{ y: -8, scale: 1.01 }}
+                onClick={() => {
+                  setSelectedService(serv);
+                  setSelectedOptions([]);
+                  setSubmittedSuccess(false);
+                }}
+                className={`group relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl ${borderHover} ${getAnimationClasses(serv.cardAnimation)} cursor-pointer flex flex-col justify-between space-y-5 overflow-hidden transition-all duration-500`}
+                style={{ boxShadow: isSelected ? `0 0 40px ${glowColor}` : undefined }}
+              >
+                {/* Top border gradient on hover */}
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-20" />
+                <div className="absolute -top-20 -right-20 w-40 h-40 rounded-full bg-white/5 blur-3xl group-hover:bg-[#D69E25]/10 transition-colors duration-500" />
+
+                <div className="p-6 space-y-3 relative">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300"
+                        style={{ backgroundColor: `${accent}20`, border: `1px solid ${accent}40`, color: accent }}
+                      >
+                        <IconComp className="w-6 h-6" />
+                      </div>
+                      {serv.badgeText && (
+                        <span
+                          className="text-[10px] font-bold px-2.5 py-1 rounded-full border"
+                          style={{
+                            color: accent,
+                            borderColor: `${accent}50`,
+                            backgroundColor: `${accent}15`,
+                          }}
+                        >
+                          {serv.featured ? "⭐ " : ""}{serv.badgeText}
+                        </span>
+                      )}
+                      {serv.featured && !serv.badgeText && (
+                        <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full">
+                          ⭐ En avant
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full">
+                      {serv.category}
+                    </span>
+                  </div>
+
+                  <h3 className="font-extrabold text-white text-base group-hover:text-[#D69E25] transition-colors">
+                    {serv.title}
+                  </h3>
+
+                  <p className="text-slate-400 text-xs leading-relaxed line-clamp-3">
+                    {serv.description}
+                  </p>
+
+                  {/* Deliverables List */}
+                  <div className="pt-2 space-y-1.5 border-t border-white/10 text-xs">
+                    {(serv.deliverables || []).slice(0, 3).map((del, i) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <Check className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: accent }} />
+                        <span className="text-[11px] leading-tight text-slate-300">{del}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="px-6 pb-5 pt-3 border-t border-white/10 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs text-slate-500 block font-medium">À partir de</span>
+                    <span className="text-xl font-black text-[#D69E25]">${Number(serv.startingPrice) || 0}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+                      <Clock className="w-3.5 h-3.5" style={{ color: accent }} />
+                      {serv.estimatedDays}
+                    </span>
+                    <ArrowRight className="w-4 h-4 text-[#D69E25] opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-300" />
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* MODALE CALCULATEUR & DEVIS */}
+        {selectedService && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm" onClick={closeModal}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="relative bg-[#021231] text-white rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-y-auto border border-[#D69E25]/40 shadow-2xl shadow-[#D69E25]/10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/50 to-transparent" />
+
+              {/* En-tête modale */}
+              <div className="sticky top-0 bg-[#021231]/95 backdrop-blur-xl z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#D69E25]/30 p-6 pb-4">
+                <div className="flex items-start gap-4">
+                  <div
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-md shrink-0"
+                    style={{ backgroundColor: `${selectedService.accentColor || '#D69E25'}20`, border: `1px solid ${selectedService.accentColor || '#D69E25'}40`, color: selectedService.accentColor || '#D69E25' }}
+                  >
+                    {(() => {
+                      const IconComp = getServiceIcon(selectedService.iconName);
+                      return <IconComp className="w-7 h-7" />;
+                    })()}
+                  </div>
+                  <div>
+                    <span className="bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] text-[10px] font-black px-2.5 py-1 rounded uppercase tracking-wider">
+                      Calculateur & Devis Instantané
+                    </span>
+                    <h3 className="text-lg sm:text-xl font-black text-white mt-1.5">
+                      {selectedService.title}
+                    </h3>
+                    <p className="text-[11px] text-slate-400">{selectedService.estimatedDays} • {selectedService.category}</p>
+                    {/* Description détaillée du service */}
+                    {selectedService.description && (
+                      <p className="text-[11px] sm:text-xs text-slate-300 mt-2 leading-relaxed max-w-lg">
+                        {selectedService.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/[0.04] px-4 py-2 rounded-xl border border-[#D69E25]/40 text-right">
+                    <span className="text-[10px] text-slate-300 block uppercase">Estimation Totale :</span>
+                    <span className="text-2xl font-black text-[#D69E25]">${totalEstimate}</span>
+                    <span className="text-[10px] text-slate-400 block">≈ {Math.round(totalEstimate * 600).toLocaleString("fr-FR")} FCFA</span>
+                  </div>
+                  <button
+                    onClick={closeModal}
+                    className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-red-500/20 hover:text-red-400 transition"
+                    title="Fermer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6">
+                {submittedSuccess ? (
+                  <div className="bg-white/[0.04] p-8 rounded-2xl border border-emerald-500/50 text-center space-y-4">
+                    <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto">
+                      <CheckCircle2 className="w-9 h-9 text-emerald-400" />
+                    </div>
+                    <h4 className="text-xl font-bold text-white">Demande de service envoyée avec succès !</h4>
+                    <p className="text-xs text-slate-300 max-w-xl mx-auto">
+                      <strong>Votre commande a été créée.</strong> Notre équipe a été notifiée et vous recevrez une confirmation par email
+                      {clientPhone ? <span> et sur <strong>WhatsApp</strong> ({clientPhone})</span> : null}.
+                      <br />
+                      Votre service vous sera envoyé une fois la commande traitée.
+                    </p>
+                    <button
+                      onClick={closeModal}
+                      className="px-6 py-2.5 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-bold text-xs rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-[#D69E25]/20"
+                    >
+                      Fermer
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Options Selection Column */}
+                    <div className="lg:col-span-6 space-y-5">
+                      <h4 className="font-bold text-sm text-[#D69E25] flex items-center gap-2">
+                        <Calculator className="w-4 h-4" />
+                        <span>Inclus & Options Supplémentaires</span>
+                      </h4>
+
+                      <div className="space-y-2 bg-white/[0.04] p-4 rounded-xl border border-white/10">
+                        <p className="text-xs font-semibold text-slate-200">Livrables inclus de base :</p>
+                        {(selectedService?.deliverables || []).map((d, idx) => (
+                          <div key={idx} className="flex items-start gap-2 text-xs text-slate-300">
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                            <span>{d}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {selectedService?.options && selectedService.options.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-slate-300">Ajouter des options express :</p>
+                          {selectedService.options.map((opt, i) => {
+                            const isChecked = selectedOptions.includes(opt.name);
+                            return (
+                              <div
+                                key={i}
+                                onClick={() => handleToggleOption(opt.name)}
+                                className={`p-3.5 rounded-xl border cursor-pointer flex items-center justify-between text-xs transition-all duration-300 ${
+                                  isChecked
+                                    ? 'bg-[#D69E25]/15 border-[#D69E25] text-white font-bold shadow-lg shadow-[#D69E25]/10'
+                                    : 'bg-white/[0.03] border-white/10 text-slate-300 hover:border-[#D69E25]/40'
+                                }`}
+                              >
+                                <span className="flex items-center gap-2">
+                                  <span className={`w-4 h-4 rounded-md border flex items-center justify-center transition ${
+                                    isChecked ? 'bg-[#D69E25] border-[#D69E25]' : 'border-slate-500'
+                                  }`}>
+                                    {isChecked && <Check className="w-3 h-3 text-[#021231]" />}
+                                  </span>
+                                  {opt.name}
+                                </span>
+                                <span className="text-[#D69E25] font-extrabold">+${Number(opt.price) || 0}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Client Contact Inputs Column */}
+                    <div className="lg:col-span-6 space-y-4 bg-white/[0.03] p-6 rounded-2xl border border-white/10">
+                      <h4 className="font-bold text-sm text-white">Vos Coordonnées & Cahier des Charges</h4>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-300 block mb-1">Nom complet *</label>
+                        <input
+                          type="text"
+                          required
+                          value={clientName}
+                          onChange={(e) => setClientName(e.target.value)}
+                          placeholder="Ex: Amadou Diallo"
+                          className="w-full bg-white/5 border border-white/15 text-white text-xs rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-[#D69E25]/60 focus:ring-1 focus:ring-[#D69E25]/30 transition placeholder-slate-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-300 block mb-1">Adresse Email *</label>
+                          <input
+                            type="email"
+                            required
+                            value={clientEmail}
+                            onChange={(e) => setClientEmail(e.target.value)}
+                            placeholder="adresse.email@domaine.com"
+                            className="w-full bg-white/5 border border-white/15 text-white text-xs rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-[#D69E25]/60 focus:ring-1 focus:ring-[#D69E25]/30 transition placeholder-slate-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-300 block mb-1">Téléphone / WhatsApp</label>
+                          <input
+                            type="tel"
+                            value={clientPhone}
+                            onChange={(e) => setClientPhone(e.target.value)}
+                            placeholder="+221 77 000 00 00"
+                            className="w-full bg-white/5 border border-white/15 text-white text-xs rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-[#D69E25]/60 focus:ring-1 focus:ring-[#D69E25]/30 transition placeholder-slate-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-300 block mb-1">Détails du projet & attentes</label>
+                        <textarea
+                          rows={3}
+                          value={projectDetails}
+                          onChange={(e) => setProjectDetails(e.target.value)}
+                          placeholder="Décrivez brièvement les couleurs souhaitées, le thème, le contexte de votre marque..."
+                          className="w-full bg-white/5 border border-white/15 text-white text-xs rounded-xl p-3 focus:outline-none focus:border-[#D69E25]/60 focus:ring-1 focus:ring-[#D69E25]/30 transition placeholder-slate-500"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="group relative w-full inline-flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-[#D69E25] via-[#F6E05E] to-[#AB6F10] bg-[length:200%_auto] hover:bg-right text-[#021231] font-black text-xs rounded-xl shadow-lg shadow-[#D69E25]/30 transition-all duration-300 active:scale-95 overflow-hidden"
+                      >
+                        <span className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 group-hover:animate-shine transition-opacity" />
+                        <ShoppingCart className="w-4 h-4" />
+                        <span>Commander ce Service (${totalEstimate})</span>
+                      </button>
+
+                      <p className="text-[10px] text-slate-500 text-center">
+                        🔒 Vos informations sont sécurisées. Un ordre de service sera créé et notre équipe vous contactera.
+                      </p>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};

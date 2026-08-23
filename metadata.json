@@ -1,0 +1,6 @@
+{
+  "name": "FORTIA HUB",
+  "description": "Plateforme Web Premium de Formation, Services et Boutique Numérique - Learn. Build. Succeed.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

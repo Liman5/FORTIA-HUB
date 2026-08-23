@@ -1,0 +1,124 @@
+{
+  "name": "FORTIA HUB - Académie, Services & Marketplace",
+  "short_name": "FORTIA HUB",
+  "description": "Plateforme Web Premium de Formation, Services et Boutique Numérique. Formez-vous, accédez à des services professionnels et téléchargez des ressources numériques de haut niveau.",
+  "start_url": "/",
+  "scope": "/",
+  "id": "fortia-hub-app",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#021231",
+  "theme_color": "#021231",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["education", "business", "shopping", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/pwa-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "FORTIA HUB - Tableaud de bord & Académie sur Ordinateur"
+    },
+    {
+      "src": "/screenshot-narrow.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "FORTIA HUB - Application Mobile"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Académie",
+      "short_name": "Académie",
+      "description": "Accéder aux cours et formations",
+      "url": "/?tab=courses",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Marketplace",
+      "short_name": "Boutique",
+      "description": "Ressources et produits numériques",
+      "url": "/?tab=shop",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Services",
+      "short_name": "Services",
+      "description": "Commandez nos prestations sur mesure",
+      "url": "/?tab=services",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Espace Membre",
+      "short_name": "Compte",
+      "description": "Accéder à mon espace personnel",
+      "url": "/?tab=member",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}
