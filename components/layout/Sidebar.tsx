@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useActiveSection } from "@/lib/store/useActiveSection";
-import { usePwaInstall, promptInstall } from "@/lib/pwa/pwaStore";
+import { usePwaInstall, promptInstall, getInstallDiagnostics } from "@/lib/pwa/pwaStore";
 import { Download, Check } from "lucide-react";
 
 interface SidebarProps {
@@ -36,7 +36,7 @@ const sidebarLinks = [
 
 export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: SidebarProps) {
   const { setActiveTab } = useActiveSection();
-  const { isInstalled, canInstall, isIOS } = usePwaInstall();
+  const { isInstalled, isIOS } = usePwaInstall();
   const [installMsg, setInstallMsg] = useState<string | null>(null);
 
   const handleNav = (tab: string) => {
@@ -49,17 +49,33 @@ export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: Si
     const installed = await promptInstall();
     if (installed) return;
 
-    // L'invite native n'a pas pu s'ouvrir → guider l'utilisateur
+    // L'invite native n'a pas pu s'ouvrir → diagnostiquer puis guider l'utilisateur
     if (isIOS) {
       setInstallMsg(
         "Sur iPhone/iPad : ouvrez Safari → bouton Partager → « Sur l'écran d'accueil » pour installer l'app."
       );
-    } else if (!canInstall) {
+      return;
+    }
+
+    const diag = await getInstallDiagnostics();
+    if (!diag.swSupported) {
       setInstallMsg(
-        "L'installation n'est pas encore disponible sur ce navigateur. Utilisez Chrome ou Edge (PC/Android), ou réessayez après quelques secondes. Si vous êtes sur l'app installée, rien à faire : vous l'utilisez déjà."
+        "Ce navigateur ne supporte pas l'installation d'applications web. Utilisez Google Chrome ou Microsoft Edge (PC / Android)."
+      );
+    } else if (!diag.secureContext) {
+      setInstallMsg(
+        "La page n'est pas servie en HTTPS : l'installation PWA est bloquée par le navigateur. Ouvrez le site en https:// pour pouvoir installer l'app."
+      );
+    } else if (diag.standalone) {
+      setInstallMsg("Vous utilisez déjà l'application installée. Il n'y a rien de plus à télécharger.");
+    } else if (!diag.swRegistered) {
+      setInstallMsg(
+        "Le service worker n'a pas pu être enregistré. Rechargez la page (F5) puis cliquez à nouveau sur « Télécharger l'App »."
       );
     } else {
-      setInstallMsg("L'invite d'installation a été fermée. Cliquez à nouveau pour réessayer.");
+      setInstallMsg(
+        "Chrome n'a pas affiché l'invite automatique. Utilisez le menu ⋮ (en haut à droite) → « Installer FORTIA HUB », ou rechargez la page puis réessayez."
+      );
     }
   };
 

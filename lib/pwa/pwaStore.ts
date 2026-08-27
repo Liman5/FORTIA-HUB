@@ -151,12 +151,33 @@ function waitForPrompt(timeoutMs: number): Promise<boolean> {
   });
 }
 
+/**
+ * Garantit que le service worker est enregistré (nécessaire pour que Chrome
+ * émette `beforeinstallprompt`). Appelé avant d'attendre l'invite.
+ */
+async function ensureServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return null;
+  try {
+    const existing = await navigator.serviceWorker.getRegistration();
+    if (existing) return existing;
+    return await navigator.serviceWorker.register("/sw.js");
+  } catch (e) {
+    console.warn("[PWA] Enregistrement du service worker impossible:", e);
+    return null;
+  }
+}
+
 /** Lance l'invite d'installation native (ou renvoie false si impossible). */
 export async function promptInstall(): Promise<boolean> {
   // Si l'invite n'est pas encore capturée, on attend qu'elle arrive
   // (service worker pas encore actif au tout premier chargement).
   if (!deferredPrompt) {
-    const ok = await waitForPrompt(4000);
+    let ok = await waitForPrompt(3000);
+    if (!ok || !deferredPrompt) {
+      // Le service worker n'est peut-être pas enregistré → on le force, puis on re-attend.
+      await ensureServiceWorker();
+      ok = await waitForPrompt(3000);
+    }
     if (!ok || !deferredPrompt) return false;
   }
 
@@ -173,6 +194,39 @@ export async function promptInstall(): Promise<boolean> {
     console.warn("[PWA] Erreur lors de l'installation:", err);
     return false;
   }
+}
+
+export interface InstallDiagnostics {
+  swSupported: boolean;
+  secureContext: boolean;
+  swRegistered: boolean;
+  swControlling: boolean;
+  promptCaptured: boolean;
+  standalone: boolean;
+}
+
+/**
+ * Retourne un diagnostic technique de l'installation (affiché dans le message
+ * d'aide du sidebar) pour expliquer pourquoi `beforeinstallprompt` n'arrive pas.
+ */
+export async function getInstallDiagnostics(): Promise<InstallDiagnostics> {
+  let swRegistered = false;
+  let swControlling = false;
+  if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      swRegistered = !!reg;
+      swControlling = !!navigator.serviceWorker.controller;
+    } catch (e) {}
+  }
+  return {
+    swSupported: typeof window !== "undefined" && "serviceWorker" in navigator,
+    secureContext: typeof window !== "undefined" ? window.isSecureContext : false,
+    swRegistered,
+    swControlling,
+    promptCaptured: !!deferredPrompt,
+    standalone: isStandalone || isInstalled,
+  };
 }
 
 /** Hook React pour lire l'état PWA partagé. */
