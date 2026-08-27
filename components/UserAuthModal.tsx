@@ -30,6 +30,7 @@ import {
   apiCheckEmailAvailability,
   apiSendOtp,
   apiVerifyOtp,
+  apiVerifyTwoFactor,
   SENDER_EMAIL_OFFICIAL 
 } from '../services/api';
 
@@ -58,12 +59,14 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
   const [accountType, setAccountType] = useState<'buyer' | 'freelance' | 'enterprise'>('freelance');
   
   // OTP Verification state (6 numeric digits)
-  const [step, setStep] = useState<'form' | 'otp'>('form');
+  const [step, setStep] = useState<'form' | 'otp' | 'twofa'>('form');
   const [otpInput, setOtpInput] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
   const [otpSender, setOtpSender] = useState(SENDER_EMAIL_OFFICIAL);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
   const [confirmationEmailSent, setConfirmationEmailSent] = useState(false);
+  // Défi JWT reçu lors du login quand la 2FA est activée
+  const [twoFactorToken, setTwoFactorToken] = useState('');
 
   // Validation state & errors
   const [loading, setLoading] = useState(false);
@@ -75,17 +78,6 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
   const emailValidation = validateEmailFormat(email);
   const passwordValidation = validatePassword(password);
 
-  const handleQuickDemoLogin = () => {
-    onLoginSuccess({
-      email: 'sanaaraav@gmail.com',
-      name: 'Utilisateur Membre',
-      phone: '+221 77 000 00 00',
-      accountType: 'freelance'
-    });
-    resetForm();
-    onClose();
-  };
-
   const resetForm = () => {
     setName('');
     setEmail('');
@@ -95,6 +87,7 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
     setStep('form');
     setOtpInput('');
     setGeneratedOtp('');
+    setTwoFactorToken('');
     setConfirmationEmailSent(false);
     setRefusalError(null);
     setSuccessMsg(null);
@@ -234,9 +227,17 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
 
     setLoading(false);
 
-    if (!res.success) {
+    if (!res.success || !res.data) {
       // Refuse connection on bad credentials or non-existent user
       setRefusalError(res.error || "Connexion refusée : Adresse e-mail ou mot de passe incorrect.");
+      return;
+    }
+
+    // Authentification à deux facteurs requise
+    if (res.data.needsTwoFactor) {
+      setStep('twofa');
+      setTwoFactorToken(res.data.twoFactorToken || '');
+      setSuccessMsg(res.data.message || "Un code de sécurité a été envoyé par e-mail.");
       return;
     }
 
@@ -248,6 +249,48 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
       resetForm();
       onClose();
     }, 1000);
+  };
+
+  const handleVerifyTwoFactorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRefusalError(null);
+    setSuccessMsg(null);
+
+    if (!/^\d{6}$/.test(otpInput.trim())) {
+      setRefusalError("Le code de sécurité doit comporter exactement 6 chiffres.");
+      return;
+    }
+
+    setLoading(true);
+    const res = await apiVerifyTwoFactor(twoFactorToken, otpInput.trim());
+    setLoading(false);
+
+    if (!res.success || !res.data?.user) {
+      setRefusalError(res.error || "Code de sécurité invalide.");
+      return;
+    }
+
+    const verifiedUser = res.data.user;
+    setSuccessMsg("Authentification à deux facteurs validée ! Bienvenue sur FORTIA HUB.");
+    setTimeout(() => {
+      onLoginSuccess(verifiedUser);
+      resetForm();
+      onClose();
+    }, 1000);
+  };
+
+  const handleResendTwoFactorCode = async () => {
+    setRefusalError(null);
+    setSuccessMsg(null);
+    setLoading(true);
+    const res = await apiLoginUser({ email, password });
+    setLoading(false);
+    if (res.success && res.data?.needsTwoFactor && res.data?.twoFactorToken) {
+      setTwoFactorToken(res.data.twoFactorToken);
+      setSuccessMsg("Un nouveau code de sécurité a été envoyé par e-mail.");
+    } else {
+      setRefusalError(res.error || "Impossible de renvoyer le code. Réessayez.");
+    }
   };
 
   return (
@@ -278,6 +321,8 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
           <h3 className="text-xl sm:text-2xl font-black text-white">
             {step === 'otp'
               ? 'Vérification du Code OTP (6 chiffres)'
+              : step === 'twofa'
+              ? 'Double authentification (2FA)'
               : mode === 'signup'
               ? 'Inscription Obligatoire Plateforme'
               : 'Connexion à votre Espace FORTIA'}
@@ -285,6 +330,8 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
           <p className="text-xs text-slate-300">
             {step === 'otp'
               ? `Code OTP à 6 chiffres envoyé à ${email} depuis ${SENDER_EMAIL_OFFICIAL}`
+              : step === 'twofa'
+              ? `Un code de sécurité à 6 chiffres a été envoyé à ${email}`
               : mode === 'signup' 
               ? 'Créez votre compte pour accéder aux formations, boutiques et services'
               : 'Saisissez vos identifiants pour accéder à votre espace membre'}
@@ -681,6 +728,80 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
             </button>
           </form>
         )) : (
+          step === 'twofa' ? (
+            /* Formulaire 2FA */
+            <form onSubmit={handleVerifyTwoFactorSubmit} className="space-y-4">
+              <div className="bg-[#021231] border border-[#D69E25]/50 p-4 rounded-2xl space-y-2.5 text-xs shadow-inner">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-[#D69E25] shrink-0" />
+                  <p className="font-black text-[#D69E25] text-[11px] uppercase tracking-wider">
+                    Sécurité renforcée : 2FA activée
+                  </p>
+                </div>
+                <p className="text-slate-300 leading-relaxed text-[11px]">
+                  Un code de sécurité à 6 chiffres a été envoyé à <strong className="text-white">{email}</strong>.
+                  Saisissez-le pour accéder à votre compte.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1 text-center">
+                  Code de sécurité (6 chiffres) *
+                </label>
+                <div className="flex justify-center gap-2 my-2">
+                  {[0, 1, 2, 3, 4, 5].map((idx) => (
+                    <div
+                      key={idx}
+                      className={`w-10 h-12 rounded-xl border-2 flex items-center justify-center font-mono text-lg font-black transition-all ${
+                        otpInput[idx]
+                          ? 'border-[#D69E25] bg-[#021231] text-[#D69E25] shadow-md scale-105'
+                          : 'border-slate-700 bg-[#021231]/40 text-slate-600'
+                      }`}
+                    >
+                      {otpInput[idx] || '•'}
+                    </div>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otpInput}
+                  onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Saisir les 6 chiffres (ex: 123456)"
+                  className="w-full bg-[#021231] border border-[#D69E25]/60 text-center font-mono text-sm tracking-widest text-amber-300 rounded-xl pl-4 pr-4 py-2.5 focus:outline-none focus:border-[#D69E25]"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-[#D69E25] text-[#021231] font-black text-xs rounded-xl hover:bg-amber-400 transition flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Vérification du code...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Valider & Accéder à Mon Compte</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResendTwoFactorCode}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-1.5 py-2 text-[11px] text-[#D69E25] font-bold hover:underline disabled:opacity-50"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Renvoyer le code
+              </button>
+            </form>
+          ) : (
           /* Login Form */
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
@@ -713,6 +834,16 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
               </div>
             </div>
 
+            <div className="flex items-center justify-end">
+              <a
+                href="/forgot-password"
+                onClick={onClose}
+                className="text-[10px] text-[#D69E25] font-bold hover:underline"
+              >
+                Mot de passe oublié ?
+              </a>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
@@ -731,7 +862,7 @@ export const UserAuthModal: React.FC<UserAuthModalProps> = ({
               )}
             </button>
           </form>
-        )}
+          ))}
       </div>
     </div>
   );

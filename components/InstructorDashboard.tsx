@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
 import { uploadFileToR2 } from "@/lib/services/clientUpload";
+import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
 
 interface InstructorDashboardProps {
   center: TrainingCenter | null;
@@ -53,6 +54,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   onOpenAuthModal,
 }) => {
   const [activeTab, setActiveTab] = useState<"overview" | "lectures" | "add" | "storage">("overview");
+  const [showCourseSuccess, setShowCourseSuccess] = useState(false);
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [centerName, setCenterName] = useState("");
@@ -838,6 +840,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 setEditingCourseId(null); setEditingCourse(null);
                 setTitle(""); setDescription(""); setImage("");
                 setChapters([]); setQuizQuestions([]); setActiveChapterIdx(null);
+                setShowCourseSuccess(true);
               }}
               className="w-full py-3.5 bg-[#D69E25] text-[#021231] font-black text-xs rounded-xl hover:bg-amber-400 transition shadow-lg flex items-center justify-center gap-2"
             >
@@ -895,6 +898,14 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             )}
           </div>
         )}
+
+        {/* Popup de confirmation d'enregistrement de la formation */}
+        <SuccessConfirmationModal
+          isOpen={showCourseSuccess}
+          onClose={() => setShowCourseSuccess(false)}
+          title="Formation publiée !"
+          message="Votre formation a été enregistrée et publiée avec succès. Elle est maintenant visible dans votre catalogue et sur la plateforme."
+        />
       </div>
     </div>
   );

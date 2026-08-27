@@ -40,6 +40,7 @@ import { ProductImageUploader } from './ProductImageUploader';
 import { ProductDeliverableUploader, DeliverableFile } from './ProductDeliverableUploader';
 import { StoreImageUploader } from './StoreImageUploader';
 import { enhanceTitle, enhanceDescription, enhanceFeatures } from '../utils/aiEnhancer';
+import { SuccessConfirmationModal } from './SuccessConfirmationModal';
 
 interface VendorDashboardProps {
   store: VendorStore;
@@ -67,6 +68,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   onViewPublicStore
 }) => {
   const [activeTab, setActiveTab] = useState<'analytics' | 'products' | 'orders' | 'settings'>('analytics');
+  const [showSuccess, setShowSuccess] = useState(false);
 
   // Filter items belonging to this store (robuste : storeId OU storeName)
   const storeProducts = (products || []).filter(
@@ -267,7 +269,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
       }
     };
     onUpdateStore(updated);
-    alert('Paramètres de votre boutique enregistrés avec succès !');
+    setShowSuccess(true);
   };
 
   const handleSubmitPayoutRequest = (e: React.FormEvent) => {
@@ -1038,6 +1040,14 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Popup de confirmation d'enregistrement de la boutique */}
+      <SuccessConfirmationModal
+        isOpen={showSuccess}
+        onClose={() => setShowSuccess(false)}
+        title="Boutique enregistrée !"
+        message="Les paramètres de votre boutique (nom, logo, bannière, description et coordonnées de paiement) ont été enregistrés avec succès."
+      />
 
     </div>
   );

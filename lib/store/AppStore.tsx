@@ -28,33 +28,14 @@ import {
   InstructorStoragePurchase,
 } from "@/lib/types";
 
-import { INITIAL_SITE_CONTENT } from "@/lib/data/siteContentData";
-import {
-  INITIAL_COURSES,
-  INITIAL_DIGITAL_PRODUCTS,
-  INITIAL_SERVICES,
-  INITIAL_USER_PROFILE,
-  INITIAL_FREELANCES,
-  INITIAL_ENTERPRISES,
-  INITIAL_BLOG_POSTS,
-  INITIAL_FEE_CONFIG,
-  INITIAL_KYC_SUBMISSIONS,
-} from "@/lib/data/academyData";
-
-import {
-  INITIAL_STORES,
-  INITIAL_MARKETPLACE_PRODUCTS,
-  INITIAL_VENDOR_APPLICATIONS,
-  INITIAL_MARKETPLACE_ORDERS,
-  INITIAL_PAYOUT_REQUESTS,
-  INITIAL_MARKETPLACE_CONFIG,
-} from "@/lib/data/marketplaceData";
 import { apiFetchPlatformData } from "@/lib/services/platformApi";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 
 interface AppStoreContextValue {
   // Chargement des données platform (Supabase)
   platformLoaded: boolean;
+  // Recharge les données platform (Supabase) à la demande (après une écriture)
+  refreshPlatformData: () => Promise<void>;
 
   // Site Content
   siteContent: SiteContent;
@@ -158,6 +139,10 @@ interface AppStoreContextValue {
   isPaymentGatewayOpen: boolean;
   setPaymentGatewayOpen: (open: boolean) => void;
 
+  // Recherche globale (barre de recherche navbar → boutique numérique)
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+
   // Vendor Application
   isVendorApplicationModalOpen: boolean;
   setVendorApplicationModalOpen: (open: boolean) => void;
@@ -214,96 +199,73 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    async function loadPlatformData() {
-      try {
-        const data = await apiFetchPlatformData();
-        if (!mounted || !data) return;
+    // Purge des éventuelles données mockées/fictives persistées en localStorage
+    // (anciennes sessions ou contenus de démonstration).
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("fortia_site_content");
+        const savedProfile = localStorage.getItem("fortia_user_profile");
+        if (savedProfile) {
+          const parsedProfile = JSON.parse(savedProfile);
+          if (
+            parsedProfile?.email &&
+            (parsedProfile.email.includes("example.com") ||
+              parsedProfile.email.includes("sanaaraav"))
+          ) {
+            localStorage.removeItem("fortia_user_profile");
+            localStorage.removeItem("fortia_user_logged_in");
+          }
+        }
+      }
+    } catch {}
 
-        // Mettre à jour les états avec les données réelles Supabase si disponibles
-        if (data.courses?.length > 0) {
-          setCourses(
-            (data.courses as any[]).map((c: any) => ({
-              ...c,
-              quiz:
-                (c.quiz as any[]) ||
-                (c.quizzes as any[])?.map((q: any) => ({
-                  id: q.id,
-                  question: q.question,
-                  explanation: q.explanation || "",
-                  options: (q.options || []).map((o: any) => o.optionText),
-                  correctAnswer: (q.options || []).findIndex((o: any) => o.isCorrect),
-                })) ||
-                [],
-            }))
-          );
+    refreshPlatformData();
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ======== SYNCHRONISATION DE SESSION AU CHARGEMENT (JWT HttpOnly) ========
+  // Vérifie la session auprès du serveur : si le cookie est expiré, révoqué
+  // ou invalide, l'état utilisateur local est nettoyé (utilisateur déconnecté).
+  // La redirection vers la connexion pour une page privée est gérée par le proxy.
+  useEffect(() => {
+    let mounted = true;
+
+    async function syncSession() {
+      try {
+        const res = await fetch("/api/auth/session");
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted && data?.user) {
+            setIsUserLoggedIn(true);
+            setUserProfile((prev) => {
+              const merged = { ...prev, ...data.user };
+              try {
+                localStorage.setItem("fortia_user_logged_in", "true");
+                localStorage.setItem("fortia_user_profile", JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+        } else {
+          // Session invalide/expirée/révoquée → nettoyage de l'état local
+          if (mounted) {
+            setIsUserLoggedIn(false);
+            setUserProfile({} as UserProfile);
+            try {
+              localStorage.removeItem("fortia_user_logged_in");
+              localStorage.removeItem("fortia_user_profile");
+            } catch {}
+          }
         }
-        if (data.products?.length > 0) {
-          setMarketplaceProducts(data.products as any);
-        }
-        if (data.stores?.length > 0) {
-          setStores(data.stores as any);
-          setActiveVendorStore((data.stores[0] as any));
-        }
-        if (data.freelances?.length > 0) {
-          setFreelances(data.freelances as any);
-        }
-        if (data.enterprises?.length > 0) {
-          setEnterprises(data.enterprises as any);
-        }
-        if (data.blogPosts?.length > 0) {
-          setBlogPosts(data.blogPosts as any);
-        }
-        if (data.kycSubmissions?.length > 0) {
-          setKycSubmissions(data.kycSubmissions as any);
-        }
-        if (data.vendorApplications?.length > 0) {
-          setVendorApplications(data.vendorApplications as any);
-        }
-        if (data.marketplaceOrders?.length > 0) {
-          setMarketplaceOrders(data.marketplaceOrders as any);
-        }
-        if (data.payoutRequests?.length > 0) {
-          setPayoutRequests(data.payoutRequests as any);
-        }
-        if (data.postPurchaseSupport?.length > 0) {
-          setPostPurchaseSubmissions(data.postPurchaseSupport as any);
-        }
-        if (data.serviceQuotes?.length > 0) {
-          setServiceQuotes(data.serviceQuotes as any);
-        }
-        if (data.servicePackages?.length > 0) {
-          setServices(data.servicePackages as any);
-        }
-        if (data.notifications?.length > 0) {
-          setNotifications(data.notifications as any);
-        }
-        if (data.siteContent?.length > 0) {
-          setSiteContent(data.siteContent[0] as any);
-        }
-        if (data.feeConfig) {
-          setFeeConfigState(data.feeConfig as any);
-        }
-        if (data.trainingCenters?.length > 0) {
-          setTrainingCenters(data.trainingCenters as any);
-          const myCenter = (data.trainingCenters as any).find(
-            (c: any) => c.ownerId === userProfile?.id
-          );
-          if (myCenter) setInstructorCenter(myCenter);
-        }
-        if (data.instructorCommissions?.length > 0) {
-          setInstructorCommissions(data.instructorCommissions as any);
-        }
-        if (data.instructorStoragePurchases?.length > 0) {
-          setInstructorStoragePurchases(data.instructorStoragePurchases as any);
-        }
-      } catch (error) {
-        console.warn("[AppStore] Données Supabase non chargées, utilisation du fallback mock:", error);
-      } finally {
-        if (mounted) setPlatformLoaded(true);
+      } catch {
+        // Erreur réseau : on conserve l'état actuel (aucune décision bloquante).
       }
     }
 
-    loadPlatformData();
+    syncSession();
     return () => {
       mounted = false;
     };
@@ -311,70 +273,44 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Site Content
-  const [siteContent, setSiteContent] = useLocalStorage<SiteContent>("fortia_site_content", INITIAL_SITE_CONTENT);
+  const [siteContent, setSiteContent] = useState<SiteContent>({} as SiteContent);
 
   // Courses
-  const [courses, setCourses] = useState<Course[]>(INITIAL_COURSES.slice(0, 1));
+  const [courses, setCourses] = useState<Course[]>([]);
 
   // Digital Products / Marketplace
-  const [marketplaceProducts, setMarketplaceProducts] = useState<MarketplaceProduct[]>(INITIAL_MARKETPLACE_PRODUCTS.slice(0, 1));
+  const [marketplaceProducts, setMarketplaceProducts] = useState<MarketplaceProduct[]>([]);
 
   // Services
-  const [services, setServices] = useState<ServicePackage[]>(INITIAL_SERVICES.slice(0, 1));
+  const [services, setServices] = useState<ServicePackage[]>([]);
   const [serviceQuotes, setServiceQuotes] = useState<ServiceQuoteRequest[]>([]);
 
   // Marketplace
-  const [stores, setStores] = useState<VendorStore[]>(INITIAL_STORES.slice(0, 1));
-  const [activeVendorStore, setActiveVendorStore] = useState<VendorStore>(
-    INITIAL_STORES && INITIAL_STORES.length > 0 ? INITIAL_STORES[0] : ({} as VendorStore)
-  );
+  const [stores, setStores] = useState<VendorStore[]>([]);
+  const [activeVendorStore, setActiveVendorStore] = useState<VendorStore>({} as VendorStore);
   const [selectedStore, setSelectedStore] = useState<VendorStore | null>(null);
-  const [vendorApplications, setVendorApplications] = useState<VendorApplication[]>(INITIAL_VENDOR_APPLICATIONS.slice(0, 1));
-  const [marketplaceOrders, setMarketplaceOrders] = useState<MarketplaceOrder[]>(INITIAL_MARKETPLACE_ORDERS.slice(0, 1));
-  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>(INITIAL_PAYOUT_REQUESTS.slice(0, 1));
-  const [marketplaceConfig, setMarketplaceConfig] = useState<MarketplaceConfig>(INITIAL_MARKETPLACE_CONFIG);
+  const [vendorApplications, setVendorApplications] = useState<VendorApplication[]>([]);
+  const [marketplaceOrders, setMarketplaceOrders] = useState<MarketplaceOrder[]>([]);
+  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
+  const [marketplaceConfig, setMarketplaceConfig] = useState<MarketplaceConfig>({} as MarketplaceConfig);
   const [postPurchaseSubmissions, setPostPurchaseSubmissions] = useState<PostPurchaseSupportSubmission[]>([]);
 
   // Platform Features
-  const [freelances, setFreelances] = useState<FreelanceProfile[]>(INITIAL_FREELANCES.slice(0, 1));
-  const [enterprises, setEnterprises] = useState<EnterpriseProfile[]>(INITIAL_ENTERPRISES.slice(0, 1));
-  const [blogPosts, setBlogPosts] = useState<BlogPost[]>(INITIAL_BLOG_POSTS.slice(0, 1));
-  const [feeConfig, setFeeConfigState] = useState<RegistrationFeeConfig>(INITIAL_FEE_CONFIG);
-  const [kycSubmissions, setKycSubmissions] = useState<KycSubmission[]>(INITIAL_KYC_SUBMISSIONS.slice(0, 1));
+  const [freelances, setFreelances] = useState<FreelanceProfile[]>([]);
+  const [enterprises, setEnterprises] = useState<EnterpriseProfile[]>([]);
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  const [feeConfig, setFeeConfigState] = useState<RegistrationFeeConfig>({
+    freelanceFeeUsd: 0,
+    freelanceFeeFcfa: 0,
+    enterpriseFeeUsd: 0,
+    enterpriseFeeFcfa: 0,
+    buyerFeeUsd: 0,
+    feeEnabled: false,
+  });
+  const [kycSubmissions, setKycSubmissions] = useState<KycSubmission[]>([]);
 
   // Notifications
-  const [notifications, setNotifications] = useState<AppNotification[]>([
-    {
-      id: "notif-1",
-      title: "Bienvenue sur FORTIA HUB !",
-      message:
-        "Découvrez notre catalogue de formations, la boutique digitale et nos services experts.",
-      date: "Aujourd'hui",
-      read: false,
-      type: "info",
-      linkTab: "courses",
-    },
-    {
-      id: "notif-2",
-      title: "Authentification & Codes OTP",
-      message:
-        "Vos accès sont protégés. Les codes OTP de confirmation à 6 chiffres vous sont transmis par e-mail via Fortia Hub <onboarding@resend.dev>.",
-      date: "Hier",
-      read: false,
-      type: "info",
-      linkTab: "settings",
-    },
-    {
-      id: "notif-3",
-      title: "Formation IA & Business 2026",
-      message:
-        "La Masterclass IA & Automatisation Business 2026 est disponible avec attestation certifiée.",
-      date: "28 Juillet",
-      read: true,
-      type: "success",
-      linkTab: "courses",
-    },
-  ]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   // User Auth
   const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(() => {
@@ -386,8 +322,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
-    if (typeof window === "undefined") return INITIAL_USER_PROFILE;
+    if (typeof window === "undefined") return {} as UserProfile;
     try {
+      // Aucun profil chargé si l'utilisateur n'est pas connecté (évite les données fictives)
+      if (localStorage.getItem("fortia_user_logged_in") !== "true") {
+        return {} as UserProfile;
+      }
       const saved = localStorage.getItem("fortia_user_profile");
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -396,9 +336,102 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (e) {}
-    return INITIAL_USER_PROFILE;
+    return {} as UserProfile;
   });
   const [openAuthModal, setOpenAuthModal] = useState(false);
+
+  // ======== RECHARGEMENT DES DONNÉES PLATFORM (à la demande) ========
+  // Déclaration `function` (hoistée) : appelée par le useEffect initial et
+  // exposée dans le contexte pour rafraîchir les données après une écriture
+  // (profil freelance, boutique, formation...) sans recharger la page.
+  async function refreshPlatformData() {
+    try {
+      const data = await apiFetchPlatformData();
+      if (!data) return;
+
+      // Mettre à jour les états avec les données réelles Supabase si disponibles
+      if (data.courses?.length > 0) {
+        setCourses(
+          (data.courses as any[]).map((c: any) => ({
+            ...c,
+            quiz:
+              (c.quiz as any[]) ||
+              (c.quizzes as any[])?.map((q: any) => ({
+                id: q.id,
+                question: q.question,
+                explanation: q.explanation || "",
+                options: (q.options || []).map((o: any) => o.optionText),
+                correctAnswer: (q.options || []).findIndex((o: any) => o.isCorrect),
+              })) ||
+              [],
+          }))
+        );
+      }
+      if (data.products?.length > 0) {
+        setMarketplaceProducts(data.products as any);
+      }
+      if (data.stores?.length > 0) {
+        setStores(data.stores as any);
+        setActiveVendorStore((data.stores[0] as any));
+      }
+      if (data.freelances?.length > 0) {
+        setFreelances(data.freelances as any);
+      }
+      if (data.enterprises?.length > 0) {
+        setEnterprises(data.enterprises as any);
+      }
+      if (data.blogPosts?.length > 0) {
+        setBlogPosts(data.blogPosts as any);
+      }
+      if (data.kycSubmissions?.length > 0) {
+        setKycSubmissions(data.kycSubmissions as any);
+      }
+      if (data.vendorApplications?.length > 0) {
+        setVendorApplications(data.vendorApplications as any);
+      }
+      if (data.marketplaceOrders?.length > 0) {
+        setMarketplaceOrders(data.marketplaceOrders as any);
+      }
+      if (data.payoutRequests?.length > 0) {
+        setPayoutRequests(data.payoutRequests as any);
+      }
+      if (data.postPurchaseSupport?.length > 0) {
+        setPostPurchaseSubmissions(data.postPurchaseSupport as any);
+      }
+      if (data.serviceQuotes?.length > 0) {
+        setServiceQuotes(data.serviceQuotes as any);
+      }
+      if (data.servicePackages?.length > 0) {
+        setServices(data.servicePackages as any);
+      }
+      if (data.notifications?.length > 0) {
+        setNotifications(data.notifications as any);
+      }
+      if (data.siteContent?.length > 0) {
+        setSiteContent(data.siteContent[0] as any);
+      }
+      if (data.feeConfig) {
+        setFeeConfigState(data.feeConfig as any);
+      }
+      if (data.trainingCenters?.length > 0) {
+        setTrainingCenters(data.trainingCenters as any);
+        const myCenter = (data.trainingCenters as any).find(
+          (c: any) => c.ownerId === userProfile?.id
+        );
+        if (myCenter) setInstructorCenter(myCenter);
+      }
+      if (data.instructorCommissions?.length > 0) {
+        setInstructorCommissions(data.instructorCommissions as any);
+      }
+      if (data.instructorStoragePurchases?.length > 0) {
+        setInstructorStoragePurchases(data.instructorStoragePurchases as any);
+      }
+    } catch (error) {
+      console.warn("[AppStore] Données Supabase non chargées (états vides affichés):", error);
+    } finally {
+      setPlatformLoaded(true);
+    }
+  }
   const [authMode, setAuthMode] = useState<"login" | "signup">("signup");
 
   // Admin
@@ -626,6 +659,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   // Payment Gateway
   const [paymentItems, setPaymentItems] = useState<CartItem[]>([]);
   const [isPaymentGatewayOpen, setPaymentGatewayOpen] = useState(false);
+
+  // Recherche globale (navbar → boutique)
+  const [searchQuery, setSearchQueryState] = useState("");
+  const setSearchQuery = useCallback((query: string) => setSearchQueryState(query), []);
 
   // Vendor Application
   const [isVendorApplicationModalOpen, setVendorApplicationModalOpen] = useState(false);
@@ -1147,6 +1184,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const logoutUser = useCallback(() => {
     setIsUserLoggedIn(false);
     try {
+      // Révoque la session JWT côté serveur (cookie HttpOnly) — best-effort :
+      // même si la requête échoue, la session locale est nettoyée.
+      fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
       localStorage.removeItem("fortia_user_logged_in");
       localStorage.removeItem("fortia_user_profile");
     } catch (e) {}
@@ -1182,6 +1222,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AppStoreContextValue>(
     () => ({
       platformLoaded,
+      refreshPlatformData,
       siteContent,
       updateSiteContent,
       courses,
@@ -1264,6 +1305,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setVendorApplicationModalOpen,
       isKycModalOpen,
       setKycModalOpen,
+      searchQuery,
+      setSearchQuery,
       orderService,
       trainingCenters,
       instructorCommissions,
@@ -1280,6 +1323,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       platformLoaded,
+      refreshPlatformData,
       siteContent,
       updateSiteContent,
       courses,
@@ -1349,6 +1393,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       isPaymentGatewayOpen,
       isVendorApplicationModalOpen,
       isKycModalOpen,
+      searchQuery,
+      setSearchQuery,
       orderService,
       trainingCenters,
       instructorCommissions,

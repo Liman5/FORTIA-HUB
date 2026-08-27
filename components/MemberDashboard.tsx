@@ -4,8 +4,20 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, Course, DigitalProduct, MarketplaceOrder } from '../types';
 import { generatePDFCertificate, downloadProductDeliverable } from '../utils/pdfGenerator';
-import { apiDeleteAccount } from '../services/api';
+import { apiDeleteAccount, apiSendOtp, apiToggleTwoFactor, apiGetTwoFactorStatus } from '../services/api';
 import { uploadFileToR2 } from '../lib/services/clientUpload';
+import { apiWritePlatform } from '../lib/services/platformWrite';
+import { usePwaInstall, promptInstall } from '../lib/pwa/pwaStore';
+import {
+  getNotifSettings,
+  saveNotifSettings,
+  getNotificationPermission,
+  requestNotificationPermission,
+  playNotificationSound,
+  subscribeToPush,
+  unsubscribeFromPush,
+  isPushSupported,
+} from '../lib/services/appNotifications';
 import { 
   User, 
   BookOpen, 
@@ -30,6 +42,11 @@ import {
   Wallet,
   Camera,
   ImageUp,
+  Bell,
+  KeyRound,
+  Smartphone,
+  RefreshCw,
+  Check,
 } from 'lucide-react';
 
 interface MemberDashboardProps {
@@ -82,6 +99,136 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [avatarSuccess, setAvatarSuccess] = useState(false);
 
+  // ===== Notifications & App (système) =====
+  const { isInstalled: pwaInstalled } = usePwaInstall();
+  // Valeurs initiales stables (indépendantes de window) pour éviter tout
+  // mismatch d'hydratation SSR ; les vraies valeurs sont chargées après montage.
+  const [notifSettings, setNotifSettings] = useState<{ enabled: boolean; sound: boolean }>({
+    enabled: true,
+    sound: true,
+  });
+  const [notifPermission, setNotifPermission] = useState<string>("unsupported");
+  const [notifBusy, setNotifBusy] = useState(false);
+
+  React.useEffect(() => {
+    setNotifSettings(getNotifSettings());
+    setNotifPermission(getNotificationPermission());
+  }, []);
+
+  // ===== Sécurité : 2FA =====
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState<boolean>(false);
+  const [twofaLoading, setTwofaLoading] = useState(false);
+  const [twofaOtp, setTwofaOtp] = useState('');
+  const [twofaModal, setTwofaModal] = useState<null | 'enable' | 'disable'>(null);
+  const [twofaMessage, setTwofaMessage] = useState<string | null>(null);
+  const [twofaError, setTwofaError] = useState<string | null>(null);
+  const [twofaOtpSent, setTwofaOtpSent] = useState(false);
+
+  // Charger l'état 2FA depuis le serveur
+  React.useEffect(() => {
+    let mounted = true;
+    apiGetTwoFactorStatus().then((res) => {
+      if (mounted) setTwoFactorEnabled(res.enabled);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const refreshNotifPermission = () => {
+    setNotifPermission(getNotificationPermission());
+  };
+
+  const handleEnableNotifications = async () => {
+    setNotifBusy(true);
+    const permission = await requestNotificationPermission();
+    setNotifPermission(permission);
+    if (permission === 'granted') {
+      // Enregistre le PushSubscription (Web Push) pour recevoir les notifications
+      // même lorsque l'application est fermée.
+      await subscribeToPush();
+    }
+    setNotifSettings(getNotifSettings());
+    setNotifBusy(false);
+  };
+
+  const handleToggleNotifEnabled = async () => {
+    const next = !notifSettings.enabled;
+    updateNotifSetting({ enabled: next });
+
+    if (next) {
+      // Activation : autorise puis abonne au Web Push
+      if (getNotificationPermission() === 'granted') {
+        await subscribeToPush();
+      } else {
+        await handleEnableNotifications();
+      }
+    } else {
+      // Désactivation : résilie l'abonnement Web Push
+      await unsubscribeFromPush();
+    }
+    setNotifSettings(getNotifSettings());
+  };
+
+  const updateNotifSetting = (partial: Partial<ReturnType<typeof getNotifSettings>>) => {
+    const next = { ...getNotifSettings(), ...partial };
+    saveNotifSettings(next);
+    setNotifSettings(next);
+    if (partial.sound === true) {
+      playNotificationSound();
+    }
+  };
+
+  const handleInstallApp = () => {
+    promptInstall();
+  };
+
+  // ===== 2FA : envoi du code puis activation / désactivation =====
+  const sendTwoFactorCode = async () => {
+    setTwofaMessage(null);
+    setTwofaError(null);
+    setTwofaOtpSent(false);
+    setTwofaOtp('');
+    if (!user?.email) {
+      setTwofaError("Adresse e-mail introuvable sur le profil.");
+      return;
+    }
+    setTwofaLoading(true);
+    const res = await apiSendOtp(user.email);
+    setTwofaLoading(false);
+    if (res.success) {
+      setTwofaOtpSent(true);
+      setTwofaMessage("Un code de sécurité à 6 chiffres a été envoyé à votre adresse e-mail.");
+    } else {
+      setTwofaError(res.message || "Impossible d'envoyer le code. Réessayez.");
+    }
+  };
+
+  const confirmTwoFactorToggle = async () => {
+    if (!twofaModal) return;
+    if (!/^\d{6}$/.test(twofaOtp.trim())) {
+      setTwofaError("Le code de sécurité doit comporter exactement 6 chiffres.");
+      return;
+    }
+    setTwofaLoading(true);
+    setTwofaMessage(null);
+    setTwofaError(null);
+    const enable = twofaModal === 'enable';
+    const res = await apiToggleTwoFactor(enable, twofaOtp.trim());
+    setTwofaLoading(false);
+    if (!res.success) {
+      setTwofaError(res.error || "Impossible de modifier la 2FA.");
+      return;
+    }
+    setTwoFactorEnabled(enable);
+    setTwofaModal(null);
+    setTwofaOtpSent(false);
+    setTwofaOtp('');
+    setTwofaMessage(enable
+      ? "Authentification à deux facteurs activée : un code vous sera demandé à chaque connexion."
+      : "Authentification à deux facteurs désactivée.");
+  };
+
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -110,6 +257,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       // Mettre à jour l'avatar dans le store
       if (onUpdateProfile) {
         onUpdateProfile({ avatar: result.url });
+      }
+      // Persister l'URL R2 dans Supabase (table users.avatar)
+      if (user?.id) {
+        apiWritePlatform("update-profile", {
+          id: user.id,
+          avatar: result.url,
+        }).then((res) => {
+          if (!res.success) {
+            console.warn("[Avatar] Non persisté en base Supabase:", res.error);
+          }
+        });
       }
       setAvatarSuccess(true);
       setTimeout(() => setAvatarSuccess(false), 3000);
@@ -613,11 +771,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
                 {/* Aperçu de l'avatar */}
                 <div className="relative shrink-0">
-                  <img
-                    src={user.avatar}
-                    alt={user.name}
-                    className="w-24 h-24 rounded-2xl object-cover border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20"
-                  />
+                  {user.avatar ? (
+                    <img
+                      src={user.avatar}
+                      alt={user.name}
+                      className="w-24 h-24 rounded-2xl object-cover border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-2xl border-2 border-[#D69E25] bg-[#011D46] flex items-center justify-center shadow-lg shadow-[#D69E25]/20">
+                      <User className="w-10 h-10 text-[#D69E25]" />
+                    </div>
+                  )}
                   {isUploadingAvatar && (
                     <div className="absolute inset-0 rounded-2xl bg-black/60 flex items-center justify-center">
                       <Loader2 className="w-6 h-6 text-[#D69E25] animate-spin" />
@@ -684,6 +848,149 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* ===== SECTION NOTIFICATIONS & APPLICATION ===== */}
+            <div className="bg-white/[0.04] backdrop-blur-xl border border-[#D69E25]/30 rounded-3xl p-6 shadow-xl space-y-4">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <Bell className="w-4 h-4 text-[#D69E25]" />
+                <span>Notifications & Application</span>
+              </h3>
+
+              {/* Statut permission */}
+              <div className="flex items-center justify-between gap-3 bg-white/[0.03] p-4 rounded-xl border border-white/10">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white">Notifications système</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {notifPermission === 'granted'
+                      ? isPushSupported()
+                        ? 'Autorisées + Web Push actif : alertes même lorsque l\u2019app est fermée.'
+                        : 'Autorisées — vous recevez les alertes comme une vraie app.'
+                      : notifPermission === 'denied'
+                      ? 'Bloquées par le navigateur (paramètres du site).'
+                      : notifPermission === 'unsupported'
+                      ? 'Non supportées sur ce navigateur / cette app.'
+                      : 'Permission non demandée. Autorisez pour recevoir les alertes.'}
+                  </p>
+                </div>
+                <button
+                  onClick={handleEnableNotifications}
+                  disabled={notifBusy || notifPermission === 'granted'}
+                  className={`shrink-0 px-4 py-2 rounded-xl text-[10px] font-black transition disabled:opacity-60 ${
+                    notifPermission === 'granted'
+                      ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-400'
+                      : 'bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] hover:brightness-110'
+                  }`}
+                >
+                  {notifBusy ? 'Demande...' : notifPermission === 'granted' ? 'Autorisée ✓' : 'Autoriser'}
+                </button>
+              </div>
+
+              {/* Toggle réception des alertes */}
+              <div className="flex items-center justify-between gap-3 bg-white/[0.03] p-4 rounded-xl border border-white/10">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white">Recevoir les alertes</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Activer ou désactiver les notifications de l'application.</p>
+                </div>
+                <button
+                  onClick={handleToggleNotifEnabled}
+                  className={`shrink-0 px-4 py-2 rounded-xl text-[10px] font-black transition border ${
+                    notifSettings.enabled
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                      : 'bg-white/5 border-white/15 text-slate-300'
+                  }`}
+                >
+                  {notifSettings.enabled ? 'Activé' : 'Désactivé'}
+                </button>
+              </div>
+
+              {/* Toggle sonnerie */}
+              <div className="flex items-center justify-between gap-3 bg-white/[0.03] p-4 rounded-xl border border-white/10">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white">Sonnerie personnalisée</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Jouer la sonnerie FORTIA lors de chaque notification.</p>
+                </div>
+                <button
+                  onClick={() => updateNotifSetting({ sound: !notifSettings.sound })}
+                  className={`shrink-0 px-4 py-2 rounded-xl text-[10px] font-black transition border ${
+                    notifSettings.sound
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                      : 'bg-white/5 border-white/15 text-slate-300'
+                  }`}
+                >
+                  {notifSettings.sound ? 'Son activé' : 'Silencieux'}
+                </button>
+              </div>
+
+              {/* Télécharger l'application */}
+              {!pwaInstalled ? (
+                <div className="flex items-center justify-between gap-3 bg-[#D69E25]/5 p-4 rounded-xl border border-[#D69E25]/30">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-[#D69E25]">Application FORTIA HUB</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Téléchargez l'app pour un accès rapide et les notifications système.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleInstallApp}
+                    className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black text-[10px] hover:brightness-110 active:scale-95 transition shadow-md"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    Télécharger
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-xs font-bold text-emerald-400">
+                  <Check className="w-4 h-4 shrink-0" />
+                  Application installée : accès rapide et notifications système disponibles.
+                </div>
+              )}
+            </div>
+
+            {/* ===== SECTION SÉCURITÉ : 2FA ===== */}
+            <div className="bg-white/[0.04] backdrop-blur-xl border border-[#D69E25]/30 rounded-3xl p-6 shadow-xl space-y-4">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#D69E25]" />
+                <span>Sécurité : Authentification à deux facteurs (2FA)</span>
+              </h3>
+
+              <div className="flex items-center justify-between gap-3 bg-white/[0.03] p-4 rounded-xl border border-white/10">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white">Protection 2FA du compte</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {twoFactorEnabled
+                      ? 'Activée — un code par e-mail vous sera demandé à chaque connexion.'
+                      : 'Désactivée — vos connexions ne demandent que le mot de passe.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setTwofaMessage(null);
+                    setTwofaError(null);
+                    setTwofaModal(twoFactorEnabled ? 'disable' : 'enable');
+                  }}
+                  className={`shrink-0 px-4 py-2 rounded-xl text-[10px] font-black transition border ${
+                    twoFactorEnabled
+                      ? 'bg-red-500/15 border-red-500/40 text-red-400 hover:bg-red-500/25'
+                      : 'bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] hover:brightness-110'
+                  }`}
+                >
+                  {twoFactorEnabled ? 'Désactiver' : 'Activer'}
+                </button>
+              </div>
+
+              {twofaMessage && (
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-[11px] font-semibold text-emerald-400">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  {twofaMessage}
+                </div>
+              )}
+              {twofaError && (
+                <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-[11px] font-semibold text-red-400">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {twofaError}
+                </div>
+              )}
             </div>
 
             <div className="bg-red-500/5 border-2 border-red-500/40 rounded-3xl p-6 space-y-4">
@@ -807,6 +1114,103 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   </div>
                 </div>
               )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ===== MODAL 2FA (code de sécurité) ===== */}
+      <AnimatePresence>
+        {twofaModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="relative bg-[#021231] border-2 border-[#D69E25]/60 rounded-3xl max-w-md w-full p-6 text-white space-y-5 shadow-2xl shadow-[#D69E25]/10"
+            >
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/60 to-transparent" />
+
+              <button
+                onClick={() => {
+                  setTwofaModal(null);
+                  setTwofaOtpSent(false);
+                  setTwofaOtp('');
+                }}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg transition"
+                aria-label="Fermer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-[#D69E25]/20 text-[#D69E25] border border-[#D69E25]/40 flex items-center justify-center mx-auto">
+                  <KeyRound className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-black text-white">
+                  {twofaModal === 'enable' ? 'Activer la 2FA' : 'Désactiver la 2FA'}
+                </h3>
+                <p className="text-xs text-slate-300">
+                  Un code de sécurité à 6 chiffres sera envoyé à{' '}
+                  <strong className="text-amber-300">{user?.email}</strong> pour confirmer l'opération.
+                </p>
+              </div>
+
+              {twofaError && (
+                <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-[11px] font-semibold text-red-400">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {twofaError}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={sendTwoFactorCode}
+                  disabled={twofaLoading}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#D69E25]/10 border border-[#D69E25]/40 text-[#D69E25] font-black text-xs rounded-xl hover:bg-[#D69E25]/20 transition disabled:opacity-50"
+                >
+                  {twofaLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  {twofaOtpSent ? 'Renvoyer le code' : 'Envoyer le code de sécurité'}
+                </button>
+
+                {twofaOtpSent && (
+                  <>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={twofaOtp}
+                      onChange={(e) => setTwofaOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Saisir les 6 chiffres (ex: 123456)"
+                      className="w-full bg-[#011D46] border border-[#D69E25]/60 text-center font-mono text-sm tracking-widest text-amber-300 rounded-xl px-4 py-3 focus:outline-none focus:border-[#D69E25]"
+                    />
+                    <button
+                      type="button"
+                      onClick={confirmTwoFactorToggle}
+                      disabled={twofaLoading || !twofaOtp}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black text-xs rounded-xl hover:brightness-110 transition shadow-lg disabled:opacity-50"
+                    >
+                      {twofaLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Vérification...
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="w-4 h-4" />
+                          {twofaModal === 'enable' ? 'Confirmer l' : 'Confirmer la d'}ésactivation
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+              </div>
             </motion.div>
           </div>
         )}

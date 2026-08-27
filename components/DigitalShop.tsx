@@ -13,7 +13,7 @@ import {
   Plus,
   Star,
   Search,
-  Sparkles,
+  X,
 } from "lucide-react";
 
 interface DigitalShopProps {
@@ -27,6 +27,8 @@ interface DigitalShopProps {
   onEditProduct?: (product: MarketplaceProduct) => void;
   onOpenStore?: (store: VendorStore) => void;
   onOpenVendorApplication?: () => void;
+  onClearSearch?: () => void;
+  onSearchChange?: (query: string) => void;
 }
 
 export const DigitalShop: React.FC<DigitalShopProps> = ({
@@ -40,6 +42,8 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
   onEditProduct,
   onOpenStore,
   onOpenVendorApplication,
+  onClearSearch,
+  onSearchChange,
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
   const [selectedStoreId, setSelectedStoreId] = useState<string>("all");
@@ -78,6 +82,7 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
   const handleReset = () => {
     setSelectedFilter("all");
     setSelectedStoreId("all");
+    onClearSearch?.();
   };
 
   return (
@@ -89,14 +94,26 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-7 relative z-10">
         {/* COMPACT HEADER */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="inline-flex items-center gap-2 bg-white/5 backdrop-blur-xl border border-[#D69E25]/40 px-4 py-2 rounded-full text-xs font-bold text-[#D69E25] shadow-[0_0_20px_rgba(214,158,37,0.1)]">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Marketplace</span>
-            </div>
-            <span className="text-xs text-slate-500 font-semibold">
-              {filteredProducts.length} produits
-            </span>
+          {/* Barre de recherche boutique - compacte, pas trop large */}
+          <div className="relative flex items-center w-full sm:w-auto sm:flex-1 max-w-xs min-w-[200px] bg-white/5 backdrop-blur-xl border border-white/15 rounded-full overflow-hidden focus-within:border-[#D69E25]/60 focus-within:shadow-[0_0_20px_rgba(214,158,37,0.15)] transition-all duration-300">
+            <Search className="absolute left-3 w-4 h-4 text-slate-400 shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange?.(e.target.value)}
+              placeholder="Rechercher dans la boutique..."
+              className="w-full bg-transparent text-sm text-white placeholder-slate-400 pl-9 pr-8 py-2 focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => onSearchChange?.("")}
+                className="absolute right-1.5 p-1 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition"
+                title="Effacer la recherche"
+                aria-label="Effacer la recherche"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           <button
             onClick={onOpenVendorApplication}

@@ -189,3 +189,76 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+// ===== Notifications système (type app) =====
+// Ouvre / met au premier plan l'application quand l'utilisateur clique
+// sur une notification, en fonction de la page cible (data.url ou data.linkTab).
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const data = event.notification.data || {};
+  let targetPath = data.url && typeof data.url === 'string' && data.url.startsWith('/')
+    ? data.url
+    : '/';
+
+  if (!data.url) {
+    switch (data.linkTab) {
+      case 'academy':
+        targetPath = '/academy';
+        break;
+      case 'marketplace':
+        targetPath = '/marketplace';
+        break;
+      case 'services':
+        targetPath = '/services';
+        break;
+      case 'member':
+      case 'notifications':
+        targetPath = '/member';
+        break;
+      default:
+        targetPath = '/';
+    }
+  }
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.focus();
+          if ('navigate' in client) {
+            client.navigate(targetPath);
+          }
+          return;
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetPath);
+      }
+    })
+  );
+});
+
+// Clôture : marque simplement la notification comme fermée
+self.addEventListener('notificationclose', (event) => {
+  event.notification.close();
+});
+
+// Réception push (Web Push standard / VAPID)
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (e) {
+    payload = { title: 'FORTIA HUB', body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title || 'FORTIA HUB', {
+      body: payload.body || '',
+      icon: payload.icon || '/pwa-192x192.png',
+      badge: '/pwa-96x96.png',
+      tag: payload.tag || 'fortia-push',
+      data: { url: payload.url || '', linkTab: payload.linkTab || '' },
+    })
+  );
+});

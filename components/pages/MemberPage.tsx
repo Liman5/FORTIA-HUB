@@ -25,6 +25,7 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
     setOpenAuthModal,
     setAuthMode,
     loginUser,
+    refreshPlatformData,
   } = useAppStore();
   const { setActiveTab } = useActiveSection();
 
@@ -138,6 +139,7 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
             user={userProfile}
             freelance={myFreelance || null}
             enterprise={myEnterprise || null}
+            onSaved={refreshPlatformData}
           />
         ) : null}
         isProviderApproved={isProviderApproved || kycApproved}

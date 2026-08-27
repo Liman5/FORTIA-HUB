@@ -19,13 +19,13 @@ import {
   InstructorCommission,
   InstructorStoragePurchase
 } from '../types';
-import { INITIAL_SITE_CONTENT } from '../data/siteContentData';
 import { ProductImageUploader } from './ProductImageUploader';
 import { ProductDeliverableUploader, DeliverableFile } from './ProductDeliverableUploader';
 import { AdminInstructorsPanel } from './AdminInstructorsPanel';
 import { AdminServicesPanel } from './AdminServicesPanel';
 import { enhanceTitle, enhanceDescription, enhanceFeatures } from '../utils/aiEnhancer';
 import { getSignedUrl } from '../lib/services/clientUpload';
+import { SuccessConfirmationModal } from './SuccessConfirmationModal';
 import { 
   ShieldCheck, 
   TrendingUp, 
@@ -214,8 +214,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'stats' | 'site_content' | 'courses' | 'products' | 'services' | 'quotes' | 'kyc' | 'fees' | 'marketplace' | 'support' | 'instructors'>(initialTab);
   const [selectedKyc, setSelectedKyc] = useState<KycSubmission | null>(null);
 
-  // Site Content Form State
-  const [siteForm, setSiteForm] = useState<SiteContent>(siteContent || INITIAL_SITE_CONTENT);
+  // Site Content Form State (les contenus viennent des données Supabase)
+  const [siteForm, setSiteForm] = useState<SiteContent>(siteContent || ({} as SiteContent));
+  const [showCourseSuccess, setShowCourseSuccess] = useState(false);
 
   useEffect(() => {
     if (siteContent) {
@@ -362,6 +363,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onAddCourse(courseObj);
     setShowAddCourse(false);
     setNewCourseTitle('');
+    setShowCourseSuccess(true);
   };
 
   // Product Add / Edit Modal State
@@ -2277,6 +2279,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
         )}
+
+        {/* Popup de confirmation d'enregistrement de la formation */}
+        <SuccessConfirmationModal
+          isOpen={showCourseSuccess}
+          onClose={() => setShowCourseSuccess(false)}
+          title="Formation enregistrée !"
+          message="La formation a été créée avec succès et est publiée dans le catalogue. Vous pouvez la modifier à tout moment depuis ce panneau."
+        />
 
       </div>
     </section>

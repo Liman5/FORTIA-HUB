@@ -69,7 +69,7 @@ export function FloatingAiAssistant() {
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
         sender: "assistant",
-        text: data.text || "Désolé, je n'ai pas pu générer de réponse.",
+        text: data.error || data.text || "Désolé, je n'ai pas pu générer de réponse.",
         time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
       };
 

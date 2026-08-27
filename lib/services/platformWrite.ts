@@ -37,7 +37,8 @@ type WriteAction =
   | "approve-kyc-full"
   | "update-freelance-profile"
   | "update-enterprise-profile"
-  | "update-store";
+  | "update-store"
+  | "update-profile";
 
 export interface WriteResult {
   success: boolean;

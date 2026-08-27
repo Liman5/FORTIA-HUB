@@ -30,9 +30,12 @@ import {
   Wallet,
   BadgeCheck,
   MousePointerClick,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store/AppStore";
 import { useActiveSection } from "@/lib/store/useActiveSection";
+import { useTheme } from "@/lib/store/ThemeProvider";
 import { Logo } from "@/components/Logo";
 
 function ParticleField() {
@@ -143,8 +146,7 @@ function TechMarquee() {
           </div>
         ))}
       </div>
-      <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[#021231] to-transparent" />
-      <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#021231] to-transparent" />
+      {/* Fonds dégradés latéraux retirés - effet noir supprimé en mode clair */}
     </div>
   );
 }
@@ -152,6 +154,7 @@ function TechMarquee() {
 export function LandingPage() {
   const store = useAppStore();
   const { setActiveTab } = useActiveSection();
+  const { isDarkMode, toggleTheme } = useTheme();
   const heroRef = useRef<HTMLDivElement>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
@@ -307,6 +310,16 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#021231] text-white selection:bg-[#D69E25]/30 selection:text-white">
+      {/* Bouton Mode Nuit / Jour - visible en haut à droite (le navbar est masqué sur la landing) */}
+      <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 z-50 p-2.5 rounded-xl bg-[#011D46]/80 text-slate-200 hover:text-[#D69E25] border border-[#D69E25]/30 transition shadow-lg hover:scale-105 active:scale-95"
+        title={isDarkMode ? "Mode Jour" : "Mode Nuit"}
+        aria-label={isDarkMode ? "Activer le mode jour" : "Activer le mode nuit"}
+      >
+        {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      </button>
+
       {/* ==================== HERO SECTION ==================== */}
       <section
         ref={heroRef}

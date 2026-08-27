@@ -313,6 +313,7 @@ export interface UserProfile {
   avatar: string;
   accountType: 'buyer' | 'freelance' | 'enterprise';
   badge: BadgeType;
+  twoFactorEnabled?: boolean;
   kycStatus: 'non_soumis' | 'en_attente' | 'approuve' | 'rejete';
   deletionRequestedAt?: string;
   deletionScheduledFor?: string;

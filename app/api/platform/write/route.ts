@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
+import { notifyUser } from "@/lib/services/notifyUser";
 
 export const dynamic = "force-dynamic";
 
@@ -148,92 +149,99 @@ export async function POST(req: NextRequest) {
 
         if (sub.applicantType === "enterprise") {
           // Créer le profil ENTREPRISE
-          const enterprise = await prisma.enterpriseProfile.upsert({
-            where: userId ? { userId } : { id: "__none__" },
-            create: {
-              userId,
-              companyName: sub.companyName || displayName,
-              tagline: "",
-              description: "",
-              logo: "",
-              badge: "gold",
-              badgeLabel: "Badge Doré (Société Certifiée)",
-              sector: "",
-              country: sub.country || "",
-              verifiedDocuments: true,
-              registrationFeePaid: true,
-              canReceivePayments: data.canReceivePayments ?? false,
-              canSellServices: true,
-              contactEmail: sub.email,
-              contactPhone: sub.phone || "",
-              website: data.website || "",
-              isVisible: true,
-            },
-            update: {
-              companyName: sub.companyName || undefined,
-              country: sub.country || undefined,
-              verifiedDocuments: true,
-              registrationFeePaid: true,
-              badge: "gold",
-              contactEmail: sub.email,
-              contactPhone: sub.phone || undefined,
-              isVisible: true,
-            },
-          });
+        const existingEnterprise = userId
+          ? await prisma.enterpriseProfile.findFirst({ where: { userId } })
+          : null;
+        const enterprise = existingEnterprise
+          ? await prisma.enterpriseProfile.update({
+              where: { id: existingEnterprise.id },
+              data: {
+                companyName: sub.companyName || undefined,
+                country: sub.country || undefined,
+                verifiedDocuments: true,
+                registrationFeePaid: true,
+                badge: "gold",
+                contactEmail: sub.email,
+                contactPhone: sub.phone || undefined,
+                isVisible: true,
+              },
+            })
+          : await prisma.enterpriseProfile.create({
+              data: {
+                userId,
+                companyName: sub.companyName || displayName,
+                tagline: "",
+                description: "",
+                logo: "",
+                badge: "gold",
+                badgeLabel: "Badge Doré (Société Certifiée)",
+                sector: "",
+                country: sub.country || "",
+                verifiedDocuments: true,
+                registrationFeePaid: true,
+                canReceivePayments: data.canReceivePayments ?? false,
+                canSellServices: true,
+                contactEmail: sub.email,
+                contactPhone: sub.phone || "",
+                website: data.website || "",
+                isVisible: true,
+              },
+            });
           profileId = enterprise.id;
           badgeLabel = enterprise.badgeLabel;
         } else {
           // Créer le profil FREELANCE
-          const freelance = await prisma.freelanceProfile.upsert({
-            where: userId ? { userId } : { id: "__none__" },
-            create: {
-              userId,
-              name: displayName,
-              title: data.title || "",
-              bio: "",
-              avatar: user?.avatar || "",
-              badge: "green",
-              badgeLabel: "Badge Vert Vérifié",
-              category: data.category || "",
-              rating: 5,
-              completedJobs: 0,
-              hourlyRate: data.hourlyRate || 0,
-              skills: data.skills || [],
-              kycVerified: true,
-              registrationFeePaid: true,
-              canReceivePayments: data.canReceivePayments ?? false,
-              canSellServices: true,
-              location: sub.country || "",
-              isVisible: true,
-            },
-            update: {
-              kycVerified: true,
-              registrationFeePaid: true,
-              badge: "green",
-              location: sub.country || undefined,
-              isVisible: true,
-            },
-          });
+          const existingFreelance = userId
+            ? await prisma.freelanceProfile.findFirst({ where: { userId } })
+            : null;
+          const freelance = existingFreelance
+            ? await prisma.freelanceProfile.update({
+                where: { id: existingFreelance.id },
+                data: {
+                  kycVerified: true,
+                  registrationFeePaid: true,
+                  badge: "green",
+                  location: sub.country || undefined,
+                  isVisible: true,
+                },
+              })
+            : await prisma.freelanceProfile.create({
+                data: {
+                  userId,
+                  name: displayName,
+                  title: data.title || "",
+                  bio: "",
+                  avatar: user?.avatar || "",
+                  badge: "green",
+                  badgeLabel: "Badge Vert Vérifié",
+                  category: data.category || "",
+                  rating: 5,
+                  completedJobs: 0,
+                  hourlyRate: data.hourlyRate || 0,
+                  skills: data.skills || [],
+                  kycVerified: true,
+                  registrationFeePaid: true,
+                  canReceivePayments: data.canReceivePayments ?? false,
+                  canSellServices: true,
+                  location: sub.country || "",
+                  isVisible: true,
+                },
+              });
           profileId = freelance.id;
           badgeLabel = freelance.badgeLabel;
         }
 
         // 3. Notifier l'utilisateur
         if (userId) {
-          await prisma.notification.create({
-            data: {
-              userId,
-              title: sub.applicantType === "enterprise" ? "Entreprise certifiée Badge Doré" : "Profil Freelance approuvé",
-              message:
-                "Félicitations " + displayName + " ! Votre dossier KYC a été approuvé. " +
-                "Vous êtes désormais visible dans l'annuaire " +
-                (sub.applicantType === "enterprise" ? "Entreprises avec le Badge Doré." : "Freelances avec le Badge Vert.") +
-                " Accédez à votre espace membre pour compléter votre profil et vos services.",
-              type: "success",
-              linkTab: "member",
-              isGlobal: false,
-              isRead: false,
-            } as any,
+          await notifyUser(userId, {
+            title: sub.applicantType === "enterprise" ? "Entreprise certifiée Badge Doré" : "Profil Freelance approuvé",
+            message:
+              "Félicitations " + displayName + " ! Votre dossier KYC a été approuvé. " +
+              "Vous êtes désormais visible dans l'annuaire " +
+              (sub.applicantType === "enterprise" ? "Entreprises avec le Badge Doré." : "Freelances avec le Badge Vert.") +
+              " Accédez à votre espace membre pour compléter votre profil et vos services.",
+            type: "success",
+            linkTab: "member",
           });
         }
 
@@ -249,34 +257,42 @@ export async function POST(req: NextRequest) {
       // ============ MISE À JOUR PROFIL FREELANCE (par le freelance) ============
       case "update-freelance-profile": {
         if (!data.userId) return NextResponse.json({ error: "userId requis" }, { status: 400 });
-        const profile = await prisma.freelanceProfile.upsert({
+        // La table freelance_profiles n'a PAS de contrainte unique sur user_id :
+        // on utilise findFirst + update/create (l'upsert Prisma échouerait en base).
+        const existingFreelanceProfile = await prisma.freelanceProfile.findFirst({
           where: { userId: data.userId },
-          create: {
-            userId: data.userId,
-            name: data.name || "Freelance",
-            title: data.title || "",
-            bio: data.bio || "",
-            avatar: data.avatar || "",
-            category: data.category || "",
-            hourlyRate: data.hourlyRate || 0,
-            skills: data.skills || [],
-            location: data.location || "",
-            kycVerified: true,
-            canSellServices: true,
-            isVisible: true,
-          },
-          update: {
-            name: data.name ?? undefined,
-            title: data.title ?? undefined,
-            bio: data.bio ?? undefined,
-            avatar: data.avatar ?? undefined,
-            category: data.category ?? undefined,
-            hourlyRate: data.hourlyRate ?? undefined,
-            skills: data.skills ?? undefined,
-            location: data.location ?? undefined,
-            isVisible: data.isVisible ?? undefined,
-          } as any,
         });
+        const profile = existingFreelanceProfile
+          ? await prisma.freelanceProfile.update({
+              where: { id: existingFreelanceProfile.id },
+              data: {
+                name: data.name ?? undefined,
+                title: data.title ?? undefined,
+                bio: data.bio ?? undefined,
+                avatar: data.avatar ?? undefined,
+                category: data.category ?? undefined,
+                hourlyRate: data.hourlyRate ?? undefined,
+                skills: data.skills ?? undefined,
+                location: data.location ?? undefined,
+                isVisible: data.isVisible ?? undefined,
+              } as any,
+            })
+          : await prisma.freelanceProfile.create({
+              data: {
+                userId: data.userId,
+                name: data.name || "Freelance",
+                title: data.title || "",
+                bio: data.bio || "",
+                avatar: data.avatar || "",
+                category: data.category || "",
+                hourlyRate: data.hourlyRate || 0,
+                skills: data.skills || [],
+                location: data.location || "",
+                kycVerified: true,
+                canSellServices: true,
+                isVisible: true,
+              },
+            });
 
         // Services du freelance (remplacement complet si fournis)
         if (Array.isArray(data.services)) {
@@ -291,7 +307,6 @@ export async function POST(req: NextRequest) {
                 startingPrice: serv.startingPrice || 0,
                 deliveryDays: serv.deliveryDays || 3,
                 image: serv.image || "",
-                displayOrder: 0,
               } as any,
             });
           }
@@ -303,36 +318,44 @@ export async function POST(req: NextRequest) {
       // ============ MISE À JOUR PROFIL ENTREPRISE (par l'entreprise) ============
       case "update-enterprise-profile": {
         if (!data.userId) return NextResponse.json({ error: "userId requis" }, { status: 400 });
-        const profile = await prisma.enterpriseProfile.upsert({
+        // La table enterprise_profiles n'a PAS de contrainte unique sur user_id :
+        // on utilise findFirst + update/create (l'upsert Prisma échouerait en base).
+        const existingEnterpriseProfile = await prisma.enterpriseProfile.findFirst({
           where: { userId: data.userId },
-          create: {
-            userId: data.userId,
-            companyName: data.companyName || "Entreprise",
-            tagline: data.tagline || "",
-            description: data.description || "",
-            logo: data.logo || "",
-            sector: data.sector || "",
-            country: data.country || "",
-            verifiedDocuments: true,
-            canSellServices: true,
-            contactEmail: data.contactEmail || "",
-            contactPhone: data.contactPhone || "",
-            website: data.website || "",
-            isVisible: true,
-          },
-          update: {
-            companyName: data.companyName ?? undefined,
-            tagline: data.tagline ?? undefined,
-            description: data.description ?? undefined,
-            logo: data.logo ?? undefined,
-            sector: data.sector ?? undefined,
-            country: data.country ?? undefined,
-            contactEmail: data.contactEmail ?? undefined,
-            contactPhone: data.contactPhone ?? undefined,
-            website: data.website ?? undefined,
-            isVisible: data.isVisible ?? undefined,
-          } as any,
         });
+        const profile = existingEnterpriseProfile
+          ? await prisma.enterpriseProfile.update({
+              where: { id: existingEnterpriseProfile.id },
+              data: {
+                companyName: data.companyName ?? undefined,
+                tagline: data.tagline ?? undefined,
+                description: data.description ?? undefined,
+                logo: data.logo ?? undefined,
+                sector: data.sector ?? undefined,
+                country: data.country ?? undefined,
+                contactEmail: data.contactEmail ?? undefined,
+                contactPhone: data.contactPhone ?? undefined,
+                website: data.website ?? undefined,
+                isVisible: data.isVisible ?? undefined,
+              } as any,
+            })
+          : await prisma.enterpriseProfile.create({
+              data: {
+                userId: data.userId,
+                companyName: data.companyName || "Entreprise",
+                tagline: data.tagline || "",
+                description: data.description || "",
+                logo: data.logo || "",
+                sector: data.sector || "",
+                country: data.country || "",
+                verifiedDocuments: true,
+                canSellServices: true,
+                contactEmail: data.contactEmail || "",
+                contactPhone: data.contactPhone || "",
+                website: data.website || "",
+                isVisible: true,
+              },
+            });
 
         // Services de l'entreprise (remplacement complet si fournis)
         if (Array.isArray(data.services)) {
@@ -351,6 +374,20 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json({ success: true, id: profile.id });
+      }
+
+      // ============ MISE À JOUR PROFIL UTILISATEUR (avatar, infos) ============
+      case "update-profile": {
+        if (!data.id) return NextResponse.json({ error: "id requis" }, { status: 400 });
+        const user = await prisma.user.update({
+          where: { id: data.id },
+          data: {
+            avatar: data.avatar ?? undefined,
+            name: data.name ?? undefined,
+            phone: data.phone ?? undefined,
+          } as any,
+        });
+        return NextResponse.json({ success: true, id: user.id });
       }
 
       // ============ CANDIDATURE VENDEUR ============
@@ -411,16 +448,11 @@ export async function POST(req: NextRequest) {
           : await prisma.user.findFirst({ where: { email: app.email } });
 
         if (sellerUser) {
-          await prisma.notification.create({
-            data: {
-              userId: sellerUser.id,
-              title: "Boutique approuvee !",
-              message: "Felicitations " + app.applicantName + " ! Votre boutique " + app.storeName + " a ete approuvee.",
-              type: "success",
-              linkTab: "vendor",
-              isGlobal: false,
-              isRead: false,
-            } as any,
+          await notifyUser(sellerUser.id, {
+            title: "Boutique approuvee !",
+            message: "Felicitations " + app.applicantName + " ! Votre boutique " + app.storeName + " a ete approuvee.",
+            type: "success",
+            linkTab: "vendor",
           });
         }
 
@@ -446,16 +478,11 @@ export async function POST(req: NextRequest) {
           : await prisma.user.findFirst({ where: { email: app.email } });
 
         if (sellerUser) {
-          await prisma.notification.create({
-            data: {
-              userId: sellerUser.id,
-              title: "Boutique non approuvee",
-              message: "Bonjour " + app.applicantName + ", votre demande de boutique " + app.storeName + " n'a pas ete approuvee.",
-              type: "warning",
-              linkTab: "vendor",
-              isGlobal: false,
-              isRead: false,
-            } as any,
+          await notifyUser(sellerUser.id, {
+            title: "Boutique non approuvee",
+            message: "Bonjour " + app.applicantName + ", votre demande de boutique " + app.storeName + " n'a pas ete approuvee.",
+            type: "warning",
+            linkTab: "vendor",
           });
         }
 
@@ -937,16 +964,11 @@ export async function POST(req: NextRequest) {
             where: { email: clientEmail.toLowerCase() },
           });
           if (clientUser) {
-            await prisma.notification.create({
-              data: {
-                userId: clientUser.id,
-                title: "Commande envoyée : " + serviceTitle,
-                message: "Votre commande " + orderNumber + " a bien été reçue. Notre équipe vous contactera sous 24h pour valider le cahier des charges. Montant estimé : " + data.estimatedPrice + "$.",
-                type: "success",
-                linkTab: "member",
-                isGlobal: false,
-                isRead: false,
-              } as any,
+            await notifyUser(clientUser.id, {
+              title: "Commande envoyée : " + serviceTitle,
+              message: "Votre commande " + orderNumber + " a bien été reçue. Notre équipe vous contactera sous 24h pour valider le cahier des charges. Montant estimé : " + data.estimatedPrice + "$.",
+              type: "success",
+              linkTab: "member",
             });
             clientNotified = true;
           }
@@ -1101,16 +1123,11 @@ export async function POST(req: NextRequest) {
           } as any,
         });
         if (user) {
-          await prisma.notification.create({
-            data: {
-              userId: user.id,
-              title: "Vous êtes formateur FORTIA HUB !",
-              message: "Felicitations " + user.name + " ! L'administration a activé votre centre de formation " + centerName + ".",
-              type: "success",
-              linkTab: "instructor",
-              isGlobal: false,
-              isRead: false,
-            } as any,
+          await notifyUser(user.id, {
+            title: "Vous êtes formateur FORTIA HUB !",
+            message: "Felicitations " + user.name + " ! L'administration a activé votre centre de formation " + centerName + ".",
+            type: "success",
+            linkTab: "instructor",
           });
         }
         return NextResponse.json({ success: true, id: created.id, notified: !!user });

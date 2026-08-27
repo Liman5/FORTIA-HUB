@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { motion } from "motion/react";
 import { useAppStore } from "@/lib/store/AppStore";
 import { CourseCatalog } from "@/components/CourseCatalog";
@@ -19,11 +19,11 @@ import {
   BadgeCheck,
   TrendingUp,
   Layers,
+  Loader2,
 } from "lucide-react";
 
 export function AcademyPage() {
-  const { courses, addToCart, setSelectedCourseForPlayer, rateCourse } = useAppStore();
-  const [searchQuery, setSearchQuery] = useState("");
+  const { courses, addToCart, setSelectedCourseForPlayer, rateCourse, platformLoaded, searchQuery, setSearchQuery } = useAppStore();
 
   const totalStudents = courses.reduce((sum, c) => sum + (c.studentsCount || 0), 0);
   const totalLessons = courses.reduce((sum, c) => sum + (c.lessonsCount || 0), 0);
@@ -66,6 +66,17 @@ export function AcademyPage() {
       setSelectedCourseForPlayer(courses[0]);
     }
   };
+
+  if (!platformLoaded) {
+    return (
+      <div className="min-h-screen bg-[#021231] text-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-[#D69E25]" />
+          <p className="text-xs text-slate-400">Chargement des formations...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#021231] text-white selection:bg-[#D69E25]/30">

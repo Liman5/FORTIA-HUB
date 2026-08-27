@@ -41,6 +41,7 @@ interface NavbarProps {
   onDeleteNotification?: (id: string) => void;
   siteContent?: any;
   onOpenSidebar?: () => void;
+  isLandingPage?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -60,6 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   notifications = [],
   siteContent,
   onOpenSidebar,
+  isLandingPage,
 }) => {
   const { isDarkMode, toggleTheme } = useTheme();
 
@@ -135,35 +137,40 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Logo variant="light" size="md" />
           </div>
 
-          {/* Desktop Search */}
-          <div className="hidden lg:flex items-center relative flex-1 max-w-xs mx-2">
-            <Search className="absolute left-3 w-3.5 h-3.5 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rechercher formation, e-book..."
-              className="w-full bg-[#011D46]/80 text-xs text-white placeholder-slate-400 pl-8 pr-3 py-1.5 rounded-full border border-[#D69E25]/30 focus:outline-none focus:border-[#D69E25] transition"
-            />
-          </div>
+          {/* Desktop Search - masqué sur la landing page */}
+          {!isLandingPage && (
+            <div className="hidden lg:flex items-center relative flex-1 max-w-xs mx-2">
+              <Search className="absolute left-3 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Rechercher dans la boutique..."
+                className="w-full bg-[#011D46]/80 text-xs text-white placeholder-slate-400 pl-8 pr-3 py-1.5 rounded-full border border-[#D69E25]/30 focus:outline-none focus:border-[#D69E25] transition"
+              />
+            </div>
+          )}
 
           {/* Global Controls Only */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Cart */}
-            <button
-              onClick={() => setIsCartOpen(true)}
-              className="relative p-2 rounded-xl bg-[#011D46]/80 text-slate-200 hover:text-[#D69E25] border border-[#D69E25]/30 transition shadow"
-              title="Panier"
-            >
-              <ShoppingCart className="w-4 h-4" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">
-                  {cartCount}
-                </span>
-              )}
-            </button>
+            {/* Cart - masqué sur la landing page */}
+            {!isLandingPage && (
+              <button
+                onClick={() => setIsCartOpen(true)}
+                className="relative p-2 rounded-xl bg-[#011D46]/80 text-slate-200 hover:text-[#D69E25] border border-[#D69E25]/30 transition shadow"
+                title="Panier"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">
+                    {cartCount}
+                  </span>
+                )}
+              </button>
+            )}
 
-            {/* Notifications - Popup Dropdown avec max 5 */}
+            {/* Notifications - Popup Dropdown avec max 5 (masqué sur la landing page) */}
+            {!isLandingPage && (
             <div className="notif-popup-container relative">
               <button
                 onClick={() => setIsNotifOpen(!isNotifOpen)}
@@ -257,6 +264,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
             </div>
+            )}
 
             {/* Theme Toggle */}
             <button
@@ -299,27 +307,29 @@ export const Navbar: React.FC<NavbarProps> = ({
               )
             )}
 
-            {/* Sidebar Button - Menu hamburger avec 3 barres */}
-            <button
-              onClick={onOpenSidebar}
-              className="sidebar-menu-btn p-2 rounded-xl bg-[#D69E25]/20 text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] border border-[#D69E25]/40 transition shadow"
-              title="Menu"
-              aria-label="Ouvrir le menu"
-            >
-              <svg
-                className="w-5 h-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                xmlns="http://www.w3.org/2000/svg"
+            {/* Sidebar Button - Menu hamburger avec 3 barres (masqué sur la landing page) */}
+            {!isLandingPage && (
+              <button
+                onClick={onOpenSidebar}
+                className="sidebar-menu-btn p-2 rounded-xl bg-[#D69E25]/20 text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] border border-[#D69E25]/40 transition shadow"
+                title="Menu"
+                aria-label="Ouvrir le menu"
               >
-                <line x1="4" y1="6" x2="20" y2="6" stroke="#D69E25" />
-                <line x1="4" y1="12" x2="20" y2="12" stroke="#D69E25" />
-                <line x1="4" y1="18" x2="20" y2="18" stroke="#D69E25" />
-              </svg>
-            </button>
+                <svg
+                  className="w-5 h-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <line x1="4" y1="6" x2="20" y2="6" stroke="#D69E25" />
+                  <line x1="4" y1="12" x2="20" y2="12" stroke="#D69E25" />
+                  <line x1="4" y1="18" x2="20" y2="18" stroke="#D69E25" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </header>

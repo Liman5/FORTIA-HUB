@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { INITIAL_COURSES } from "@/lib/data/academyData";
-import { INITIAL_STORES, INITIAL_MARKETPLACE_PRODUCTS } from "@/lib/data/marketplaceData";
+
+// ============================================================
+// Données mockées supprimées : le projet n'utilise plus de
+// données fictives. Le seed "UNIQUEMENT SI VIDE" du POST
+// ci-dessous est désormais inopérant (tableaux vides).
+// Les tables Supabase sont alimentées uniquement par les vrais
+// flux (création de cours, produits, boutiques par les acteurs).
+// ============================================================
+const INITIAL_COURSES: any[] = [];
+const INITIAL_STORES: any[] = [];
+const INITIAL_MARKETPLACE_PRODUCTS: any[] = [];
 
 /**
  * GET /api/platform/sync

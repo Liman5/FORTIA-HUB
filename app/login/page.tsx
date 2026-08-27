@@ -3,8 +3,8 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, Eye, EyeOff, Loader2, LogIn, AlertCircle, CheckCircle2 } from "lucide-react";
-import { apiLoginUser } from "@/services/api";
+import { Mail, Lock, Eye, EyeOff, Loader2, LogIn, AlertCircle, CheckCircle2, KeyRound, ShieldCheck, RefreshCw, ArrowLeft } from "lucide-react";
+import { apiLoginUser, apiVerifyTwoFactor } from "@/services/api";
 import { useAppStore } from "@/lib/store/AppStore";
 
 export default function LoginPage() {
@@ -17,6 +17,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Étape 2FA
+  const [needsTwoFactor, setNeedsTwoFactor] = useState(false);
+  const [twoFactorToken, setTwoFactorToken] = useState("");
+  const [otpInput, setOtpInput] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,15 +37,77 @@ export default function LoginPage() {
     const res = await apiLoginUser({ email, password });
     setLoading(false);
 
-    if (!res.success || !res.data?.user) {
+    if (!res.success || !res.data) {
       setError(res.error || "Connexion refusée : Adresse e-mail ou mot de passe incorrect.");
+      return;
+    }
+
+    // Authentification à deux facteurs requise
+    if (res.data.needsTwoFactor) {
+      setNeedsTwoFactor(true);
+      setTwoFactorToken(res.data.twoFactorToken || "");
+      setSuccess(res.data.message || "Un code de sécurité a été envoyé par e-mail.");
+      return;
+    }
+
+    if (!res.data.user) {
+      setError("Réponse de connexion invalide.");
       return;
     }
 
     // Sauvegarder la session dans le store (Supabase persisté en base)
     loginUser(res.data.user);
     setSuccess("Connexion réussie ! Redirection...");
-    setTimeout(() => router.push("/member"), 1200);
+    // Retour à la page privée d'origine si le proxy a redirigé ici (?next=...)
+    const next = new URLSearchParams(window.location.search).get("next") || "/member";
+    setTimeout(() => router.push(next), 1200);
+  };
+
+  const handleVerifyTwoFactor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (!/^\d{6}$/.test(otpInput.trim())) {
+      setError("Le code de sécurité doit comporter exactement 6 chiffres.");
+      return;
+    }
+
+    setLoading(true);
+    const res = await apiVerifyTwoFactor(twoFactorToken, otpInput.trim());
+    setLoading(false);
+
+    if (!res.success || !res.data?.user) {
+      setError(res.error || "Code de sécurité invalide.");
+      return;
+    }
+
+    loginUser(res.data.user);
+    setSuccess("Authentification à deux facteurs validée ! Redirection...");
+    const next = new URLSearchParams(window.location.search).get("next") || "/member";
+    setTimeout(() => router.push(next), 1200);
+  };
+
+  const handleResendTwoFactorCode = async () => {
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
+    const res = await apiLoginUser({ email, password });
+    setLoading(false);
+    if (res.success && res.data?.needsTwoFactor) {
+      setTwoFactorToken(res.data.twoFactorToken || "");
+      setSuccess("Un nouveau code de sécurité a été envoyé par e-mail.");
+    } else {
+      setError(res.error || "Impossible de renvoyer le code. Réessayez.");
+    }
+  };
+
+  const backToLogin = () => {
+    setNeedsTwoFactor(false);
+    setTwoFactorToken("");
+    setOtpInput("");
+    setError(null);
+    setSuccess(null);
   };
 
   return (
@@ -74,6 +141,64 @@ export default function LoginPage() {
             </div>
           )}
 
+          {needsTwoFactor ? (
+          <form onSubmit={handleVerifyTwoFactor} className="space-y-4">
+            {/* Informations 2FA */}
+            <div className="p-4 bg-[#D69E25]/10 border border-[#D69E25]/40 rounded-xl">
+              <div className="flex items-center gap-2 mb-2">
+                <ShieldCheck className="w-5 h-5 text-[#D69E25] shrink-0" />
+                <p className="text-xs font-black text-[#D69E25]">Double authentification requise</p>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Pour sécuriser votre compte, un code de sécurité à 6 chiffres a été envoyé à votre adresse e-mail.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-300 block mb-1 font-bold">Code de sécurité (6 chiffres)</label>
+              <div className="relative">
+                <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otpInput}
+                  onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="123456"
+                  className="w-full bg-[#021231] border border-[#D69E25]/60 text-center font-mono text-sm tracking-widest text-amber-300 rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-[#D69E25]"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-[#D69E25] text-[#021231] font-black text-xs rounded-xl hover:bg-amber-400 transition shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+              {loading ? "Vérification..." : "Valider le code de sécurité"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResendTwoFactorCode}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-1.5 py-2 text-[11px] text-[#D69E25] font-bold hover:underline disabled:opacity-50"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Renvoyer le code
+            </button>
+
+            <button
+              type="button"
+              onClick={backToLogin}
+              className="w-full flex items-center justify-center gap-1.5 py-2 text-[11px] text-slate-400 font-semibold hover:text-white"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Retour à la connexion
+            </button>
+          </form>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-xs text-slate-300 block mb-1 font-bold">Adresse e-mail</label>
@@ -110,6 +235,15 @@ export default function LoginPage() {
               </div>
             </div>
 
+            <div className="flex items-center justify-end">
+              <Link
+                href="/forgot-password"
+                className="text-[10px] text-[#D69E25] font-bold hover:underline"
+              >
+                Mot de passe oublié ?
+              </Link>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
@@ -119,6 +253,7 @@ export default function LoginPage() {
               {loading ? "Connexion en cours..." : "Se Connecter"}
             </button>
           </form>
+          )}
 
           <div className="text-center text-xs text-slate-400 space-y-1">
             <p>

@@ -16,10 +16,16 @@ import { PaymentGatewayModal } from "@/components/PaymentGatewayModal";
 import { UserAuthModal } from "@/components/UserAuthModal";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { FloatingAiAssistant } from "@/components/FloatingAiAssistant";
+import { SearchResultsModal } from "@/components/SearchResultsModal";
+import { AnimatePresence } from "motion/react";
+import { registerServiceWorker } from "@/app/registerServiceWorker";
+import { initPwaStore } from "@/lib/pwa/pwaStore";
+import { showSystemNotification } from "@/lib/services/appNotifications";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAdminPage = pathname === "/admin";
+  const isLandingPage = pathname === "/";
   const store = useAppStore();
   const { activeTab, setActiveTab } = useActiveSection();
 
@@ -65,10 +71,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     selectedStore,
     isAdminAuthModalOpen,
     setAdminAuthModalOpen,
+    searchQuery,
+    setSearchQuery,
+    refreshPlatformData,
   } = store;
-
-  // Search query state (persisted locally in this shell)
-  const [localSearchQuery, setLocalSearchQuery] = React.useState("");
 
   // Derive cart count and vendor email
   const cartCount = cartItems.length;
@@ -84,10 +90,79 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Sidebar state
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
+  // Recherche globale : le modal s'ouvre dès que l'utilisateur tape,
+  // mais reste fermé après une navigation vers la boutique (le filtre est conservé).
+  const [isSearchOpen, setIsSearchOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (searchQuery && searchQuery.trim().length > 0) {
+      setIsSearchOpen(true);
+    }
+  }, [searchQuery]);
+
+  const handleCloseSearch = () => {
+    setIsSearchOpen(false);
+    setSearchQuery("");
+  };
+
+  const handleNavigateFromSearch = () => {
+    setIsSearchOpen(false);
+  };
+
+  // ===== PWA : initialisation du store d'installation + service worker (mises à jour auto) =====
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    initPwaStore();
+    registerServiceWorker();
+  }, []);
+
+  // ===== Notifications "comme une app" : rafraîchissement périodique (quasi temps réel) =====
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (isUserLoggedIn) {
+      // Rafraîchit les données (notifications, commandes…) toutes les 60 secondes
+      interval = setInterval(() => {
+        refreshPlatformData().catch(() => {});
+      }, 60000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isUserLoggedIn, refreshPlatformData]);
+
+  // ===== Notifications système quand une nouvelle notification in-app arrive =====
+  const seenNotifIdsRef = React.useRef<Set<string>>(new Set());
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const notifList = notifications || [];
+    // Marquer silencieusement les notifications existantes au premier chargement
+    if (seenNotifIdsRef.current.size === 0) {
+      notifList.forEach((n) => n && n.id && seenNotifIdsRef.current.add(n.id));
+      return;
+    }
+    notifList.forEach((n) => {
+      if (n && n.id && !n.read && !seenNotifIdsRef.current.has(n.id)) {
+        seenNotifIdsRef.current.add(n.id);
+        showSystemNotification({
+          title: n.title || "FORTIA HUB",
+          body: n.message || "",
+          tag: n.id,
+          data: { linkTab: n.linkTab || "" },
+        });
+      }
+    });
+    // Nettoyage des ids qui n'existent plus (notifications supprimées)
+    const existingIds = new Set(notifList.map((n) => n.id));
+    seenNotifIdsRef.current = new Set(
+      [...seenNotifIdsRef.current].filter((id) => existingIds.has(id))
+    );
+  }, [notifications]);
+
   return (
-    <div className={`min-h-screen bg-[#021231] font-sans antialiased text-slate-100 flex flex-col ${isAdminPage ? "" : "pb-24 sm:pb-28"}`}>
-      {/* Top Navbar - masqué sur la page admin */}
-      {!isAdminPage && (
+    <div className={`min-h-screen bg-[#021231] font-sans antialiased text-slate-100 flex flex-col ${isAdminPage || isLandingPage ? "" : "pb-24 sm:pb-28"}`}>
+      {/* Top Navbar - masqué sur la page admin et sur la landing page */}
+      {!isAdminPage && !isLandingPage && (
         <Navbar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -95,8 +170,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           setIsCartOpen={() => setCartOpen(true)}
           isAdmin={isAdmin}
           setIsAdmin={setAdmin}
-          searchQuery={localSearchQuery}
-          setSearchQuery={setLocalSearchQuery}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
           onOpenAuthModal={handleOpenAuthModal}
           isUserLoggedIn={isUserLoggedIn}
           userEmail={userProfile.email}
@@ -108,11 +183,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onDeleteNotification={deleteNotification}
           siteContent={siteContent}
           onOpenSidebar={() => setIsSidebarOpen(true)}
+          isLandingPage={isLandingPage}
         />
       )}
 
-      {/* Sidebar */}
-      {!isAdminPage && (
+      {/* Sidebar - masqué sur la landing page */}
+      {!isAdminPage && !isLandingPage && (
         <Sidebar
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
@@ -209,14 +285,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         onLoginSuccess={loginUser}
       />
 
-      {/* Persistent Bottom Navigation Bar - masqué sur la page admin */}
-      {!isAdminPage && (
+      {/* Persistent Bottom Navigation Bar - masqué sur la page admin et sur la landing page */}
+      {!isAdminPage && !isLandingPage && (
         <BottomNavbar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           isUserLoggedIn={isUserLoggedIn}
           onOpenAuthModal={handleOpenAuthModal}
+          isLandingPage={isLandingPage}
         />
+      )}
+
+      {/* Modal de résultats de recherche globale (barre de recherche navbar → boutique) */}
+      {!isAdminPage && !isLandingPage && (
+        <AnimatePresence>
+          {isSearchOpen && searchQuery && searchQuery.trim().length > 0 && (
+            <SearchResultsModal
+              onClose={handleCloseSearch}
+              onNavigate={handleNavigateFromSearch}
+            />
+          )}
+        </AnimatePresence>
       )}
 
       {/* Robot IA Fortia flottant sur toutes les pages */}

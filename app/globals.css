@@ -150,6 +150,14 @@ html.light .animated-gradient-text {
   ) !important;
 }
 
+/* --- Stats du Hero : dégradé blanc -> sombre en mode clair (sinon illisible sur carte blanche) --- */
+html.light [class*="from-white to-slate-300"] {
+  background-image: linear-gradient(to right, #0f172a, #64748b) !important;
+}
+html.light [class*="from-white to-slate-300"]:hover {
+  background-image: linear-gradient(to right, #d69e25, #f6e05e) !important;
+}
+
 /* ===== Header Navbar protégé du mode clair ===== */
 .navbar-header {
   background-color: #021231 !important;

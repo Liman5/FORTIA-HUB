@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { validateEmailFormat } from "@/lib/utils/authValidation";
 import { prisma } from "@/lib/prisma";
+import { supabaseEnsureAuthUser } from "@/lib/services/supabaseAuth";
+import {
+  createUserSession,
+  setSessionCookie,
+  getCurrentUser,
+} from "@/lib/services/authSession";
+import {
+  createTwoFactorChallenge,
+  isTwoFactorEnabled,
+  setTwoFactorEnabled,
+  verifyTwoFactorChallenge,
+} from "@/lib/services/twoFactor";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -9,17 +21,6 @@ export const dynamic = "force-dynamic";
 const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 const FROM_EMAIL = process.env.SENDER_EMAIL || "Fortia Hub <onboarding@resend.dev>";
-
-// Fallback in-memory (utilisé uniquement si la base Supabase est inaccessible)
-let usersStore: Array<{
-  id: string;
-  email: string;
-  password: string;
-  name: string;
-  phone?: string;
-  accountType?: string;
-  createdAt: string;
-}> = [];
 
 const activeOtpsStore = new Map<
   string,
@@ -103,19 +104,25 @@ function generateOtpEmailHtml(otpCode: string, recipientEmail: string) {
   `;
 }
 
-// GET /api/auth/users - list registered users
+// GET /api/auth/users - list registered users (Supabase / Prisma)
 export async function GET() {
-  return NextResponse.json({
-    count: usersStore.length,
-    users: usersStore.map((u) => ({
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      phone: u.phone,
-      accountType: u.accountType,
-      createdAt: u.createdAt,
-    })),
-  });
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        accountType: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return NextResponse.json({ count: users.length, users });
+  } catch (err: any) {
+    console.warn("[AUTH] Base inaccessible pour la liste des utilisateurs:", err?.message);
+    return NextResponse.json({ count: 0, users: [] });
+  }
 }
 
 // POST /api/auth - unified auth endpoint (action-based routing)
@@ -152,20 +159,11 @@ export async function POST(request: NextRequest) {
           );
         }
       } catch (dbError: any) {
-        console.warn("[AUTH] Base inaccessible, fallback mémoire:", dbError?.message);
-        const existingUser = usersStore.find(
-          (u) => u.email.toLowerCase() === normalizedEmail
+        console.warn("[AUTH] Base inaccessible pour la vérification d'email:", dbError?.message);
+        return NextResponse.json(
+          { error: "Base de données inaccessible. Impossible de vérifier l'adresse e-mail." },
+          { status: 500 }
         );
-        if (existingUser) {
-          return NextResponse.json(
-            {
-              available: false,
-              error:
-                "Refusé : Cette adresse e-mail est déjà inscrite sur la plateforme. Une seule inscription est autorisée par adresse e-mail.",
-            },
-            { status: 400 }
-          );
-        }
       }
 
       return NextResponse.json({
@@ -336,48 +334,29 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        return NextResponse.json(
-          {
-            message: "Inscription réussie !",
-            user: {
-              id: newUser.id,
-              email: newUser.email,
-              name: newUser.name,
-              phone: newUser.phone,
-              accountType: newUser.accountType,
-            },
-          },
-          { status: 201 }
-        );
-      } catch (dbError: any) {
-        console.warn("[AUTH] Base inaccessible, fallback mémoire:", dbError?.message);
-
-        // Fallback mémoire
-        const existingUser = usersStore.find(
-          (u) => u.email.toLowerCase() === normalizedEmail
-        );
-        if (existingUser) {
-          return NextResponse.json(
-            {
-              error:
-                "Refusé : Cette adresse e-mail est déjà inscrite sur la plateforme. Une seule inscription est autorisée par adresse e-mail.",
-            },
-            { status: 400 }
-          );
+        // Création du compte dans Supabase Auth (best-effort) pour permettre
+        // la réinitialisation de mot de passe par email ultérieurement.
+        try {
+          await supabaseEnsureAuthUser(newUser.email, password);
+        } catch (e: any) {
+          console.warn("[AUTH] Impossible de créer le compte Supabase Auth:", e?.message);
         }
 
-        const newUser = {
-          id: `usr-${Date.now()}`,
-          email: normalizedEmail,
-          password,
-          name: name || normalizedEmail.split("@")[0],
-          phone: phone || "",
-          accountType: accountType || "buyer",
-          createdAt: new Date().toISOString(),
-        };
-        usersStore.push(newUser);
+        // === Session JWT (cookie HttpOnly) : connexion automatique après inscription ===
+        let sessionToken: string | null = null;
+        let sessionExpiresAt: Date | null = null;
+        try {
+          const session = await createUserSession(
+            { id: newUser.id, email: newUser.email },
+            request
+          );
+          sessionToken = session.token;
+          sessionExpiresAt = session.expiresAt;
+        } catch (e: any) {
+          console.warn("[AUTH] Impossible de créer la session:", e?.message);
+        }
 
-        return NextResponse.json(
+        const response = NextResponse.json(
           {
             message: "Inscription réussie !",
             user: {
@@ -385,10 +364,24 @@ export async function POST(request: NextRequest) {
               email: newUser.email,
               name: newUser.name,
               phone: newUser.phone,
+              avatar: newUser.avatar || "",
+              badge: newUser.badge || "none",
               accountType: newUser.accountType,
+              twoFactorEnabled: false,
             },
           },
           { status: 201 }
+        );
+
+        if (sessionToken && sessionExpiresAt) {
+          setSessionCookie(response, sessionToken, sessionExpiresAt);
+        }
+        return response;
+      } catch (dbError: any) {
+        console.warn("[AUTH] Base inaccessible pour l'inscription:", dbError?.message);
+        return NextResponse.json(
+          { error: "Base de données inaccessible. Impossible de créer le compte." },
+          { status: 500 }
         );
       }
     }
@@ -408,7 +401,6 @@ export async function POST(request: NextRequest) {
       if (pendingDeletion) {
         const now = Date.now();
         if (now >= pendingDeletion.deleteAt) {
-          usersStore = usersStore.filter((u) => u.email.toLowerCase() !== normalizedEmail);
           pendingDeletionsStore.delete(normalizedEmail);
           return NextResponse.json(
             { error: "Connexion impossible : Votre compte a été définitivement supprimé à l'issue du délai de 24 heures." },
@@ -446,38 +438,82 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        return NextResponse.json({
-          message: "Connexion réussie !",
-          user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            phone: user.phone,
-            accountType: user.accountType,
-          },
-        });
-      } catch (dbError: any) {
-        console.warn("[AUTH] Base inaccessible, fallback mémoire:", dbError?.message);
+        // === 2FA : si l'authentification à deux facteurs est activée, exiger
+        // le code de sécurité envoyé par e-mail AVANT de créer la session. ===
+        const twoFactorEnabled = await isTwoFactorEnabled(user.id);
+        if (twoFactorEnabled) {
+          const code = Math.floor(100000 + Math.random() * 900000).toString();
+          const twoFactorKey = `2fa:${user.email}`;
+          activeOtpsStore.set(twoFactorKey, {
+            otpCode: code,
+            sender: FROM_EMAIL,
+            expiresAt: Date.now() + 10 * 60 * 1000,
+          });
 
-        // Fallback mémoire
-        const user = usersStore.find((u) => u.email.toLowerCase() === normalizedEmail);
-        if (!user || user.password !== password) {
-          return NextResponse.json(
-            { error: "Connexion refusée : Adresse e-mail ou mot de passe incorrect." },
-            { status: 401 }
-          );
+          let emailSent = false;
+          if (resend) {
+            try {
+              const { data, error } = await resend.emails.send({
+                from: FROM_EMAIL,
+                to: [user.email],
+                subject: `${code} est votre code de sécurité Fortia Hub (2FA)`,
+                html: generateOtpEmailHtml(code, user.email),
+              });
+              if (!error && data?.id) emailSent = true;
+            } catch (e) {
+              console.warn("[2FA] Envoi du code de sécurité échoué:", e);
+            }
+          }
+
+          const challenge = await createTwoFactorChallenge(user.id);
+
+          return NextResponse.json({
+            needsTwoFactor: true,
+            twoFactorToken: challenge,
+            message:
+              "Authentification à deux facteurs : un code de sécurité à 6 chiffres a été envoyé par e-mail.",
+            emailSent,
+          });
         }
 
-        return NextResponse.json({
+        // === Session JWT (cookie HttpOnly) ===
+        let sessionToken: string | null = null;
+        let sessionExpiresAt: Date | null = null;
+        try {
+          const session = await createUserSession(
+            { id: user.id, email: user.email },
+            request
+          );
+          sessionToken = session.token;
+          sessionExpiresAt = session.expiresAt;
+        } catch (e: any) {
+          console.warn("[AUTH] Impossible de créer la session:", e?.message);
+        }
+
+        const response = NextResponse.json({
           message: "Connexion réussie !",
           user: {
             id: user.id,
             email: user.email,
             name: user.name,
             phone: user.phone,
+            avatar: user.avatar || "",
+            badge: user.badge || "none",
             accountType: user.accountType,
+            twoFactorEnabled: false,
           },
         });
+
+        if (sessionToken && sessionExpiresAt) {
+          setSessionCookie(response, sessionToken, sessionExpiresAt);
+        }
+        return response;
+      } catch (dbError: any) {
+        console.warn("[AUTH] Base inaccessible pour la connexion:", dbError?.message);
+        return NextResponse.json(
+          { error: "Base de données inaccessible. Impossible de vérifier vos identifiants." },
+          { status: 500 }
+        );
       }
     }
 
@@ -503,6 +539,145 @@ export async function POST(request: NextRequest) {
           "Demande de suppression définitive enregistrée. Le processus prend 24 heures avant la suppression irréversible. Durant ce délai, la connexion est strictement impossible.",
         requestedAt: new Date(requestedAt).toISOString(),
         deleteAt: new Date(deleteAt).toISOString(),
+      });
+    }
+
+    // ====== VERIFY-2FA ======
+    // Deuxième étape de connexion : l'utilisateur envoie le code de sécurité
+    // reçu par e-mail + le défi JWT reçu lors du login. Si tout est valide,
+    // la session est créée et l'utilisateur accède enfin à son compte.
+    if (body.action === "verify-2fa") {
+      const { token, otp } = body;
+      if (!token || !otp) {
+        return NextResponse.json(
+          { success: false, error: "Le code de sécurité et la session 2FA sont requis." },
+          { status: 400 }
+        );
+      }
+      if (!/^\d{6}$/.test(String(otp).trim())) {
+        return NextResponse.json(
+          { success: false, error: "Le code de sécurité doit comporter exactement 6 chiffres." },
+          { status: 400 }
+        );
+      }
+
+      const userId = await verifyTwoFactorChallenge(token);
+      if (!userId) {
+        return NextResponse.json(
+          { success: false, error: "Session 2FA invalide ou expirée. Veuillez vous reconnecter." },
+          { status: 401 }
+        );
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        return NextResponse.json(
+          { success: false, error: "Compte introuvable." },
+          { status: 404 }
+        );
+      }
+
+      const twoFactorKey = `2fa:${user.email}`;
+      const stored = activeOtpsStore.get(twoFactorKey);
+      if (!stored) {
+        return NextResponse.json(
+          { success: false, error: "Aucun code de sécurité actif. Veuillez vous reconnecter." },
+          { status: 400 }
+        );
+      }
+      if (Date.now() > stored.expiresAt) {
+        activeOtpsStore.delete(twoFactorKey);
+        return NextResponse.json(
+          { success: false, error: "Le code de sécurité a expiré. Veuillez vous reconnecter." },
+          { status: 400 }
+        );
+      }
+      if (stored.otpCode !== String(otp).trim()) {
+        return NextResponse.json(
+          { success: false, error: "Code de sécurité incorrect. Veuillez réessayer." },
+          { status: 400 }
+        );
+      }
+      activeOtpsStore.delete(twoFactorKey);
+
+      // Session JWT (cookie HttpOnly)
+      let sessionToken: string | null = null;
+      let sessionExpiresAt: Date | null = null;
+      try {
+        const session = await createUserSession({ id: user.id, email: user.email }, request);
+        sessionToken = session.token;
+        sessionExpiresAt = session.expiresAt;
+      } catch (e: any) {
+        console.warn("[2FA] Impossible de créer la session:", e?.message);
+      }
+
+      const response = NextResponse.json({
+        success: true,
+        message: "Authentification à deux facteurs validée !",
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          phone: user.phone,
+          avatar: user.avatar || "",
+          badge: user.badge || "none",
+          accountType: user.accountType,
+          twoFactorEnabled: true,
+        },
+      });
+
+      if (sessionToken && sessionExpiresAt) {
+        setSessionCookie(response, sessionToken, sessionExpiresAt);
+      }
+      return response;
+    }
+
+    // ====== GET-2FA-STATUS ======
+    // Retourne l'état 2FA de l'utilisateur connecté (paramètres membre).
+    if (body.action === "get-2fa-status") {
+      const current = await getCurrentUser(request);
+      if (!current) {
+        return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+      }
+      const enabled = await isTwoFactorEnabled(current.id);
+      return NextResponse.json({ twoFactorEnabled: enabled });
+    }
+
+    // ====== TOGGLE-2FA ======
+    // Active/désactive la 2FA. Le client envoie d'abord `send-otp` à son
+    // e-mail, puis fournit le code pour confirmer l'opération sensible.
+    if (body.action === "toggle-2fa") {
+      const { enabled, otp } = body;
+      const current = await getCurrentUser(request);
+      if (!current) {
+        return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+      }
+      if (!otp || !/^\d{6}$/.test(String(otp).trim())) {
+        return NextResponse.json(
+          { error: "Un code de sécurité à 6 chiffres est requis pour confirmer l'opération." },
+          { status: 400 }
+        );
+      }
+
+      const twoFactorKey = `2fa:${current.email}`;
+      const stored =
+        activeOtpsStore.get(twoFactorKey) || activeOtpsStore.get(current.email.toLowerCase());
+      if (!stored || stored.otpCode !== String(otp).trim() || Date.now() > stored.expiresAt) {
+        activeOtpsStore.delete(twoFactorKey);
+        return NextResponse.json(
+          { error: "Code de sécurité invalide ou expiré. Demandez un nouveau code." },
+          { status: 400 }
+        );
+      }
+      activeOtpsStore.delete(twoFactorKey);
+
+      await setTwoFactorEnabled(current.id, !!enabled);
+      return NextResponse.json({
+        success: true,
+        twoFactorEnabled: !!enabled,
+        message: enabled
+          ? "Authentification à deux facteurs activée. Un code vous sera demandé à chaque connexion."
+          : "Authentification à deux facteurs désactivée.",
       });
     }
 

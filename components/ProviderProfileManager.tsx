@@ -7,6 +7,7 @@ import {
   UserProfile,
 } from "@/lib/types";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
+import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
 import {
   User,
   Building2,
@@ -24,22 +25,27 @@ import {
   ShieldCheck,
   Star,
   Clock,
+  AlertCircle,
 } from "lucide-react";
 
 interface ProviderProfileManagerProps {
   user: UserProfile;
   freelance?: FreelanceProfile | null;
   enterprise?: EnterpriseProfile | null;
+  onSaved?: () => void;
 }
 
 export const ProviderProfileManager: React.FC<ProviderProfileManagerProps> = ({
   user,
   freelance,
   enterprise,
+  onSaved,
 }) => {
   const isFreelance = !!freelance;
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // ===== État FREELANCE =====
   const [frTitle, setFrTitle] = useState(freelance?.title || "");
@@ -47,7 +53,6 @@ export const ProviderProfileManager: React.FC<ProviderProfileManagerProps> = ({
   const [frCategory, setFrCategory] = useState(freelance?.category || "");
   const [frHourlyRate, setFrHourlyRate] = useState(Number(freelance?.hourlyRate) || 0);
   const [frLocation, setFrLocation] = useState(freelance?.location || "");
-  const [frAvatar, setFrAvatar] = useState(freelance?.avatar || user.avatar || "");
   const [frSkills, setFrSkills] = useState<string[]>(freelance?.skills || []);
   const [frSkillInput, setFrSkillInput] = useState("");
   // Services éditables : type souple pour permettre ajout/modification avant sauvegarde
@@ -101,37 +106,49 @@ export const ProviderProfileManager: React.FC<ProviderProfileManagerProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const saveProfile = (e: React.FormEvent) => {
+  const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isFreelance) {
-      apiWritePlatform("update-freelance-profile", {
-        userId: user.id,
-        name: freelance?.name || user.name,
-        title: frTitle,
-        bio: frBio,
-        avatar: frAvatar,
-        category: frCategory,
-        hourlyRate: frHourlyRate,
-        skills: frSkills,
-        location: frLocation,
-        services: frServices,
-      });
-    } else {
-      apiWritePlatform("update-enterprise-profile", {
-        userId: user.id,
-        companyName: enCompanyName,
-        tagline: enTagline,
-        description: enDescription,
-        logo: enLogo,
-        sector: enSector,
-        country: enCountry,
-        contactEmail: enContactEmail,
-        contactPhone: enContactPhone,
-        website: enWebsite,
-        services: enServices,
-      });
+    setSaveError(null);
+    const res = isFreelance
+      ? await apiWritePlatform("update-freelance-profile", {
+          userId: user.id,
+          name: freelance?.name || user.name,
+          title: frTitle,
+          bio: frBio,
+          // La photo de profil du compte (users.avatar, enregistrée dans Supabase)
+          // est utilisée automatiquement comme photo du profil freelance.
+          avatar: user.avatar || freelance?.avatar || "",
+          category: frCategory,
+          hourlyRate: frHourlyRate,
+          skills: frSkills,
+          location: frLocation,
+          services: frServices,
+        })
+      : await apiWritePlatform("update-enterprise-profile", {
+          userId: user.id,
+          companyName: enCompanyName,
+          tagline: enTagline,
+          description: enDescription,
+          logo: enLogo,
+          sector: enSector,
+          country: enCountry,
+          contactEmail: enContactEmail,
+          contactPhone: enContactPhone,
+          website: enWebsite,
+          services: enServices,
+        });
+
+    if (!res.success) {
+      setSaveError(
+        "Impossible d'enregistrer vos informations dans la base de données. " +
+          (res.error ? `Détail : ${res.error}` : "Vérifiez votre connexion et réessayez.")
+      );
+      return;
     }
+
     setSaved(true);
+    setShowSuccess(true);
+    onSaved?.();
     setTimeout(() => setSaved(false), 3000);
   };
 
@@ -276,16 +293,6 @@ export const ProviderProfileManager: React.FC<ProviderProfileManagerProps> = ({
                     className="w-full bg-[#021231] border border-slate-700 text-sm rounded-xl p-3 text-white focus:outline-none focus:border-[#D69E25]"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">Avatar (URL)</label>
-                <input
-                  type="text"
-                  value={frAvatar}
-                  onChange={(e) => setFrAvatar(e.target.value)}
-                  placeholder="https://... (image profil)"
-                  className="w-full bg-[#021231] border border-slate-700 text-sm rounded-xl p-3 text-white focus:outline-none focus:border-[#D69E25]"
-                />
               </div>
               <div className="md:col-span-2">
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">Biographie / Présentation *</label>
@@ -549,6 +556,14 @@ export const ProviderProfileManager: React.FC<ProviderProfileManagerProps> = ({
           </div>
         </div>
 
+        {/* Message d'erreur de sauvegarde */}
+        {saveError && (
+          <div className="flex items-start gap-2 bg-red-500/15 border border-red-500/40 text-red-300 text-xs rounded-xl p-3">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{saveError}</span>
+          </div>
+        )}
+
         {/* Bouton de sauvegarde */}
         <button
           type="submit"
@@ -567,6 +582,18 @@ export const ProviderProfileManager: React.FC<ProviderProfileManagerProps> = ({
           )}
         </button>
       </form>
+
+      {/* Popup de confirmation d'enregistrement */}
+      <SuccessConfirmationModal
+        isOpen={showSuccess}
+        onClose={() => setShowSuccess(false)}
+        title={isFreelance ? "Profil freelance enregistré !" : "Profil entreprise enregistré !"}
+        message={
+          isFreelance
+            ? "Vos informations professionnelles ont été enregistrées et sont visibles dans l'annuaire Freelances. Votre photo de profil du compte est utilisée automatiquement."
+            : "Les informations de votre entreprise ont été enregistrées et sont visibles dans le répertoire Entreprises."
+        }
+      />
     </div>
   );
 };

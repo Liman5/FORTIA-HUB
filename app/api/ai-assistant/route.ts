@@ -1,9 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type Content, type Tool } from "@google/genai";
+import { AI_TOOL_DECLARATIONS, executeAiTool } from "@/lib/services/aiTools";
+import { getCurrentUser } from "@/lib/services/authSession";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+/**
+ * Modèle Gemini utilisé par l'assistant IA.
+ * Configurable via la variable d'environnement `GEMINI_MODEL` afin de pouvoir
+ * changer de modèle sans modifier le code.
+ *
+ * Défaut : `gemini-3.7-flash` — modèle Flash le plus récent et capable,
+ * disponible gratuitement dans le Free Tier de la Gemini API.
+ *
+ * Autres modèles Flash disponibles dans le Free Tier :
+ * - gemini-3.6-flash
+ * - gemini-3.5-flash
+ * - gemini-3.5-flash-lite
+ */
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.7-flash";
+
+/**
+ * Modèles de secours tentés automatiquement si le modèle principal (`GEMINI_MODEL`)
+ * est temporairement indisponible (503 : forte affluence) ou en limite de quota
+ * (429 : limite gratuite atteinte). Tous disponibles dans le Free Tier.
+ * La liste par défaut peut être surchargée via `GEMINI_FALLBACK_MODELS`
+ * (séparée par des virgules), sans modifier le code.
+ */
+const GEMINI_FALLBACK_MODELS = (
+  process.env.GEMINI_FALLBACK_MODELS || "gemini-3.6-flash,gemini-3.5-flash"
+)
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
+
+/**
+ * Client Gemini initialisé une seule fois au chargement du module.
+ * La clé API est lue uniquement depuis `GEMINI_API_KEY` côté serveur :
+ * elle n'est jamais transmise ni exposée au navigateur.
+ */
 let aiClient: GoogleGenAI | null = null;
 if (process.env.GEMINI_API_KEY) {
   try {
@@ -16,33 +52,11 @@ if (process.env.GEMINI_API_KEY) {
       },
     });
   } catch (err) {
-    console.warn("Failed to initialize GoogleGenAI:", err);
+    console.warn("Échec de l'initialisation du client Gemini:", err);
   }
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { prompt } = body;
-
-    if (!prompt || typeof prompt !== "string") {
-      return NextResponse.json({ error: "Le paramètre 'prompt' est requis." }, { status: 400 });
-    }
-
-    if (!aiClient) {
-      return NextResponse.json({
-        text: `[Conseiller Académique - FORTIA HUB]
-Merci pour votre question concernant : "${prompt}".
-
-Voici nos recommandations personnalisées pour vous accompagner sur **FORTIA HUB** :
-• Pour les formations Cryptomonnaie : Suivez le module "Blockchain & Gestion du Risque".
-• Pour l'Intelligence Artificielle & Design : Consultez nos packs de Prompts & Templates Canva dans la Boutique Numérique.
-• Pour le Marketing & Video : Découvrez notre module "CapCut & Reels Pro".`,
-        isFallback: true,
-      });
-    }
-
-    const systemInstruction = `Tu es le Conseiller Académique Officiel de la plateforme FORTIA HUB (https://fortia-hub.com).
+const SYSTEM_INSTRUCTION = `Tu es le Conseiller Académique Officiel de la plateforme FORTIA HUB (https://fortia-hub.com).
 RÈGLE OBLIGATOIRE ET STRICTE :
 - Ne révèle JAMAIS que tu es une Intelligence Artificielle, une IA, un modèle de langage, un robot ou un algorithme.
 - Présente-toi et exprime-toi TOUJOURS comme un conseiller humain membre de l'équipe académique et du service orientation de FORTIA HUB.
@@ -92,68 +106,243 @@ INSTRUCTIONS DE RÉPONSE :
 - Réponds toujours en français, avec clarté, élégance, bienveillance et professionnalisme.
 - Présente la plateforme avec précision lorsque l'utilisateur demande ce qu'est FORTIA HUB ou ce qu'elle propose.
 - Recommande les formations, produits ou services adaptés à la demande.
-- Propose et guide clairement l'utilisateur vers la bonne rubrique (Formations, Boutique, Prestations Agence, Vérification Certificat, Espace Membre).`;
+- Propose et guide clairement l'utilisateur vers la bonne rubrique (Formations, Boutique, Prestations Agence, Vérification Certificat, Espace Membre).
 
-    let replyText = "";
+STRUCTURE DE L'APPLICATION (pages et rubriques réelles) :
+- Accueil / Formations : page « academy » (catalogue des formations certifiantes).
+- Boutique & Produits : page « marketplace » (produits numériques et boutiques des vendeurs).
+- Prestations Agence : page « services » (devis de prestations : logo, design, rédaction, montage vidéo...).
+- Annuaire Freelance & Entreprises : pages « enterprises » et sections marketplace dédiées.
+- Vérification de certificat : page « verifier » (vérification publique par numéro).
+- Blog & Actualités : page « blog ».
+- Mon Compte : page « member » (profil, achats, abonnements).
+- Paramètres : page « settings » (modification du profil : nom, téléphone, mot de passe, avatar).
+- Notifications : page « notifications ».
+- Connexion / Inscription : modales de connexion et d'inscription (page « login » / « register »).
+
+RÈGLES D'UTILISATION DES OUTILS (IMPORTANT) :
+- Tu disposes d'outils pour consulter les données RÉELLES de la plateforme. La base de données est la SEULE source de vérité.
+- Quand un utilisateur demande des informations existantes dans la plateforme (boutiques, produits, formations, freelances, entreprises, services, articles, paramètres, son profil, ses commandes, ses certificats, ses notifications, ses devis), appelle TOUJOURS l'outil correspondant avant de répondre. N'invente JAMAIS de boutique, produit, formation, prix, statistique ou donnée.
+- Si un outil ne retourne aucun résultat ou renvoie une erreur, réponds honnêtement que l'information demandée n'est pas disponible, sans rien inventer.
+- Pour les questions d'orientation (ex : « où puis-je modifier mon profil ? »), utilise la STRUCTURE DE L'APPLICATION ci-dessus.
+- Tu ne peux PAS modifier, créer ou supprimer des données : tu guides uniquement l'utilisateur vers la rubrique de la plateforme concernée pour ces actions.
+- Les données privées (profil, commandes, certificats, notifications, devis) ne concernent que le compte actuellement connecté. Si l'utilisateur n'est pas connecté ou si l'outil indique qu'il n'est pas authentifié, explique-lui qu'il doit d'abord se connecter, sans divulguer la moindre information.`;
+
+
+/**
+ * Extraire le code HTTP d'une erreur levée par le SDK `@google/genai`.
+ * Le SDK lève une `ApiError` avec `status` (code HTTP) et un corps JSON dans
+ * `error`. En cas d'échec de détection, on tente une correspondance par texte
+ * (utile pour les réponses non JSON de certains proxies).
+ */
+function getGeminiErrorStatus(err: any): number {
+  if (typeof err?.status === "number") return err.status;
+
+  const bodyCode = err?.error?.error?.code ?? err?.error?.code;
+  if (typeof bodyCode === "number") return bodyCode;
+
+  const message = String(err?.message || "");
+  // 429 = quota / limite de débit atteinte (fréquent sur le Free Tier).
+  if (/RESOURCE_EXHAUSTED|rate limit|quota|429/i.test(message)) return 429;
+  if (/permission|403|FORBIDDEN/i.test(message)) return 403;
+  if (/api key|401|UNAUTHENTICATED|invalid/i.test(message)) return 401;
+
+  return 500;
+}
+
+/**
+ * Convertit une erreur de l'API Gemini en réponse HTTP lisible pour le client.
+ * Attention particulière au code 429 : il correspond à la limite d'utilisation
+ * gratuite atteinte (quota Free Tier de la Gemini API).
+ */
+function handleGeminiError(err: any): NextResponse {
+  const status = getGeminiErrorStatus(err);
+  const message = String(err?.message || "Erreur inconnue de l'API Gemini.");
+  console.error(`[AI Assistant] Erreur Gemini (HTTP ${status}):`, message);
+
+  if (status === 429) {
+    return NextResponse.json(
+      {
+        error:
+          "La limite d'utilisation gratuite de l'assistant IA a été atteinte pour le moment. Veuillez réessayer un peu plus tard.",
+        code: "rate_limit_exceeded",
+        isFallback: true,
+      },
+      { status: 429 }
+    );
+  }
+
+  if (status === 401) {
+    return NextResponse.json(
+      {
+        error:
+          "La clé API Gemini est invalide ou expirée. Contactez l'administrateur de la plateforme.",
+        code: "invalid_api_key",
+        isFallback: true,
+      },
+      { status: 401 }
+    );
+  }
+
+  if (status === 403) {
+    return NextResponse.json(
+      {
+        error:
+          "L'accès à l'assistant IA est actuellement refusé. Contactez l'administrateur de la plateforme.",
+        code: "permission_denied",
+        isFallback: true,
+      },
+      { status: 403 }
+    );
+  }
+
+  if (status === 503) {
+    return NextResponse.json(
+      {
+        error:
+          "Le service d'assistance IA rencontre une forte affluence pour le moment. Veuillez réessayer dans quelques instants.",
+        code: "temporarily_unavailable",
+        isFallback: true,
+      },
+      { status: 503 }
+    );
+  }
+
+  return NextResponse.json(
+    {
+      error:
+        "Une erreur est survenue lors de la génération de la réponse par l'assistant IA. Réessayez plus tard.",
+      code: "gemini_error",
+      isFallback: true,
+    },
+    { status: 502 }
+  );
+}
+
+/**
+ * Tente de générer une réponse avec le modèle configuré (`GEMINI_MODEL`),
+ * puis bascule automatiquement sur les modèles de secours gratuits si le
+ * modèle principal est temporairement indisponible (503 : forte affluence)
+ * ou en limite de quota (429 : limite gratuite atteinte).
+ * Les erreurs définitives (401, 403, 404…) sont remontées immédiatement.
+ */
+async function generateWithFallback(
+  contents: Content[],
+  toolConfig?: { tools?: Tool[] }
+): Promise<{ text: string; model: string; response: Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>> }> {
+  const models = Array.from(new Set([GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS]));
+  let lastErr: any = null;
+
+  for (const model of models) {
     try {
-      const response = await aiClient.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
+      const response = await aiClient!.models.generateContent({
+        model,
+        contents,
         config: {
-          systemInstruction,
+          systemInstruction: SYSTEM_INSTRUCTION,
           temperature: 0.7,
+          ...(toolConfig?.tools ? { tools: toolConfig.tools } : {}),
         },
       });
-      replyText = response.text || "Désolé, je n'ai pas pu générer de réponse pour le moment.";
-    } catch (geminiErr: any) {
-      const lowerPrompt = prompt.toLowerCase();
-      if (lowerPrompt.includes("formation") || lowerPrompt.includes("cours")) {
-        replyText = `🎓 **Catalogue des Formations Certifiantes FORTIA HUB**
 
-Nos programmes sont conçus pour vous transmettre des compétences pratiques et immédiatement monétisables :
-• **Cryptomonnaie & Web3 :** Comprenez la Blockchain, sécurisez vos wallets et maîtrisez l'analyse technique.
-• **IA & Prompt Engineering :** Maîtrisez ChatGPT et Midjourney pour automatiser vos tâches.
-• **Design Graphique Canva Pro :** Créez des chartes graphiques et des identités visuelles complètes.
-• **CapCut & Video Reels :** Réalisez des montages vidéo percutants.
-• **Marketing Digital 360° :** Créez des campagnes publicitaires rentables.
-• **Entrepreneuriat & Business Plan :** Menez votre projet de la vision à l'exécution.
-
-🏆 Chaque formation validée génère un **Certificat Numérique** avec numéro d'authentification unique et QR Code vérifiable !`;
-      } else if (lowerPrompt.includes("boutique") || lowerPrompt.includes("ebook")) {
-        replyText = `🛍️ **Boutique Numérique FORTIA HUB**
-
-Accédez à nos ressources digitales en téléchargement immédiat :
-• **eBooks PDF Stratégiques :** Guides d'experts sur le Trading, la création de contenu et le Marketing.
-• **Packs Prompts IA :** Plus de 1000 prompts prêts à l'emploi.
-• **Modèles Canva Pro Éditables :** Affiches, carrousels et présentations.
-• **Templates Business :** Business plans, grilles tarifaires et contrats type.
-
-💡 Rendez-vous dans la rubrique **Boutique Numérique** pour un accès immédiat !`;
-      } else {
-        replyText = `[Conseiller Académique - FORTIA HUB]
-
-Merci pour votre question : "${prompt}".
-
-**FORTIA HUB** est votre hub d'apprentissage et de services digitaux :
-• 🎓 **Formations Certifiantes :** Crypto, IA, Canva, CapCut, Marketing Digital.
-• 🛍️ **Boutique Numérique :** eBooks, Packs de +1000 Prompts IA & Templates Canva.
-• 💼 **Prestations Agence :** Logos, Rédaction White Paper, Montages Vidéo.
-• 🛡️ **Vérification de Certificats :** Authentification publique par numéro unique.
-
-Comment souhaiteriez-vous être orienté(e) aujourd'hui ?`;
+      return {
+        text: response.text || "Désolé, je n'ai pas pu générer de réponse pour le moment.",
+        model,
+        response,
+      };
+    } catch (err: any) {
+      lastErr = err;
+      const status = getGeminiErrorStatus(err);
+      // Seuls les 503/429 (erreurs temporaires) déclenchent le basculement.
+      if (status !== 503 && status !== 429) {
+        throw err;
       }
+      console.warn(
+        `[AI Assistant] Modèle "${model}" indisponible (HTTP ${status}), bascule sur le modèle suivant.`
+      );
+    }
+  }
+
+  throw lastErr;
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { prompt } = body;
+
+    if (!prompt || typeof prompt !== "string") {
+      return NextResponse.json({ error: "Le paramètre 'prompt' est requis." }, { status: 400 });
     }
 
-    return NextResponse.json({
-      text: replyText,
-      isFallback: false,
-    });
+    if (!process.env.GEMINI_API_KEY || !aiClient) {
+      return NextResponse.json(
+        {
+          error:
+            "Le service d'assistance IA n'est pas configuré. Veuillez contacter l'administrateur de la plateforme.",
+          code: "not_configured",
+          isFallback: true,
+        },
+        { status: 503 }
+      );
+    }
+
+    try {
+      // === Identité de l'utilisateur connecté (JWT HttpOnly, résolu côté serveur) ===
+      // Le cookie de session est la SEULE source d'identité : l'email éventuellement
+      // envoyé par le client dans le body n'est JAMAIS utilisé pour les données privées.
+      const sessionUser = await getCurrentUser(request);
+
+      // === Appel Gemini avec function calling ===
+      const tools = [{ functionDeclarations: AI_TOOL_DECLARATIONS }];
+      const contents: Content[] = [{ role: "user", parts: [{ text: prompt }] }];
+
+      let { text, model, response } = await generateWithFallback(contents, { tools });
+
+      // Boucle d'exécution des outils demandés par Gemini (limitée).
+      // Gemini appelle un outil → on l'exécute côté serveur contre Supabase →
+      // on renvoie le résultat à Gemini → Gemini formule la réponse finale.
+      const MAX_TOOL_ROUNDS = 4;
+      let rounds = 0;
+      while (response.functionCalls?.length && rounds < MAX_TOOL_ROUNDS) {
+        rounds++;
+        const modelTurn = response.candidates?.[0]?.content;
+        if (modelTurn) contents.push(modelTurn);
+
+        const functionResponseParts = [];
+        for (const fc of response.functionCalls) {
+          const result = await executeAiTool(
+            fc.name ?? "",
+            (fc.args as Record<string, unknown>) ?? {},
+            { user: sessionUser }
+          );
+          functionResponseParts.push({
+            functionResponse: { name: fc.name, response: result },
+          });
+        }
+        contents.push({ role: "user", parts: functionResponseParts });
+
+        const next = await generateWithFallback(contents, { tools });
+        text = next.text;
+        response = next.response;
+      }
+
+      return NextResponse.json({
+        text,
+        isFallback: false,
+        model,
+        toolRounds: rounds,
+      });
+    } catch (geminiErr: any) {
+      return handleGeminiError(geminiErr);
+    }
   } catch (error: any) {
     console.error("Erreur générale AI Assistant:", error);
     return NextResponse.json(
       {
         error: "Une erreur est survenue lors du traitement par l'Assistant IA.",
-        details: error.message,
+        code: "internal",
+        isFallback: true,
       },
       { status: 500 }
     );

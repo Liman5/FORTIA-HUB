@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useActiveSection } from "@/lib/store/useActiveSection";
+import { usePwaInstall, promptInstall } from "@/lib/pwa/pwaStore";
+import { Download, Check } from "lucide-react";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -34,10 +36,15 @@ const sidebarLinks = [
 
 export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: SidebarProps) {
   const { setActiveTab } = useActiveSection();
+  const { isInstalled } = usePwaInstall();
 
   const handleNav = (tab: string) => {
     setActiveTab(tab);
     onClose();
+  };
+
+  const handleInstallApp = () => {
+    promptInstall();
   };
 
   return (
@@ -150,7 +157,18 @@ export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: Si
             </div>
 
             {/* Footer */}
-            <div className="sidebar-footer p-4 border-t border-[#D69E25]/10 bg-[#021231]/50">
+            <div className="sidebar-footer p-4 border-t border-[#D69E25]/10 bg-[#021231]/50 space-y-2">
+              {/* Bouton Télécharger l'App - masqué si déjà installé */}
+              {!isInstalled && (
+                <button
+                  onClick={handleInstallApp}
+                  className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black text-xs hover:brightness-110 active:scale-95 transition shadow-lg"
+                  title="Télécharger l'application FORTIA HUB"
+                >
+                  <Download className="w-4 h-4" />
+                  Télécharger l'App
+                </button>
+              )}
               <div className="sidebar-footer-text text-[10px] text-slate-500 font-semibold">
                 FORTIA HUB © {new Date().getFullYear()}
               </div>

@@ -3,14 +3,15 @@
 import React, { useState } from 'react';
 import { Certificate } from '../types';
 import { generatePDFCertificate, triggerCelebrationConfetti } from '../utils/pdfGenerator';
-import { INITIAL_CERTIFICATES_DATABASE } from '../data/academyData';
 import { Award, Search, CheckCircle, ShieldCheck, Download, AlertCircle, Share2 } from 'lucide-react';
+
+// Base de vérification réelle (provenant de Supabase) — aucune donnée fictive.
+// Tant qu'aucun certificat réel n'est fourni, la recherche ne retourne rien.
+const CERTIFICATES_DATABASE: Certificate[] = [];
 
 export const CertificateVerifier: React.FC = () => {
   const [searchCode, setSearchCode] = useState('');
-  const [foundCert, setFoundCert] = useState<Certificate | null>(
-    INITIAL_CERTIFICATES_DATABASE && INITIAL_CERTIFICATES_DATABASE.length > 0 ? INITIAL_CERTIFICATES_DATABASE[0] : null
-  );
+  const [foundCert, setFoundCert] = useState<Certificate | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleSearch = (e: React.FormEvent) => {
@@ -18,7 +19,7 @@ export const CertificateVerifier: React.FC = () => {
     if (!searchCode.trim()) return;
 
     const term = searchCode.trim().toUpperCase();
-    const result = INITIAL_CERTIFICATES_DATABASE.find(
+    const result = CERTIFICATES_DATABASE.find(
       c => c.id.toUpperCase() === term || c.studentName.toUpperCase().includes(term)
     );
 

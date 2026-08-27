@@ -16,6 +16,14 @@ export interface OtpVerifyResponse {
   error?: string;
 }
 
+/** Réponse de login : peut exiger une étape 2FA avant de créer la session. */
+export interface LoginResult {
+  user?: Partial<UserProfile>;
+  needsTwoFactor?: boolean;
+  twoFactorToken?: string;
+  message?: string;
+}
+
 /**
  * Sends a 6-digit OTP email via Resend to the registrant
  */
@@ -37,14 +45,13 @@ export async function apiSendOtp(email: string): Promise<OtpSendResponse> {
       };
     }
   } catch (err) {
-    // Offline fallback
+    // Erreur réseau — aucune simulation d'envoi
   }
 
   return {
-    success: true,
-    message: `Code de vérification à 6 chiffres envoyé à ${email} depuis ${SENDER_EMAIL_OFFICIAL}`,
+    success: false,
+    message: "Impossible d'envoyer le code de vérification. Vérifiez votre connexion et réessayez.",
     sender: SENDER_EMAIL_OFFICIAL,
-    otpCode: generatedCode,
   };
 }
 
@@ -99,17 +106,11 @@ export interface ApiResponse<T = any> {
   error?: string;
 }
 
-// In-memory fallback set for single email registration constraint in browser session
-const localRegisteredEmails = new Set<string>([
-  "admin@fortiahub.com",
-  "etudiant@fortiahub.com",
-]);
-
 /**
- * Checks email availability and domain format against backend records and client state
+ * Checks email availability against the backend (Supabase)
  */
 export async function apiCheckEmailAvailability(email: string): Promise<{ available: boolean; error?: string }> {
-  // 1. Client-side domain format validation
+  // Client-side domain format validation
   const formatResult = validateEmailFormat(email);
   if (!formatResult.isValid) {
     return {
@@ -120,16 +121,7 @@ export async function apiCheckEmailAvailability(email: string): Promise<{ availa
 
   const normalizedEmail = email.trim().toLowerCase();
 
-  // 2. Client local fallback check
-  if (localRegisteredEmails.has(normalizedEmail)) {
-    return {
-      available: false,
-      error:
-        "Refusé : Cette adresse e-mail est déjà inscrite sur la plateforme. Une seule inscription est autorisée par adresse e-mail.",
-    };
-  }
-
-  // 3. Backend REST check
+  // Backend REST check (vérification réelle dans Supabase)
   try {
     const response = await fetch("/api/auth", {
       method: "POST",
@@ -145,8 +137,11 @@ export async function apiCheckEmailAvailability(email: string): Promise<{ availa
     }
     return { available: true };
   } catch (err) {
-    // Offline fallback: if not in localRegisteredEmails, treat as available
-    return { available: true };
+    // Erreur réseau : aucune disponibilité simulée
+    return {
+      available: false,
+      error: "Impossible de vérifier la disponibilité de l'adresse e-mail. Vérifiez votre connexion et réessayez.",
+    };
   }
 }
 
@@ -181,45 +176,27 @@ export async function apiRegisterUser(
       };
     }
 
-    localRegisteredEmails.add(payload.email.trim().toLowerCase());
-
     return {
       success: true,
       data: { user: data.user },
     };
   } catch (err) {
-    // Fallback if network offline / local dev
-    const normalizedEmail = payload.email.trim().toLowerCase();
-    if (localRegisteredEmails.has(normalizedEmail)) {
-      return {
-        success: false,
-        error:
-          "Refusé : Cette adresse e-mail est déjà inscrite sur la plateforme. Une seule inscription est autorisée par adresse e-mail.",
-      };
-    }
-
-    localRegisteredEmails.add(normalizedEmail);
+    // Erreur réseau : aucune inscription simulée
     return {
-      success: true,
-      data: {
-        user: {
-          id: `usr-offline-${normalizedEmail.replace(/[^a-z0-9]/g, "")}`,
-          email: payload.email,
-          name: payload.name,
-          phone: payload.phone,
-          accountType: payload.accountType || "buyer",
-        },
-      },
+      success: false,
+      error: "Impossible de créer le compte. Vérifiez votre connexion et réessayez.",
     };
   }
 }
 
 /**
  * Login user via Backend REST API (/api/auth)
+ * Si l'utilisateur a activé la 2FA, la réponse contient `needsTwoFactor`
+ * et `twoFactorToken` : il faut alors appeler `apiVerifyTwoFactor`.
  */
 export async function apiLoginUser(
   payload: AuthLoginPayload
-): Promise<ApiResponse<{ user: Partial<UserProfile> }>> {
+): Promise<ApiResponse<LoginResult>> {
   try {
     const response = await fetch("/api/auth", {
       method: "POST",
@@ -236,56 +213,95 @@ export async function apiLoginUser(
       };
     }
 
-    return {
-      success: true,
-      data: { user: data.user },
-    };
-  } catch (err) {
-    // Fallback logic for client
-    const normalizedEmail = payload.email.trim().toLowerCase();
-
-    // Check offline pending deletions store
-    try {
-      const pendingRaw = localStorage.getItem("fortia_pending_deletions");
-      if (pendingRaw) {
-        const deletions = JSON.parse(pendingRaw);
-        if (deletions[normalizedEmail]) {
-          const deleteAt = deletions[normalizedEmail].deleteAt;
-          const remainingMs = deleteAt - Date.now();
-          if (remainingMs <= 0) {
-            return {
-              success: false,
-              error: "Connexion impossible : Votre compte a été définitivement supprimé.",
-            };
-          }
-          const hours = Math.floor(remainingMs / (1000 * 60 * 60));
-          const mins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-          return {
-            success: false,
-            error: `Connexion impossible : Votre demande de suppression définitive de compte est en cours (délai de 24h). Temps restant : ${hours}h ${mins}min. La connexion vous est strictement interdite durant ce délai.`,
-          };
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    if (!localRegisteredEmails.has(normalizedEmail)) {
+    if (data.needsTwoFactor) {
       return {
-        success: false,
-        error: "Connexion refusée : Adresse e-mail ou mot de passe incorrect.",
+        success: true,
+        data: {
+          needsTwoFactor: true,
+          twoFactorToken: data.twoFactorToken,
+          message: data.message,
+        },
       };
     }
 
     return {
       success: true,
-      data: {
-        user: {
-          id: `usr-offline-${normalizedEmail.replace(/[^a-z0-9]/g, "")}`,
-          email: payload.email,
-          name: payload.email.split("@")[0],
-        },
-      },
+      data: { user: data.user },
+    };
+  } catch (err) {
+    // Erreur réseau : aucune connexion simulée
+    return {
+      success: false,
+      error: "Connexion impossible : le serveur est injoignable. Vérifiez votre connexion et réessayez.",
+    };
+  }
+}
+
+/**
+ * Deuxième étape du login 2FA : envoie le code reçu par e-mail + le défi JWT.
+ * En cas de succès, la session est créée côté serveur.
+ */
+export async function apiVerifyTwoFactor(
+  token: string,
+  otp: string
+): Promise<ApiResponse<{ user: Partial<UserProfile> }>> {
+  try {
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "verify-2fa", token, otp }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, error: data.error || "Code de sécurité invalide." };
+    }
+    return { success: true, data: { user: data.user } };
+  } catch (err) {
+    return {
+      success: false,
+      error: "Impossible de valider le code de sécurité. Vérifiez votre connexion.",
+    };
+  }
+}
+
+/** Retourne l'état 2FA de l'utilisateur connecté. */
+export async function apiGetTwoFactorStatus(): Promise<{ enabled: boolean }> {
+  try {
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "get-2fa-status" }),
+    });
+    const data = await response.json();
+    return { enabled: data?.twoFactorEnabled === true };
+  } catch (err) {
+    return { enabled: false };
+  }
+}
+
+/**
+ * Active/désactive la 2FA pour l'utilisateur connecté.
+ * Nécessite un code OTP fraîchement envoyé via `apiSendOtp(email)`.
+ */
+export async function apiToggleTwoFactor(
+  enabled: boolean,
+  otp: string
+): Promise<ApiResponse<{ twoFactorEnabled: boolean }>> {
+  try {
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "toggle-2fa", enabled, otp }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, error: data.error || "Impossible de modifier la 2FA." };
+    }
+    return { success: true, data: { twoFactorEnabled: data.twoFactorEnabled === true } };
+  } catch (err) {
+    return {
+      success: false,
+      error: "Impossible de modifier la 2FA. Vérifiez votre connexion.",
     };
   }
 }
@@ -297,21 +313,6 @@ export async function apiDeleteAccount(
   email: string
 ): Promise<ApiResponse<{ requestedAt: string; deleteAt: string }>> {
   const normalizedEmail = email.trim().toLowerCase();
-  const deleteAtMs = Date.now() + 24 * 60 * 60 * 1000;
-
-  // Persist deletion request locally for client-side fallback
-  try {
-    const pendingRaw = localStorage.getItem("fortia_pending_deletions");
-    const deletions = pendingRaw ? JSON.parse(pendingRaw) : {};
-    deletions[normalizedEmail] = {
-      email: normalizedEmail,
-      requestedAt: Date.now(),
-      deleteAt: deleteAtMs,
-    };
-    localStorage.setItem("fortia_pending_deletions", JSON.stringify(deletions));
-  } catch (e) {
-    // ignore
-  }
 
   try {
     const response = await fetch("/api/auth", {
@@ -336,15 +337,12 @@ export async function apiDeleteAccount(
       };
     }
   } catch (err) {
-    // offline fallback
+    // Erreur réseau : aucune demande simulée
   }
 
   return {
-    success: true,
-    data: {
-      requestedAt: new Date().toISOString(),
-      deleteAt: new Date(deleteAtMs).toISOString(),
-    },
+    success: false,
+    error: "Impossible de demander la suppression du compte. Vérifiez votre connexion et réessayez.",
   };
 }
 
@@ -365,6 +363,9 @@ export async function apiFetchPlatformSync() {
 
 /**
  * AI Assistant endpoint (/api/ai-assistant)
+ * Retourne la réponse du serveur telle quelle : `{ text, isFallback }` en cas
+ * de succès, ou `{ error, code, isFallback }` en cas d'erreur (notamment 429 :
+ * limite gratuite de la Gemini API atteinte).
  */
 export async function apiAiAssistant(prompt: string, category?: string, context?: any) {
   try {
@@ -373,14 +374,13 @@ export async function apiAiAssistant(prompt: string, category?: string, context?
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt, category, context }),
     });
-    if (response.ok) {
-      return await response.json();
-    }
+    return await response.json();
   } catch (e) {
-    // ignore offline
+    console.error("Erreur réseau API AI Assistant:", e);
+    return {
+      text: "",
+      isFallback: true,
+      error: "Le service d'assistance IA est actuellement indisponible. Réessayez plus tard.",
+    };
   }
-  return {
-    text: `[Conseiller Académique - FORTIA HUB] Merci pour votre question. Consultez notre catalogue de formations et services.`,
-    isFallback: true,
-  };
 }

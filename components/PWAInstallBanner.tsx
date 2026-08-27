@@ -1,196 +1,121 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Download, X, Smartphone, Check, Share2, Sparkles } from 'lucide-react';
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
-}
+import React, { useState, useEffect } from "react";
+import { Download, X, Smartphone, Check, Share2 } from "lucide-react";
+import { usePwaInstall, promptInstall } from "@/lib/pwa/pwaStore";
+import { requestNotificationPermission } from "@/lib/services/appNotifications";
 
 interface PWAInstallBannerProps {
-  onDismiss?: () => void;
   inlineOnly?: boolean;
 }
 
+/**
+ * PWAInstallBanner — popup discret (« négligeable ») de téléchargement de l'app.
+ * - Compact : une petite pastille en bas d'écran, avec juste un bouton Installer + une croix.
+ * - Ne s'affiche JAMAIS si l'app est déjà installée (mode standalone) ou si
+ *   l'installation n'est pas disponible.
+ * - Se mémorise si l'utilisateur l'a fermée (fortia_pwa_banner_dismissed).
+ */
 export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ inlineOnly = false }) => {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isStandalone, setIsStandalone] = useState<boolean>(false);
-  const [isIOS, setIsIOS] = useState<boolean>(false);
-  const [showIOSPrompt, setShowIOSPrompt] = useState<boolean>(false);
-  const [isDismissed, setIsDismissed] = useState<boolean>(false);
-  const [isInstalled, setIsInstalled] = useState<boolean>(false);
+  const { canInstall, isInstalled, isStandalone, isIOS } = usePwaInstall();
+  const [isDismissed, setIsDismissed] = useState(false);
+  const [showIOSPrompt, setShowIOSPrompt] = useState(false);
 
   useEffect(() => {
-    // Check if already installed / standalone
-    const isStandaloneMode = 
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone ||
-      document.referrer.includes('android-app://');
-
-    setIsStandalone(isStandaloneMode);
-
-    // Detect iOS
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isAppleDevice = /iphone|ipad|ipod/.test(userAgent) && !(window as any).MSStream;
-    setIsIOS(isAppleDevice);
-
-    // Check if previously dismissed
-    const dismissedState = localStorage.getItem('fortia_pwa_banner_dismissed');
-    if (dismissedState === 'true') {
-      setIsDismissed(true);
-    }
-
-    // Listen for beforeinstallprompt
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    // Listen for appinstalled
-    const handleAppInstalled = () => {
-      setIsInstalled(true);
-      setDeferredPrompt(null);
-      console.log('[PWA] FORTIA HUB est maintenant installé !');
-    };
-
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
+    try {
+      const dismissed = window.localStorage.getItem("fortia_pwa_banner_dismissed");
+      if (dismissed === "true") setIsDismissed(true);
+    } catch (e) {}
   }, []);
-
-  const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      try {
-        await deferredPrompt.prompt();
-        const choiceResult = await deferredPrompt.userChoice;
-        if (choiceResult.outcome === 'accepted') {
-          console.log('[PWA] L\'utilisateur a accepté l\'installation.');
-          setIsInstalled(true);
-        } else {
-          console.log('[PWA] L\'utilisateur a refusé l\'installation.');
-        }
-        setDeferredPrompt(null);
-      } catch (err) {
-        console.error('[PWA] Erreur lors de l\'installation:', err);
-      }
-    } else if (isIOS) {
-      setShowIOSPrompt(true);
-    }
-  };
 
   const handleDismiss = () => {
     setIsDismissed(true);
-    localStorage.setItem('fortia_pwa_banner_dismissed', 'true');
+    try {
+      window.localStorage.setItem("fortia_pwa_banner_dismissed", "true");
+    } catch (e) {}
   };
 
-  // Do not show banner if already standalone app
-  if (isStandalone || isInstalled) {
+  // Déjà installé → on ne propose plus le téléchargement
+  if (isInstalled || isStandalone) {
     if (inlineOnly) {
       return (
         <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#D69E25]/10 border border-[#D69E25]/40 text-[#D69E25] rounded-xl text-xs font-bold">
-          <Check className="w-4 h-4 text-emerald-400" />
-          <span>Application Installée</span>
+          <Check className="w-3.5 h-3.5" />
+          App installée
         </div>
       );
     }
     return null;
   }
 
-  // If inline button mode (for placement inside menus or headers)
-  if (inlineOnly) {
-    if (!deferredPrompt && !isIOS) return null;
+  // Pas installable (pas d'événement beforeinstallprompt) et pas iOS → rien à montrer
+  if (!canInstall && !isIOS) return null;
+  if (isDismissed && !inlineOnly) return null;
 
+  const handleInstallClick = async () => {
+    const installed = await promptInstall();
+    if (installed) {
+      // Après l'installation : demande de permission des notifications système
+      setTimeout(() => {
+        requestNotificationPermission();
+      }, 1200);
+    } else if (isIOS) {
+      setShowIOSPrompt(true);
+    }
+  };
+
+  // Version « inline » (bouton dans les paramètres / sidebar)
+  if (inlineOnly) {
     return (
       <button
         onClick={handleInstallClick}
-        className="w-full flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-[#D69E25] to-amber-500 text-[#021231] font-extrabold rounded-xl text-xs hover:brightness-110 transition shadow-lg cursor-pointer"
+        className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black text-xs hover:brightness-110 active:scale-95 transition shadow-lg"
       >
-        <div className="flex items-center gap-2">
-          <Download className="w-4 h-4" />
-          <span>Installer l'Application FORTIA HUB</span>
-        </div>
-        <Sparkles className="w-3.5 h-3.5 opacity-80" />
+        <Download className="w-4 h-4" />
+        Télécharger l'App FORTIA HUB
       </button>
     );
   }
 
-  // Hide floating banner if explicitly dismissed and no active prompt
-  if (isDismissed && !showIOSPrompt) return null;
-
-  // Don't display banner if no prompt & not iOS
-  if (!deferredPrompt && !isIOS) return null;
-
+  // Popup compact et discret en bas d'écran
   return (
-    <div className="fixed top-20 left-4 right-4 md:left-auto md:right-6 md:max-w-md z-50 transition-all duration-300 animate-in fade-in slide-in-from-top-4">
-      <div className="bg-[#011D46]/95 backdrop-blur-md border-2 border-[#D69E25] rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.7)] text-slate-100 relative overflow-hidden">
-        
-        {/* Top Gold Accent Line */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-300 via-[#D69E25] to-amber-500" />
+    <div className="fixed bottom-24 sm:bottom-28 right-3 left-3 sm:left-auto sm:right-6 sm:max-w-sm z-50">
+      <div className="bg-[#011D46]/95 backdrop-blur-md border border-[#D69E25]/50 rounded-2xl p-3 shadow-[0_8px_30px_rgba(0,0,0,0.6)] text-slate-100 relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-300 via-[#D69E25] to-amber-500" />
 
         <button
           onClick={handleDismiss}
-          className="absolute top-3 right-3 p-1 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
+          className="absolute top-2 right-2 p-1 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition"
           title="Fermer"
+          aria-label="Fermer"
         >
           <X className="w-4 h-4" />
         </button>
 
-        <div className="flex items-start gap-3.5">
-          {/* App Icon Preview */}
-          <div className="w-12 h-12 bg-gradient-to-br from-[#021231] to-[#011D46] border-2 border-[#D69E25] rounded-xl flex items-center justify-center flex-shrink-0 shadow-md">
-            <span className="font-black text-xl text-[#D69E25]">F</span>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 shrink-0 bg-gradient-to-br from-[#021231] to-[#011D46] border border-[#D69E25] rounded-xl flex items-center justify-center">
+            <span className="font-black text-lg text-[#D69E25]">F</span>
           </div>
 
-          <div className="flex-1 pr-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <h4 className="font-black text-sm text-[#D69E25]">Installer FORTIA HUB</h4>
-              <span className="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                App Web
-              </span>
-            </div>
-            
-            <p className="text-xs text-slate-300 leading-relaxed mb-3">
-              Installez FORTIA HUB sur votre appareil pour un accès instantané, fluide et utilisable même hors-ligne.
-            </p>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-black text-[#D69E25] truncate">Installer FORTIA HUB</p>
+            <p className="text-[10px] text-slate-300 truncate">Accès instantané & hors-ligne</p>
 
-            {/* iOS Prompt Instructions */}
-            {showIOSPrompt && isIOS ? (
-              <div className="p-3 bg-[#021231] border border-[#D69E25]/40 rounded-xl text-xs space-y-2 mb-3">
-                <p className="font-bold text-amber-300 flex items-center gap-1.5">
-                  <Share2 className="w-4 h-4 text-[#D69E25]" />
-                  <span>Installation sur iOS (Safari) :</span>
-                </p>
-                <ol className="list-decimal list-inside text-slate-300 space-y-1 text-[11px]">
-                  <li>Appuyez sur le bouton <strong>Partager</strong> <Share2 className="inline w-3 h-3 text-[#D69E25]" /> en bas de l'écran.</li>
-                  <li>Défilez vers le bas et sélectionnez <strong>Sur l'écran d'accueil</strong> ➕.</li>
-                  <li>Validez pour ajouter FORTIA HUB comme application.</li>
-                </ol>
-              </div>
-            ) : null}
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleInstallClick}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-[#D69E25] via-amber-500 to-[#D69E25] text-[#021231] font-black rounded-xl text-xs hover:brightness-110 active:scale-95 transition shadow-lg cursor-pointer"
-              >
-                <Smartphone className="w-4 h-4" />
-                <span>Installer Maintenant</span>
-              </button>
-
-              <button
-                onClick={handleDismiss}
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition cursor-pointer"
-              >
-                Plus tard
-              </button>
-            </div>
+            {showIOSPrompt && isIOS && (
+              <p className="text-[10px] text-amber-300 mt-1 flex items-center gap-1 leading-snug">
+                <Share2 className="w-3 h-3 shrink-0" />
+                Safari → Partager → « Sur l'écran d'accueil »
+              </p>
+            )}
           </div>
+
+          <button
+            onClick={handleInstallClick}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black rounded-xl text-[10px] hover:brightness-110 active:scale-95 transition shadow-md"
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            Installer
+          </button>
         </div>
       </div>
     </div>
