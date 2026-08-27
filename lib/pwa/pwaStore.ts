@@ -77,9 +77,11 @@ export function subscribePwa(listener: Listener): () => void {
   };
 }
 
-/** Détecte et capture l'événement d'installation (à appeler une fois au démarrage). */
+/** Détecte et capture l'événement d'installation (idempotent). */
+let initialized = false;
 export function initPwaStore() {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || initialized) return;
+  initialized = true;
 
   // Mode déjà installé (standalone)
   isStandalone =
@@ -106,11 +108,57 @@ export function initPwaStore() {
 
   window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   window.addEventListener("appinstalled", handleAppInstalled);
+
+  // État initial déjà calculé (standalone/iOS) sans attendre un événement
+  emit();
+}
+
+// ============================================================
+// Initialisation IMMÉDIATE au chargement du module (côté client).
+// L'événement `beforeinstallprompt` peut se déclencher très tôt,
+// avant le premier useEffect de React : l'écouter dès maintenant
+// garantit que `promptInstall()` fonctionne au premier clic.
+// ============================================================
+if (typeof window !== "undefined") {
+  initPwaStore();
+}
+
+/**
+ * Attend (brièvement) que l'événement `beforeinstallprompt` soit émis.
+ * Utile au tout premier chargement : le service worker doit être actif pour
+ * que l'événement arrive, ce qui peut prendre 1 à 2 secondes.
+ */
+function waitForPrompt(timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (deferredPrompt) {
+      resolve(true);
+      return;
+    }
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    const onPrompt = () => finish(true);
+    const onInstalled = () => finish(false);
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+  });
 }
 
 /** Lance l'invite d'installation native (ou renvoie false si impossible). */
 export async function promptInstall(): Promise<boolean> {
-  if (!deferredPrompt) return false;
+  // Si l'invite n'est pas encore capturée, on attend qu'elle arrive
+  // (service worker pas encore actif au tout premier chargement).
+  if (!deferredPrompt) {
+    const ok = await waitForPrompt(4000);
+    if (!ok || !deferredPrompt) return false;
+  }
 
   try {
     await deferredPrompt.prompt();

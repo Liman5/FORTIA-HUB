@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Info,
   Award,
@@ -36,15 +36,31 @@ const sidebarLinks = [
 
 export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: SidebarProps) {
   const { setActiveTab } = useActiveSection();
-  const { isInstalled } = usePwaInstall();
+  const { isInstalled, canInstall, isIOS } = usePwaInstall();
+  const [installMsg, setInstallMsg] = useState<string | null>(null);
 
   const handleNav = (tab: string) => {
     setActiveTab(tab);
     onClose();
   };
 
-  const handleInstallApp = () => {
-    promptInstall();
+  const handleInstallApp = async () => {
+    setInstallMsg(null);
+    const installed = await promptInstall();
+    if (installed) return;
+
+    // L'invite native n'a pas pu s'ouvrir → guider l'utilisateur
+    if (isIOS) {
+      setInstallMsg(
+        "Sur iPhone/iPad : ouvrez Safari → bouton Partager → « Sur l'écran d'accueil » pour installer l'app."
+      );
+    } else if (!canInstall) {
+      setInstallMsg(
+        "L'installation n'est pas encore disponible sur ce navigateur. Utilisez Chrome ou Edge (PC/Android), ou réessayez après quelques secondes. Si vous êtes sur l'app installée, rien à faire : vous l'utilisez déjà."
+      );
+    } else {
+      setInstallMsg("L'invite d'installation a été fermée. Cliquez à nouveau pour réessayer.");
+    }
   };
 
   return (
@@ -168,6 +184,11 @@ export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: Si
                   <Download className="w-4 h-4" />
                   Télécharger l'App
                 </button>
+              )}
+              {installMsg && (
+                <div className="px-3 py-2 rounded-xl bg-[#D69E25]/10 border border-[#D69E25]/40 text-[10px] text-amber-200 leading-relaxed">
+                  {installMsg}
+                </div>
               )}
               <div className="sidebar-footer-text text-[10px] text-slate-500 font-semibold">
                 FORTIA HUB © {new Date().getFullYear()}
