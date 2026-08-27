@@ -34,6 +34,33 @@ export function FloatingAiAssistant() {
   const [isTyping, setIsTyping] = useState(false);
   const chatBodyRef = useRef<HTMLDivElement>(null);
 
+  // ===== Drag : position du robot flottant =====
+  const [robotPos, setRobotPos] = useState<{ x: number; y: number } | null>(null);
+  const [popupPos, setPopupPos] = useState<{ left: number; top: number } | null>(null);
+  const [popupBelow, setPopupBelow] = useState(true);
+  const [popupAlignLeft, setPopupAlignLeft] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
+  const robotWrapRef = useRef<HTMLDivElement>(null);
+  const suppressClickRef = useRef(false);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    baseX: number;
+    baseY: number;
+    moved: boolean;
+  } | null>(null);
+
+  // Position initiale du robot : bas droite
+  useEffect(() => {
+    setRobotPos({
+      x: Math.max(8, window.innerWidth - 88),
+      y: Math.max(8, window.innerHeight - 168),
+    });
+    setPopupBelow(true);
+    setPopupAlignLeft(true);
+  }, []);
+
   // Auto-scroll des messages
   useEffect(() => {
     if (chatBodyRef.current) {
@@ -91,19 +118,114 @@ export function FloatingAiAssistant() {
     }
   };
 
+  // ===== DRAG : déplacer le robot à la souris / au doigt =====
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0 || isOpen) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const base = robotPos ?? { x: rect.left, y: rect.top };
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX: base.x,
+      baseY: base.y,
+      moved: false,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDragging(true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true;
+    if (!drag.moved) return;
+    const wrap = robotWrapRef.current;
+    const width = wrap?.offsetWidth ?? 72;
+    const height = wrap?.offsetHeight ?? 72;
+    const maxX = Math.max(0, window.innerWidth - width);
+    const maxY = Math.max(0, window.innerHeight - height);
+    setRobotPos({
+      x: Math.min(Math.max(drag.baseX + dx, 0), maxX),
+      y: Math.min(Math.max(drag.baseY + dy, 0), maxY),
+    });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    setIsDragging(false);
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    // Un vrai déplacement => on ignore le clic qui suit
+    if (drag.moved) suppressClickRef.current = true;
+  };
+
+  const handleClick = () => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    toggleChat();
+  };
+
+  // Calcule où ouvrir le popup / afficher le message de bienvenue selon la position du robot
+  const computePopupPlacement = () => {
+    const rect = robotWrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const popupW = Math.min(400, vw - 16);
+    const popupH = 480;
+
+    // Vertical : au-dessus du robot si possible, sinon en dessous
+    let top: number;
+    let below = false;
+    if (rect.top - popupH - 12 >= 12) {
+      top = rect.top - popupH - 12;
+    } else {
+      top = Math.max(12, Math.min(rect.bottom + 12, vh - popupH - 12));
+      below = true;
+    }
+    // Horizontal : bord droit du popup aligné avec le bord droit du robot, clampé à l'écran
+    const left = Math.min(Math.max(rect.right - popupW, 12), vw - popupW - 12);
+
+    setPopupPos({ left, top });
+    setPopupBelow(below);
+    setPopupAlignLeft(rect.left + 260 <= vw);
+  };
+
+  const toggleChat = () => {
+    const next = !isOpen;
+    setIsOpen(next);
+    setIsWelcoming(false);
+    if (next) computePopupPlacement();
+  };
+
   return (
     <>
-      {/* ===== BULLE ROBOT IA FLOTTANTE ===== */}
-      <div className="fixed bottom-24 sm:bottom-28 right-4 sm:right-6 z-[100]">
+      {/* ===== BULLE ROBOT IA FLOTTANTE (déplaçable) ===== */}
+      <div
+        ref={robotWrapRef}
+        className={`fixed z-[100] ${
+          robotPos ? "" : "bottom-24 sm:bottom-28 right-4 sm:right-6"
+        }`}
+        style={robotPos ? { left: robotPos.x, top: robotPos.y } : undefined}
+      >
         {/* Message de bienvenue au survol */}
         <AnimatePresence>
-          {isHovered && !isOpen && isWelcoming && (
+          {isHovered && !isOpen && isWelcoming && !isDragging && (
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.9 }}
               transition={{ duration: 0.25, ease: "easeOut" }}
-              className="absolute bottom-full right-0 mb-3 w-[260px] bg-[#021231] border border-[#D69E25]/50 rounded-2xl p-4 shadow-2xl shadow-black/50"
+              className={`absolute ${
+                popupBelow ? "top-full mt-3" : "bottom-full mb-3"
+              } ${
+                popupAlignLeft ? "left-0" : "right-0"
+              } w-[260px] bg-[#021231] border border-[#D69E25]/50 rounded-2xl p-4 shadow-2xl shadow-black/50`}
             >
               <div className="flex items-start gap-2.5">
                 {/* Mini robot dans le message */}
@@ -119,25 +241,34 @@ export function FloatingAiAssistant() {
                   </p>
                 </div>
               </div>
-              <div className="absolute -bottom-1.5 right-6 w-3 h-3 bg-[#021231] border-r border-b border-[#D69E25]/50 rotate-45" />
+              <div
+                className={`absolute ${
+                  popupBelow ? "-top-1.5 border-t border-l" : "-bottom-1.5 border-r border-b"
+                } ${popupAlignLeft ? "left-6" : "right-6"} w-3 h-3 bg-[#021231] border-[#D69E25]/50 rotate-45`}
+              />
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Bouton robot animé */}
         <motion.button
-          onClick={() => {
-            setIsOpen(!isOpen);
-            setIsWelcoming(false);
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          onClick={handleClick}
+          onMouseEnter={() => {
+            setIsHovered(true);
+            computePopupPlacement();
           }}
-          onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
-          animate={{ y: [0, -8, 0] }}
+          animate={isDragging ? { y: 0 } : { y: [0, -8, 0] }}
           transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
           whileHover={{ scale: 1.12 }}
-          whileTap={{ scale: 0.95 }}
-          className="relative group cursor-pointer"
-          title="Fortia AI Assistant"
+          whileTap={{ scale: isDragging ? 1 : 0.95 }}
+          className="relative group cursor-grab active:cursor-grabbing select-none touch-none"
+          title="Fortia AI Assistant (glisser pour déplacer, cliquer pour discuter)"
+          aria-label="Fortia AI Assistant : glisser pour déplacer, cliquer pour discuter"
         >
           {/* Halo lumineux */}
           <span className="absolute inset-0 rounded-full bg-[#D69E25]/30 blur-xl animate-pulse" />
@@ -199,13 +330,14 @@ export function FloatingAiAssistant() {
 
       {/* ===== POPUP CHAT IA ===== */}
       <AnimatePresence>
-        {isOpen && (
+        {isOpen && popupPos && (
           <motion.div
             initial={{ opacity: 0, y: 40, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.95 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
-            className="fixed bottom-24 sm:bottom-28 right-4 sm:right-6 z-[110] w-[340px] sm:w-[400px] max-w-[calc(100vw-2rem)] flex flex-col bg-[#021231] border-2 border-[#D69E25]/50 rounded-3xl shadow-2xl shadow-black/60 overflow-hidden"
+            style={{ left: popupPos.left, top: popupPos.top }}
+            className="fixed z-[110] w-[340px] sm:w-[400px] max-w-[calc(100vw-2rem)] flex flex-col bg-[#021231] border-2 border-[#D69E25]/50 rounded-3xl shadow-2xl shadow-black/60 overflow-hidden"
           >
             {/* Header */}
             <div className="relative bg-gradient-to-r from-[#011D46] via-[#0A2A5E] to-[#011D46] border-b border-[#D69E25]/40 p-4 flex items-center gap-3">
