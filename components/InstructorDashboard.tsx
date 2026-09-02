@@ -76,6 +76,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     {
       title: string;
       lessons: {
+        id?: string;
         title: string;
         duration: string;
         type: "video" | "article";
