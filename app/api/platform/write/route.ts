@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
-import { notifyUser, broadcastNotification } from "@/lib/services/notifyUser";
+import { notifyUser } from "@/lib/services/notifyUser";
 
 export const dynamic = "force-dynamic";
 
@@ -690,12 +690,19 @@ export async function POST(req: NextRequest) {
               }
             }
           }
-          await broadcastNotification({
-            title: "Vente enregistrée",
-            message: `Un produit « ${created.productTitle || "—"} » vient d'être acheté sur FORTIA HUB (${created.amountUsd || 0} $).`,
-            type: "info",
-            linkTab: "admin",
+          // Notifier UNIQUEMENT les administrateurs (jamais diffusé à tous)
+          const admins = await prisma.user.findMany({
+            where: { accountType: "admin", isActive: true },
+            select: { id: true },
           });
+          for (const admin of admins) {
+            await notifyUser(admin.id, {
+              title: "Vente enregistrée",
+              message: `Un produit « ${created.productTitle || "—"} » vient d'être acheté sur FORTIA HUB (${created.amountUsd || 0} $).`,
+              type: "info",
+              linkTab: "admin",
+            });
+          }
         } catch (e) {
           console.warn("[NOTIFY] Notification de vente impossible:", e);
         }

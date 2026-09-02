@@ -10,6 +10,7 @@ export function NotificationsPage() {
   const {
     isUserLoggedIn,
     notifications,
+    myNotifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
     deleteNotification,
@@ -17,6 +18,9 @@ export function NotificationsPage() {
     setOpenAuthModal,
     setAuthMode,
   } = useAppStore();
+
+  // Affichage strictement personnel : ses notifications + annonces globales (jamais celles d'un autre)
+  const visibleNotifications = (myNotifications && myNotifications.length > 0 ? myNotifications : notifications) || [];
 
   const { setActiveTab } = useActiveSection();
 
@@ -49,7 +53,7 @@ export function NotificationsPage() {
 
   return (
     <NotificationCenter
-      notifications={notifications}
+      notifications={visibleNotifications}
       onMarkAsRead={markNotificationAsRead}
       onMarkAllAsRead={markAllNotificationsAsRead}
       onDeleteNotification={deleteNotification}

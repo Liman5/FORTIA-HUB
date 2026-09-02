@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: "desc" },
       }),
       prisma.notification.findMany({
-        where: { userId: user.id },
+        where: { OR: [{ userId: user.id }, { isGlobal: true }] },
         orderBy: { createdAt: "desc" },
         take: 100,
       }),
