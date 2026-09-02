@@ -17,6 +17,7 @@ import {
   verifyTwoFactorChallenge,
   verifyTwoFactorCode,
 } from "@/lib/services/twoFactor";
+import { notifyUser } from "@/lib/services/notifyUser";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -651,8 +652,20 @@ export async function POST(request: NextRequest) {
         // Conserve le secret (déchiffré) enregistré lors du setup et active la 2FA
         const secret = await getTwoFactorSecret(current.id);
         await saveTwoFactorProfile(current.id, { enabled: true, secret });
+        await notifyUser(current.id, {
+          title: "2FA activée 🔐",
+          message: "L'authentification à deux facteurs est active. Un code Google Authenticator sera demandé à chaque connexion.",
+          type: "success",
+          linkTab: "member",
+        });
       } else {
         await saveTwoFactorProfile(current.id, { enabled: false, secret: "" });
+        await notifyUser(current.id, {
+          title: "2FA désactivée",
+          message: "L'authentification à deux facteurs a été désactivée sur votre compte.",
+          type: "info",
+          linkTab: "member",
+        });
       }
 
       return NextResponse.json({

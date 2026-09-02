@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
-import { notifyUser } from "@/lib/services/notifyUser";
+import { notifyUser, broadcastNotification } from "@/lib/services/notifyUser";
 
 export const dynamic = "force-dynamic";
 
@@ -670,6 +670,36 @@ export async function POST(req: NextRequest) {
             status: "Paye",
           } as any,
         });
+
+        // ===== Notifications de vente (vendeur + diffusion admin/globale) =====
+        try {
+          if (created.storeId) {
+            const storeDoc = await prisma.store.findUnique({ where: { id: created.storeId } });
+            const sellerEmail = storeDoc?.ownerEmail || "";
+            if (sellerEmail) {
+              const seller = await prisma.user.findFirst({
+                where: { email: { equals: sellerEmail, mode: "insensitive" } },
+              });
+              if (seller) {
+                await notifyUser(seller.id, {
+                  title: "Nouvelle vente ! 🎉",
+                  message: `Votre produit « ${created.productTitle || "—"} » a été acheté pour ${created.amountUsd || 0} $ (${created.paymentGateway || "Paiement"}).`,
+                  type: "success",
+                  linkTab: "vendor",
+                });
+              }
+            }
+          }
+          await broadcastNotification({
+            title: "Vente enregistrée",
+            message: `Un produit « ${created.productTitle || "—"} » vient d'être acheté sur FORTIA HUB (${created.amountUsd || 0} $).`,
+            type: "info",
+            linkTab: "admin",
+          });
+        } catch (e) {
+          console.warn("[NOTIFY] Notification de vente impossible:", e);
+        }
+
         return NextResponse.json({ success: true, id: created.id });
       }
 

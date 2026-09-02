@@ -73,3 +73,27 @@ export async function notifyUser(userId: string, data: NotifyUserData): Promise<
 
   return notifId;
 }
+
+/**
+ * Notification GLOBALE (diffusée à tous) : annonces, blogs, publicités…
+ * Crée une ligne `isGlobal: true` vue par tous les utilisateurs.
+ * Ne lève jamais : toute erreur est loggée et le flux continue.
+ */
+export async function broadcastNotification(data: NotifyUserData): Promise<string | null> {
+  try {
+    const n = await prisma.notification.create({
+      data: {
+        title: data.title,
+        message: data.message,
+        type: (data.type || "info") as any,
+        linkTab: data.linkTab || "",
+        isGlobal: true,
+        isRead: false,
+      } as any,
+    });
+    return n.id;
+  } catch (e: any) {
+    console.warn("[NOTIFY] Création de la notification globale impossible:", e?.message);
+    return null;
+  }
+}
