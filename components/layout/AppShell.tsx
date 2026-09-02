@@ -37,6 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setAdmin,
     isUserLoggedIn,
     userProfile,
+    sessionChecking,
     logoutUser,
     notifications,
     markNotificationAsRead,
@@ -207,6 +208,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={`min-h-screen bg-[#021231] font-sans antialiased text-slate-100 flex flex-col ${isAdminPage || isLandingPage ? "" : "pb-24 sm:pb-28"}`}>
+      {/* Écran de chargement anti-flash : tant que la session n'est pas vérifiée
+          (n'affiche jamais « reconnectez-vous » par erreur au rechargement) */}
+      {sessionChecking &&
+        (() => {
+          try {
+            return (
+              typeof window !== "undefined" &&
+              localStorage.getItem("fortia_user_logged_in") === "true"
+            );
+          } catch {
+            return false;
+          }
+        })() && (
+          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-[#021231]">
+            <div className="w-14 h-14 rounded-2xl bg-[#D69E25]/20 border border-[#D69E25]/40 flex items-center justify-center">
+              <span className="block w-6 h-6 border-2 border-[#D69E25] border-t-transparent rounded-full animate-spin" style={{ animationDuration: "1s" }} />
+            </div>
+            <p className="text-xs font-bold text-slate-400 animate-pulse">Chargement de votre session…</p>
+          </div>
+        )}
       {/* Top Navbar - masqué sur la page admin et sur la landing page */}
       {!isAdminPage && !isLandingPage && (
         <Navbar

@@ -108,6 +108,8 @@ interface AppStoreContextValue {
   // User Auth
   isUserLoggedIn: boolean;
   userProfile: UserProfile;
+  /** true pendant la vérification de session au démarrage (évite le flash « reconnectez-vous »). */
+  sessionChecking: boolean;
   openAuthModal: boolean;
   setOpenAuthModal: (open: boolean) => void;
   authMode: "login" | "signup";
@@ -270,6 +272,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // Erreur réseau : on conserve l'état actuel (aucune décision bloquante).
       }
+      if (mounted) setSessionChecking(false);
     }
 
     syncSession();
@@ -346,6 +349,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     return {} as UserProfile;
   });
   const [openAuthModal, setOpenAuthModal] = useState(false);
+  // Anti-flash : reste true tant que la session serveur n'est pas vérifiée
+  const [sessionChecking, setSessionChecking] = useState(true);
 
   // ======== RECHARGEMENT DES DONNÉES PLATFORM (à la demande) ========
   // Déclaration `function` (hoistée) : appelée par le useEffect initial et
@@ -1392,6 +1397,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       clearCart,
       isUserLoggedIn,
       userProfile,
+      sessionChecking,
       openAuthModal,
       setOpenAuthModal,
       authMode,
@@ -1493,6 +1499,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       clearCart,
       isUserLoggedIn,
       userProfile,
+      sessionChecking,
       openAuthModal,
       authMode,
       loginUser,
