@@ -741,15 +741,32 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     <span className="text-[10px] font-mono text-slate-500">{cert.id}</span>
                   </div>
 
-                  <div className="py-4 space-y-1">
-                    <h4 className="font-bold text-sm text-white">{cert.courseTitle}</h4>
-                    <div className="flex items-center gap-3 text-xs text-slate-400">
-                      <span>Délivré le {cert.issueDate}</span>
-                      <span className="flex items-center gap-1">
-                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        {cert.grade}
-                      </span>
+                  <div className="py-4 flex items-center justify-between gap-4">
+                    <div className="space-y-1 min-w-0">
+                      <h4 className="font-bold text-sm text-white">{cert.courseTitle}</h4>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                        <span>Délivré le {cert.issueDate}</span>
+                        <span className="flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          {cert.grade}
+                        </span>
+                      </div>
+                      {cert.qrCodeUrl && (
+                        <p className="text-[10px] text-slate-500">
+                          Attestation authentique vérifiable par QR Code unique.
+                        </p>
+                      )}
                     </div>
+                    {cert.qrCodeUrl && (
+                      <div className="shrink-0 bg-white rounded-lg p-1 shadow">
+                        <img
+                          src={cert.qrCodeUrl}
+                          alt={`QR Code attestation ${cert.id}`}
+                          className="w-16 h-16 object-contain"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <button

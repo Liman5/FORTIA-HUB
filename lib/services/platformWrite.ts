@@ -38,7 +38,8 @@ type WriteAction =
   | "update-freelance-profile"
   | "update-enterprise-profile"
   | "update-store"
-  | "update-profile";
+  | "update-profile"
+  | "sync-user-learning";
 
 export interface WriteResult {
   success: boolean;

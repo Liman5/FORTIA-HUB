@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Course, Lesson, Certificate } from '../types';
 import { generatePDFCertificate, triggerCelebrationConfetti } from '../utils/pdfGenerator';
 import { 
@@ -26,6 +26,12 @@ interface CoursePlayerModalProps {
   isLoggedIn?: boolean;
   onBuyCourse?: () => void;
   onRequireLogin?: () => void;
+  /** % de progression déjà enregistré (compte membre). */
+  initialProgress?: number;
+  /** Appelé à chaque changement de progression (persistance compte). */
+  onProgressChanged?: (percent: number) => void;
+  /** Appelé quand l'apprenant débloque et enregistre son attestation. */
+  onCertificateEarned?: (certificate: Certificate) => void;
 }
 
 // Convertit les URLs YouTube (regarder / partager / embed) en URL de lecteur embed.
@@ -39,6 +45,26 @@ function toYoutubeEmbedUrl(raw?: string): string | null {
   return null;
 }
 
+// Identifiant stable d'attestation (numéro unique, non aléatoire à chaque rendu)
+function stableHash(value: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36).toUpperCase().padStart(6, "0").slice(0, 6);
+}
+
+function certificateCategoryCode(course: Course): string {
+  const raw = String(course.category || (course as any).categoryLabel || "FORT");
+  const clean = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+  return clean.slice(0, 4) || "FORT";
+}
+
 export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   course,
   onClose,
@@ -47,10 +73,18 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   hasAccess = true,
   isLoggedIn = true,
   onBuyCourse,
-  onRequireLogin
+  onRequireLogin,
+  initialProgress = 0,
+  onProgressChanged,
+  onCertificateEarned
 }) => {
   const [activeTab, setActiveTab] = useState<'content' | 'quiz' | 'certificate'>('content');
   const chapters = course.chapters || [];
+  // Tous les ids de leçons (pour la progression persistée du compte)
+  const allLessonIds = chapters.reduce<string[]>((acc, ch) => {
+    (ch.lessons || []).forEach((l) => { if (l.id) acc.push(l.id); });
+    return acc;
+  }, []);
   const initialLesson: Lesson = chapters[0]?.lessons?.[0] || {
     id: 'default',
     title: 'Introduction au Cours',
@@ -61,14 +95,46 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   };
 
   const [currentLesson, setCurrentLesson] = useState<Lesson>(initialLesson);
-  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(['l1']);
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>(() => {
+    if (initialProgress >= 100) return allLessonIds;
+    if (initialProgress > 0 && allLessonIds.length > 0) {
+      const approx = Math.max(1, Math.round((allLessonIds.length * initialProgress) / 100));
+      return allLessonIds.slice(0, approx);
+    }
+    return [];
+  });
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [rulesAccepted, setRulesAccepted] = useState(false);
+  const [certificateGranted, setCertificateGranted] = useState(false);
+  const skipProgressSync = useRef(true);
 
   const totalLessonsCount = chapters.reduce((acc, ch) => acc + (ch.lessons ? ch.lessons.length : 0), 0);
   const progressPercent = totalLessonsCount > 0 ? Math.round((completedLessonIds.length / totalLessonsCount) * 100) : 0;
 
   const isCourseCompleted = progressPercent === 100;
+
+  // Synchronise chaque changement de progression vers le compte membre (persistance)
+  useEffect(() => {
+    if (skipProgressSync.current) {
+      skipProgressSync.current = false;
+      return;
+    }
+    const pct =
+      totalLessonsCount > 0
+        ? Math.round((completedLessonIds.length / totalLessonsCount) * 100)
+        : course.quiz && course.quiz.length > 0
+        ? quizSubmitted
+          ? 100
+          : 0
+        : 100;
+    if (onProgressChanged) onProgressChanged(pct);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedLessonIds.length, quizSubmitted]);
+
+  const quizComplete = !course.quiz || course.quiz.length === 0 || quizSubmitted;
+  // L'attestation n'est déblocable qu'à 100 % ET quiz validé (s'il existe)
+  const certificateUnlocked = isCourseCompleted && quizComplete;
 
   // Lecteur : détecte si la leçon courante est une vidéo YouTube ou un fichier vidéo direct (MP4/WebM/R2…)
   const currentYoutubeEmbed = currentLesson?.videoUrl ? toYoutubeEmbedUrl(currentLesson.videoUrl) : null;
@@ -89,21 +155,36 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
     triggerCelebrationConfetti();
   };
 
-  // Generated Certificate object for this student & course
+  // Attestation à numéro UNIQUE & stable (cours + apprenant) — affichée ensuite
+  // dans l'onglet « Attestations » de la page membre avec son QR Code.
+  const todayKey = new Date().toISOString().split("T")[0];
+  const certId = `FORTIA-${new Date().getFullYear()}-${certificateCategoryCode(course)}-${stableHash(
+    `${course.id}|${studentName || "apprenant"}|${todayKey}`
+  )}`;
   const currentCertificate: Certificate = {
-    id: `FORTIA-2026-${String(course.category || (course as any).categoryLabel || "FORT").toUpperCase().slice(0, 4)}-${Math.floor(1000 + Math.random() * 9000)}`,
-    studentName: studentName || 'Apprenant FORTIA',
+    id: certId,
+    studentName: studentName || "Apprenant FORTIA",
     courseTitle: course.title,
     category: course.categoryLabel,
-    issueDate: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
-    grade: 'Mention Excellent (98%)',
-    qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=FORTIA-CERT',
-    verified: true
-  };
+    courseId: course.id,
+    issueDate: new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }),
+    grade: "Mention Excellent (98%)",
+    qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+      `FORTIA-HUB-CERT:${certId}`
+    )}`,
+    verified: true,
+  } as Certificate & { courseId?: string };
 
   const handleDownloadCertificate = () => {
     triggerCelebrationConfetti();
     generatePDFCertificate(currentCertificate);
+  };
+
+  const handleGrantCertificate = () => {
+    if (!certificateUnlocked || !rulesAccepted || certificateGranted) return;
+    setCertificateGranted(true);
+    triggerCelebrationConfetti();
+    if (onCertificateEarned) onCertificateEarned(currentCertificate as Certificate);
   };
 
   return (
@@ -482,57 +563,152 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: CERTIFICATE GENERATOR */}
+          {/* TAB 3: CERTIFICATE GENERATOR — déblocage après 100 %, quiz validé ET règlement accepté */}
           {activeTab === 'certificate' && (
-            <div className="max-w-2xl mx-auto bg-white p-8 rounded-2xl border border-[#D69E25]/40 shadow-xl space-y-6 text-center">
+            <div className="max-w-2xl mx-auto bg-white p-6 sm:p-8 rounded-2xl border border-[#D69E25]/40 shadow-xl space-y-5 text-center">
               <div className="w-16 h-16 rounded-full bg-amber-100 text-[#D69E25] flex items-center justify-center mx-auto border-2 border-[#D69E25]">
                 <Award className="w-8 h-8" />
               </div>
 
               <div className="space-y-2">
                 <h3 className="text-xl font-extrabold text-[#021231]">
-                  Attestation d'Accomplissement Officielle
+                  Attestation d&apos;Accomplissement Officielle
                 </h3>
                 <p className="text-xs text-slate-600 max-w-md mx-auto">
-                  Délivrée par <strong>FORTIA HUB</strong> au titulaire ci-dessous avec signature numérique et numéro de vérification authentifié.
+                  Délivrée par <strong>FORTIA HUB</strong> au titulaire ci-dessous avec numéro unique et QR Code d&apos;authentification.
                 </p>
               </div>
 
+              {/* Étapes de déblocage */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
+                {[
+                  { label: "Formation terminée", detail: `${progressPercent}%`, ok: isCourseCompleted },
+                  { label: course.quiz && course.quiz.length > 0 ? "Quiz validé" : "Contenu validé", detail: quizComplete ? "Fait ✓" : "En cours", ok: quizComplete },
+                  { label: "Règlement accepté", detail: rulesAccepted ? "Accepté ✓" : "À accepter", ok: rulesAccepted },
+                ].map((s) => (
+                  <div
+                    key={s.label}
+                    className={`flex items-center gap-2.5 rounded-xl border p-3 text-xs font-bold ${
+                      s.ok ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-slate-50 border-slate-200 text-slate-500"
+                    }`}
+                  >
+                    {s.ok ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                    ) : (
+                      <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="leading-tight">{s.label}</p>
+                      <p className="text-[10px] opacity-70">{s.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Règlement de délivrance — obligatoire avant toute délivrance */}
+              <div
+                className={`rounded-2xl border p-4 space-y-3 text-left transition ${
+                  rulesAccepted ? "bg-emerald-50 border-emerald-300" : "bg-amber-50 border-amber-200"
+                }`}
+              >
+                <p className="text-xs font-black text-[#021231] flex items-center gap-2">
+                  <Award className="w-4 h-4 text-[#AB6F10]" /> Règlement de certification FORTIA HUB
+                </p>
+                <ul className="space-y-1.5 text-[11px] text-slate-600 leading-relaxed">
+                  <li className="flex items-start gap-1.5"><span className="text-[#D69E25] mt-0.5">●</span> J&apos;atteste avoir réalisé personnellement l&apos;intégralité de cette formation sur FORTIA HUB.</li>
+                  <li className="flex items-start gap-1.5"><span className="text-[#D69E25] mt-0.5">●</span> Je m&apos;engage à ne pas revendiquer ni partager ce certificat de manière frauduleuse.</li>
+                  <li className="flex items-start gap-1.5"><span className="text-[#D69E25] mt-0.5">●</span> Je respecte les droits d&apos;auteur des formateurs (pas de redistribution des vidéos/cours).</li>
+                  <li className="flex items-start gap-1.5"><span className="text-[#D69E25] mt-0.5">●</span> Toute fraude entraîne la révocation de l&apos;attestation et du compte.</li>
+                </ul>
+                <label
+                  className={`flex items-start gap-2.5 rounded-xl border p-3 cursor-pointer transition ${
+                    rulesAccepted ? "border-emerald-400 bg-white" : "border-[#D69E25]/50 bg-white"
+                  } ${!isCourseCompleted || !quizComplete ? "opacity-60 cursor-not-allowed" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={rulesAccepted}
+                    disabled={!isCourseCompleted || !quizComplete}
+                    onChange={(e) => setRulesAccepted(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 accent-emerald-600"
+                  />
+                  <span className="text-[11px] font-bold text-slate-700">
+                    J&apos;accepte le règlement ci-dessus et je demande la délivrance officielle de mon attestation.
+                    {(!isCourseCompleted || !quizComplete) && (
+                      <span className="block text-[10px] font-semibold text-amber-600 mt-1">
+                        🔒 Disponible une fois la formation terminée à 100 % {course.quiz && course.quiz.length > 0 ? "et le quiz validé" : ""}.
+                      </span>
+                    )}
+                  </span>
+                </label>
+              </div>
+
               {/* Certificate Preview Card */}
-              <div className="bg-[#021231] text-white p-6 rounded-xl border-2 border-[#D69E25] shadow-2xl relative space-y-4">
-                <div className="flex items-center justify-between border-b border-[#D69E25]/30 pb-3">
-                  <span className="font-black text-xs text-[#D69E25] tracking-widest uppercase">
+              <div className="bg-[#021231] text-white p-5 rounded-xl border-2 border-[#D69E25] shadow-2xl relative space-y-4">
+                <div className="flex items-center justify-between gap-2 border-b border-[#D69E25]/30 pb-3">
+                  <span className="font-black text-[11px] text-[#D69E25] tracking-widest uppercase">
                     FORTIA HUB • ATTESTATION
                   </span>
-                  <span className="text-[10px] text-slate-300 font-mono">
+                  <span className="text-[9px] sm:text-[10px] text-slate-300 font-mono truncate">
                     N° {currentCertificate.id}
                   </span>
                 </div>
 
-                <div className="space-y-1 py-2">
-                  <p className="text-[11px] text-slate-300">Décerné à :</p>
-                  <p className="text-xl font-black text-white tracking-wide uppercase">{currentCertificate.studentName}</p>
-                  <p className="text-xs text-[#D69E25] font-semibold pt-1">
-                    « {currentCertificate.courseTitle} »
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between pt-3 border-t border-[#D69E25]/30 text-[10px] text-slate-300">
-                  <span>Délivré le : {currentCertificate.issueDate}</span>
-                  <span className="text-emerald-400 font-bold">✓ Authenticité Vérifiée</span>
+                <div className="flex flex-col sm:flex-row items-center gap-5">
+                  <div className="flex-1 space-y-1 py-1 text-center sm:text-left">
+                    <p className="text-[11px] text-slate-300">Décerné à :</p>
+                    <p className="text-lg sm:text-xl font-black text-white tracking-wide uppercase">{currentCertificate.studentName}</p>
+                    <p className="text-xs text-[#D69E25] font-semibold pt-1">
+                      « {currentCertificate.courseTitle} »
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-0.5 pt-2 border-t border-[#D69E25]/30 text-[10px] text-slate-300">
+                      <span>Délivré le : {currentCertificate.issueDate}</span>
+                      <span className="text-emerald-400 font-bold">✓ Authenticité Vérifiée</span>
+                    </div>
+                  </div>
+                  <div className="shrink-0 bg-white rounded-lg p-1.5 shadow-md">
+                    <img
+                      src={currentCertificate.qrCodeUrl}
+                      alt={`QR Code attestation ${currentCertificate.id}`}
+                      className="w-20 h-20 object-contain"
+                      loading="lazy"
+                    />
+                    <p className="text-[7px] text-slate-500 text-center font-bold mt-0.5">QR UNIQUE</p>
+                  </div>
                 </div>
               </div>
 
-              {/* Action Download PDF Button */}
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              {certificateGranted && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-800 text-xs font-bold flex items-center justify-center gap-2">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  Attestation enregistrée dans votre compte — onglet « Attestations » de votre Espace Membre.
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
                   onClick={handleDownloadCertificate}
-                  className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black text-xs rounded-xl shadow-lg hover:brightness-110 transition flex items-center justify-center gap-2"
+                  disabled={!isCourseCompleted || !quizComplete || !rulesAccepted}
+                  className="w-full sm:w-auto px-6 py-3 bg-[#021231] text-[#D69E25] font-black text-xs rounded-xl border border-[#D69E25]/50 shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-[#011D46]"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Télécharger l'Attestation (PDF Haute Qualité)</span>
+                  <span>Télécharger le PDF</span>
+                </button>
+                <button
+                  onClick={handleGrantCertificate}
+                  disabled={!isCourseCompleted || !quizComplete || !rulesAccepted || certificateGranted}
+                  className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-[#D69E25] via-[#F6E05E] to-[#AB6F10] bg-[length:200%_auto] hover:bg-right text-[#021231] font-black text-xs rounded-xl shadow-lg shadow-[#D69E25]/30 transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>{certificateGranted ? "Attestation délivrée ✓" : "Délivrer mon Attestation"}</span>
                 </button>
               </div>
+              {(!isCourseCompleted || !quizComplete) && (
+                <p className="text-[11px] font-semibold text-amber-600">
+                  ⏳ Terminez les {totalLessonsCount} leçons {course.quiz && course.quiz.length > 0 ? "et validez le quiz " : ""}pour débloquer votre attestation.
+                </p>
+              )}
 
             </div>
           )}

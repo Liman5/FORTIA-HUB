@@ -6,6 +6,7 @@ import {
   DigitalProduct,
   ServicePackage,
   CartItem,
+  Certificate,
   ServiceQuoteRequest,
   UserProfile,
   FreelanceProfile,
@@ -165,6 +166,12 @@ interface AppStoreContextValue {
   rateCourse: (courseId: string, rating: number) => void;
   suspendInstructorCourse: (courseId: string) => void;
   deleteInstructorCourse: (courseId: string) => void;
+  /** Enregistre le % d'avancement d'une formation sur le compte membre. */
+  recordCourseProgress: (courseId: string, percent: number) => void;
+  /** Ajoute l'attestation officielle au compte membre (visible onglet Attestations). */
+  grantCertificate: (certificate: Certificate) => void;
+  /** Inscrit le membre à une formation (ajout à enrolledCourseIds + progression initiale). */
+  ensureCourseEnrollment: (courseId: string) => void;
   buyInstructorStorage: (center: TrainingCenter, amountGb: number, amountUsd: number) => void;
   adminAddInstructor: (data: { email: string; centerName: string; description?: string; storageQuotaGb?: number }) => void;
 }
@@ -1155,6 +1162,73 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const clearCart = useCallback(() => setCartItems([]), []);
 
+  // ===== Apprentissage : progression & attestations du membre =====
+  const persistUserLearning = useCallback(
+    (updatedProfile: UserProfile) => {
+      setUserProfile(updatedProfile);
+      try {
+        localStorage.setItem("fortia_user_profile", JSON.stringify(updatedProfile));
+      } catch (e) {}
+      if (updatedProfile.id) {
+        apiWritePlatform("sync-user-learning", {
+          userId: updatedProfile.id,
+          courseProgress: updatedProfile.courseProgress || {},
+          enrolledCourseIds: updatedProfile.enrolledCourseIds || [],
+          earnedCertificates: updatedProfile.earnedCertificates || [],
+        });
+      }
+    },
+    []
+  );
+
+  const recordCourseProgress = useCallback(
+    (courseId: string, percent: number) => {
+      if (!courseId || !userProfile) return;
+      const safePct = Math.max(0, Math.min(100, Math.round(percent || 0)));
+      const updated: UserProfile = {
+        ...userProfile,
+        courseProgress: {
+          ...(userProfile.courseProgress || {}),
+          [courseId]: safePct,
+        },
+      };
+      persistUserLearning(updated);
+    },
+    [userProfile, persistUserLearning]
+  );
+
+  const grantCertificate = useCallback(
+    (certificate: Certificate) => {
+      if (!certificate?.id || !userProfile) return;
+      const existing = userProfile.earnedCertificates || [];
+      if (existing.some((c) => c.id === certificate.id)) return;
+      const updated: UserProfile = {
+        ...userProfile,
+        earnedCertificates: [...existing, certificate],
+      };
+      persistUserLearning(updated);
+    },
+    [userProfile, persistUserLearning]
+  );
+
+  const ensureCourseEnrollment = useCallback(
+    (courseId: string) => {
+      if (!courseId || !userProfile) return;
+      const enrolled = userProfile.enrolledCourseIds || [];
+      if (enrolled.includes(courseId)) return;
+      const updated: UserProfile = {
+        ...userProfile,
+        enrolledCourseIds: [...enrolled, courseId],
+        courseProgress: {
+          ...(userProfile.courseProgress || {}),
+          [courseId]: userProfile.courseProgress?.[courseId] ?? 0,
+        },
+      };
+      persistUserLearning(updated);
+    },
+    [userProfile, persistUserLearning]
+  );
+
   const loginUser = useCallback(
     (userData: Partial<UserProfile>) => {
       const updatedProfile = { ...userProfile, ...userData };
@@ -1318,6 +1392,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       rateCourse,
       suspendInstructorCourse,
       deleteInstructorCourse,
+      recordCourseProgress,
+      grantCertificate,
+      ensureCourseEnrollment,
       buyInstructorStorage,
       adminAddInstructor,
     }),
@@ -1406,6 +1483,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       rateCourse,
       suspendInstructorCourse,
       deleteInstructorCourse,
+      recordCourseProgress,
+      grantCertificate,
+      ensureCourseEnrollment,
       buyInstructorStorage,
       adminAddInstructor,
     ]

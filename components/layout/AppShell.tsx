@@ -4,6 +4,7 @@ import React from "react";
 import { usePathname } from "next/navigation";
 import { useAppStore } from "@/lib/store/AppStore";
 import { useActiveSection } from "@/lib/store/useActiveSection";
+import type { Certificate } from "@/lib/types";
 import { Navbar } from "@/components/Navbar";
 import { BottomNavbar } from "@/components/BottomNavbar";
 import { PWAInstallBanner } from "@/components/PWAInstallBanner";
@@ -68,6 +69,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     removeFromCart,
     clearCart,
     rateCourse,
+    recordCourseProgress,
+    grantCertificate,
+    ensureCourseEnrollment,
     activeVendorStore,
     selectedStore,
     isAdminAuthModalOpen,
@@ -115,6 +119,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       categoryLabel: playerCourse.categoryLabel,
     });
     setSelectedCourseForPlayer(null);
+  };
+
+  // Progression déjà enregistrée + délivrance de l'attestation (compte membre)
+  const playerInitialProgress =
+    playerCourse && userProfile?.courseProgress ? userProfile.courseProgress[playerCourse.id] || 0 : 0;
+
+  const handleEarnedCertificate = (certificate: Certificate) => {
+    if (!playerCourse) return;
+    grantCertificate(certificate);
+    ensureCourseEnrollment(playerCourse.id);
   };
 
   // Sidebar state
@@ -255,6 +269,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           isLoggedIn={isUserLoggedIn}
           onBuyCourse={handleBuyCourseFromPlayer}
           onRequireLogin={() => handleOpenAuthModal("login")}
+          initialProgress={playerInitialProgress}
+          onProgressChanged={(pct) => {
+            if (playerCourse) {
+              recordCourseProgress(playerCourse.id, pct);
+              ensureCourseEnrollment(playerCourse.id);
+            }
+          }}
+          onCertificateEarned={handleEarnedCertificate}
         />
       )}
 

@@ -489,6 +489,80 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, notified: !!sellerUser });
       }
 
+      // ============ SYNCHRONISATION APPRENTISSAGE MEMBRE ============
+      // Persiste la progression, les inscriptions aux formations et les
+      // attestations obtenues (earnedCertificates) sur le compte utilisateur.
+      case "sync-user-learning": {
+        const { userId } = data;
+        if (!userId) {
+          return NextResponse.json({ error: "userId requis" }, { status: 400 });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+          return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+        }
+
+        let enrolled = Array.isArray(user.enrolledCourseIds) ? [...user.enrolledCourseIds] : [];
+        if (Array.isArray(data.enrolledCourseIds)) {
+          data.enrolledCourseIds.forEach((cid: string) => {
+            if (cid && !enrolled.includes(cid)) enrolled.push(cid);
+          });
+        }
+
+        let progress: Record<string, number> = {};
+        try {
+          const parsed = JSON.parse(String(user.courseProgress || "{}"));
+          if (parsed && typeof parsed === "object") progress = { ...parsed };
+        } catch {}
+        if (data.courseProgress && typeof data.courseProgress === "object") {
+          Object.entries(data.courseProgress).forEach(([cid, pct]) => {
+            if (cid) progress[cid] = Math.max(0, Math.min(100, Number(pct) || 0));
+          });
+        }
+
+        let certificates: any[] = [];
+        try {
+          const parsed = JSON.parse(String(user.earnedCertificates || "[]"));
+          if (Array.isArray(parsed)) certificates = [...parsed];
+        } catch {}
+        if (Array.isArray(data.earnedCertificates)) {
+          data.earnedCertificates.forEach((cert: any) => {
+            if (cert && cert.id && !certificates.some((c: any) => c.id === cert.id)) {
+              certificates.push(cert);
+              // Enregistre aussi la ligne officielle en base (pour la vérification publique)
+              prisma.certificate
+                .create({
+                  data: {
+                    certificateNumber: cert.id,
+                    userId,
+                    courseId: cert.courseId || undefined,
+                    studentName: cert.studentName || user.name,
+                    courseTitle: cert.courseTitle || "",
+                    category: cert.category || "",
+                    issueDate: cert.issueDate || "",
+                    grade: cert.grade || "",
+                    qrCodeUrl: cert.qrCodeUrl || "",
+                    verified: true,
+                  } as any,
+                })
+                .catch(() => {});
+            }
+          });
+        }
+
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            enrolledCourseIds: enrolled,
+            courseProgress: progress as any,
+            earnedCertificates: certificates as any,
+          } as any,
+        });
+
+        return NextResponse.json({ success: true, enrolledCount: enrolled.length, certificateCount: certificates.length });
+      }
+
       // ============ COMMANDE PAYEE ============
       case "submit-order": {
         const created = await prisma.marketplaceOrder.create({
