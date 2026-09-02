@@ -49,9 +49,19 @@ export async function uploadFileToR2(
       body: formData,
     });
 
-    const data = await res.json();
+    // Réponse serveur pas toujours JSON (413 / HTML / texte) → parsing sûr
+    const rawText = await res.text();
+    let data: any = null;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = null;
+    }
 
-    if (!res.ok) {
+    if (!res.ok || !data) {
+      const detail =
+        data?.error ||
+        (rawText && rawText.length < 300 ? rawText : "Erreur lors de l'upload");
       return {
         success: false,
         key: "",
@@ -59,7 +69,7 @@ export async function uploadFileToR2(
         fileName: file.name,
         size: file.size,
         contentType: file.type,
-        error: data.error || "Erreur lors de l'upload",
+        error: detail,
       };
     }
 

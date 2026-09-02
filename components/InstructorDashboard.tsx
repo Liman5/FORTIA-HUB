@@ -19,7 +19,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
-import { uploadCourseVideoDirect } from "@/lib/services/clientUpload";
+import { uploadCourseVideoDirect, uploadFileToR2 } from "@/lib/services/clientUpload";
 import { hashSecret } from "@/lib/services/offlineVideo";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
 
@@ -106,6 +106,9 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState("");
   const [videoSecretCode, setVideoSecretCode] = useState("");
+  // Image de couverture : upload fichier (pas seulement URL)
+  const coverFileRef = useRef<HTMLInputElement>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
 
   const myCourses = (courses || []).filter((c) => c.instructorId === center?.ownerId || c.centerId === center?.id);
   const totalStudents = myCourses.reduce((s, c) => s + (c.studentsCount || 0), 0);
@@ -469,7 +472,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               <label className="text-xs text-slate-300 block mb-1 font-bold">Titre de la formation *</label>
               <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Masterclass IA 2026" className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-slate-300 block mb-1">Catégorie</label>
                 <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white">
@@ -486,7 +489,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <input type="number" min="1" value={price} onChange={(e) => setPrice(Number(e.target.value))} className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-slate-300 block mb-1">Durée (heures)</label>
                 <input type="number" min="1" value={durationHours} onChange={(e) => setDurationHours(Number(e.target.value))} className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white" />
@@ -510,9 +513,57 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               <label className="text-xs text-slate-300 block mb-1">Description</label>
               <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Décrivez votre formation..." className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white" />
             </div>
-            <div>
-              <label className="text-xs text-slate-300 block mb-1">URL Image de couverture</label>
-              <input type="text" value={image} onChange={(e) => setImage(e.target.value)} placeholder="https://..." className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white" />
+            <div className="space-y-2">
+              <label className="text-xs text-slate-300 block font-bold">Image de couverture</label>
+              {image && (
+                <div className="relative w-full sm:w-64 rounded-xl overflow-hidden border border-slate-700">
+                  <img src={image} alt="Aperçu couverture" className="w-full h-32 object-cover" />
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  ref={coverFileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (!file.type?.startsWith("image/")) {
+                      alert("Veuillez choisir une image (JPG, PNG, WebP…).");
+                      return;
+                    }
+                    setUploadingCover(true);
+                    try {
+                      const result = await uploadFileToR2(file, "store-images", center?.id || "instructor", true);
+                      if (result.success) {
+                        setImage(result.url);
+                      } else {
+                        alert(result.error || "Erreur lors de l'upload de l'image.");
+                      }
+                    } finally {
+                      setUploadingCover(false);
+                      if (coverFileRef.current) coverFileRef.current.value = "";
+                    }
+                  }}
+                />
+                <input
+                  type="text"
+                  value={image}
+                  onChange={(e) => setImage(e.target.value)}
+                  placeholder="URL externe ou cliquez sur Parcourir…"
+                  className="flex-1 bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => !uploadingCover && coverFileRef.current?.click()}
+                  disabled={uploadingCover}
+                  className="shrink-0 px-4 py-3 bg-[#D69E25] text-[#021231] font-black text-xs rounded-xl hover:bg-amber-400 transition flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  {uploadingCover ? "Upload…" : "📁 Parcourir"}
+                </button>
+              </div>
             </div>
 
             {/* ===== ÉDITEUR CHAPITRES & LEÇONS (vidéos) ===== */}
@@ -576,7 +627,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   <p className="text-[10px] font-bold text-[#D69E25]">
                     Ajouter une leçon au chapitre : {chapters[activeChapterIdx].title}
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
                       type="text"
                       value={lessonTitle}
@@ -809,7 +860,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   placeholder="Question (Ex: Qu'est-ce que la blockchain ?)"
                   className="w-full bg-[#011D46] border border-slate-700 text-xs rounded-lg p-2.5 text-white"
                 />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {quizOptions.map((opt, oi) => (
                     <div key={oi} className="flex items-center gap-1.5">
                       <input

@@ -116,6 +116,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [rulesAccepted, setRulesAccepted] = useState(false);
   const [certificateGranted, setCertificateGranted] = useState(false);
+  const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
   const skipProgressSync = useRef(true);
 
   // ===== Copie hors-ligne (chiffrée AES en local) =====
@@ -326,6 +327,12 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">
                   Achetez cette formation pour débloquer les <strong>vidéos HD</strong>, le <strong>quiz d&apos;évaluation</strong> et votre <strong>certificat officiel</strong>.
                 </p>
+                {isLoggedIn && (
+                  <p className="text-[10px] font-semibold text-slate-500 inline-flex items-center gap-1.5">
+                    <UserCheck className="w-3.5 h-3.5 text-[#D69E25]" />
+                    Connecté : <strong>{studentName}</strong>
+                  </p>
+                )}
               </div>
 
               <div className="bg-[#021231] text-white rounded-2xl border border-[#D69E25] px-4 py-5 shadow-xl">
@@ -680,56 +687,111 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                 <p className="text-xs text-slate-500">Répondez correctement aux questions pour valider votre mention.</p>
               </div>
 
-              <div className="space-y-6">
-                {course.quiz.map((q, idx) => (
-                  <div key={q.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                    <p className="font-bold text-xs text-[#021231]">
-                      {idx + 1}. {q.question}
-                    </p>
-                    <div className="space-y-2">
-                      {q.options.map((opt, oIdx) => {
-                        const isSelected = quizAnswers[q.id] === oIdx;
-                        const isCorrect = q.correctAnswer === oIdx;
-
-                        let optClass = 'bg-white border-slate-200 text-slate-700 hover:border-slate-400';
-                        if (quizSubmitted) {
-                          if (isCorrect) optClass = 'bg-emerald-50 border-emerald-500 text-emerald-900 font-bold';
-                          else if (isSelected && !isCorrect) optClass = 'bg-rose-50 border-rose-400 text-rose-900';
-                        } else if (isSelected) {
-                          optClass = 'bg-[#021231] text-[#D69E25] font-bold border-[#D69E25]';
-                        }
-
-                        return (
-                          <button
-                            key={oIdx}
-                            onClick={() => !quizSubmitted && setQuizAnswers({ ...quizAnswers, [q.id]: oIdx })}
-                            className={`w-full text-left p-3 rounded-lg border text-xs transition ${optClass}`}
-                          >
-                            {opt}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {quizSubmitted && (
-                      <p className="text-[11px] text-slate-600 bg-white p-2.5 rounded border border-slate-200 italic">
-                        💡 <strong>Explication:</strong> {q.explanation}
-                      </p>
-                    )}
-                  </div>
-                ))}
+              <div className="space-y-4">
+                {course.quiz.map((q, qi) => {
+                  const isCurrent = qi === currentQuizIndex;
+                  const isPast = qi < currentQuizIndex;
+                  if (isCurrent || quizSubmitted || isPast) {
+                    return (
+                      <div key={q.id} className="space-y-3">
+                        {isPast && quizSubmitted && (
+                          <p className="text-[10px] text-slate-400 font-bold">Question {qi + 1} — corrigée</p>
+                        )}
+                        <div className={`p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 ${!isCurrent && quizSubmitted ? "opacity-90" : ""}`}>
+                          <p className="font-bold text-xs text-[#021231]">
+                            {qi + 1}. {q.question}
+                          </p>
+                          <div className="space-y-2">
+                            {q.options.map((opt, oIdx) => {
+                              const isSelected = quizAnswers[q.id] === oIdx;
+                              const isCorrect = q.correctAnswer === oIdx;
+                              let optClass = 'bg-white border-slate-200 text-slate-700 hover:border-slate-400';
+                              if (quizSubmitted) {
+                                if (isCorrect) optClass = 'bg-emerald-50 border-emerald-500 text-emerald-900 font-bold';
+                                else if (isSelected && !isCorrect) optClass = 'bg-rose-50 border-rose-400 text-rose-900';
+                              } else if (isSelected) {
+                                optClass = 'bg-[#021231] text-[#D69E25] font-bold border-[#D69E25]';
+                              }
+                              return (
+                                <button
+                                  key={oIdx}
+                                  onClick={() => !quizSubmitted && setQuizAnswers({ ...quizAnswers, [q.id]: oIdx })}
+                                  className={`w-full text-left p-3 rounded-lg border text-xs transition ${optClass}`}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {quizSubmitted && (
+                            <p className="text-[11px] text-slate-600 bg-white p-2.5 rounded border border-slate-200 italic">
+                              💡 <strong>Explication :</strong> {q.explanation || "Aucune explication fournie."}
+                            </p>
+                          )}
+                        </div>
+                        {/* Autres questions : aperçu flouté / verrouillé */}
+                        {isCurrent && qi + 1 < (course.quiz || []).length && (
+                          <div className="relative blur-[6px] select-none pointer-events-none opacity-60 p-4 bg-slate-100 rounded-xl border border-dashed border-slate-300">
+                            <p className="font-bold text-xs text-slate-400">
+                              Question {qi + 2} — Répondez d'abord à la question {qi + 1}
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-1">{(course.quiz || [])[qi + 1].question}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  // Questions suivantes verrouillées (non visibles)
+                  return (
+                    <div key={q.id} className="hidden" aria-hidden="true" />
+                  );
+                })}
               </div>
 
               {!quizSubmitted ? (
-                <button
-                  onClick={() => {
-                    setQuizSubmitted(true);
-                    markAllComplete();
-                  }}
-                  className="w-full py-3 bg-[#021231] text-[#D69E25] font-extrabold text-xs rounded-xl shadow-lg hover:bg-[#011D46] transition"
-                >
-                  Valider mes Réponses
-                </button>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentQuizIndex((i) => Math.max(0, i - 1))}
+                      disabled={currentQuizIndex === 0}
+                      className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-slate-200"
+                    >
+                      ← Précédente
+                    </button>
+                    <span className="text-[11px] font-black text-slate-500">
+                      Question {currentQuizIndex + 1} / {course.quiz.length}
+                    </span>
+                    {currentQuizIndex < course.quiz.length - 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => setCurrentQuizIndex((i) => i + 1)}
+                        disabled={quizAnswers[course.quiz[currentQuizIndex].id] === undefined}
+                        className="px-4 py-2.5 bg-[#021231] text-[#D69E25] font-extrabold text-xs rounded-lg shadow transition disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-[#011D46]"
+                      >
+                        Question suivante →
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={!course.quiz.every((q) => quizAnswers[q.id] !== undefined)}
+                        onClick={() => {
+                          setQuizSubmitted(true);
+                          markAllComplete();
+                        }}
+                        className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-700 text-white font-black text-xs rounded-lg shadow transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Valider mes réponses ✓
+                      </button>
+                    )}
+                  </div>
+                  {currentQuizIndex < course.quiz.length - 1 &&
+                    quizAnswers[course.quiz[currentQuizIndex].id] === undefined && (
+                      <p className="text-center text-[11px] font-semibold text-amber-600">
+                        Choisissez une réponse pour débloquer la question suivante (les autres questions restent floutées).
+                      </p>
+                    )}
+                </div>
               ) : (
                 <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center space-y-2">
                   <p className="font-bold text-emerald-800 text-sm">🎉 Bravo ! Votre Quiz est validé avec succès !</p>
