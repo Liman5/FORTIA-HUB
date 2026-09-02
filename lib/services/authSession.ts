@@ -136,7 +136,16 @@ export async function getCurrentUser(request: NextRequest): Promise<{
   id: string;
   name: string;
   email: string;
+  phone: string;
+  avatar: string;
+  badge: string;
   accountType: string;
+  kycStatus: string;
+  enrolledCourseIds: string[];
+  purchasedProductIds: string[];
+  courseProgress: Record<string, number>;
+  earnedCertificates: any[];
+  paymentHistory: any[];
 } | null> {
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
@@ -151,17 +160,59 @@ export async function getCurrentUser(request: NextRequest): Promise<{
   if (!session || session.expiresAt < new Date()) return null;
   if (session.userId !== payload.sub) return null;
 
+  // Sécurité : on ne lit QUE la ligne du compte authentifié (jamais un autre user)
   const user = await prisma.user.findUnique({
     where: { id: payload.sub },
-    select: { id: true, name: true, email: true, accountType: true, isActive: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      avatar: true,
+      badge: true,
+      accountType: true,
+      isActive: true,
+      kycStatus: true,
+      enrolledCourseIds: true,
+      purchasedProductIds: true,
+      courseProgress: true,
+      earnedCertificates: true,
+      paymentHistory: true,
+    },
   });
   if (!user || !user.isActive) return null;
+
+  const safeArray = (v: any): any[] => (Array.isArray(v) ? v : []);
+  let progress: Record<string, number> = {};
+  try {
+    const parsed = JSON.parse(String(user.courseProgress || "{}"));
+    if (parsed && typeof parsed === "object") progress = parsed;
+  } catch {}
+  let certificates: any[] = [];
+  try {
+    const parsed = JSON.parse(String(user.earnedCertificates || "[]"));
+    if (Array.isArray(parsed)) certificates = parsed;
+  } catch {}
+  let paymentHistory: any[] = [];
+  try {
+    const parsed = JSON.parse(String(user.paymentHistory || "[]"));
+    if (Array.isArray(parsed)) paymentHistory = parsed;
+  } catch {}
 
   return {
     id: user.id,
     name: user.name,
     email: user.email,
+    phone: user.phone || "",
+    avatar: user.avatar || "",
+    badge: user.badge || "none",
     accountType: user.accountType,
+    kycStatus: user.kycStatus || "non_soumis",
+    enrolledCourseIds: safeArray(user.enrolledCourseIds),
+    purchasedProductIds: safeArray(user.purchasedProductIds),
+    courseProgress: progress,
+    earnedCertificates: certificates,
+    paymentHistory: paymentHistory,
   };
 }
 

@@ -1276,7 +1276,33 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
   const loginUser = useCallback(
     (userData: Partial<UserProfile>) => {
-      const updatedProfile = { ...userProfile, ...userData };
+      // Sécurité : au changement de compte (email différent), on repart d'un profil
+      // vierge — JAMAIS de fusion avec les achats/attestations du compte précédent.
+      const sameEmail =
+        !!userProfile?.email &&
+        !!userData?.email &&
+        userProfile.email.toLowerCase() === (userData.email || "").toLowerCase();
+      const base = sameEmail ? userProfile : ({} as UserProfile);
+
+      const updatedProfile: UserProfile = {
+        ...base,
+        ...userData,
+        enrolledCourseIds: sameEmail
+          ? userProfile.enrolledCourseIds || []
+          : userData.enrolledCourseIds || [],
+        courseProgress: sameEmail
+          ? userProfile.courseProgress || {}
+          : userData.courseProgress || {},
+        purchasedProductIds: sameEmail
+          ? userProfile.purchasedProductIds || []
+          : userData.purchasedProductIds || [],
+        earnedCertificates: sameEmail
+          ? userProfile.earnedCertificates || []
+          : userData.earnedCertificates || [],
+        paymentHistory: sameEmail
+          ? userProfile.paymentHistory || []
+          : userData.paymentHistory || [],
+      };
       setUserProfile(updatedProfile);
       setIsUserLoggedIn(true);
       setOpenAuthModal(false);
@@ -1302,6 +1328,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
   const logoutUser = useCallback(() => {
     setIsUserLoggedIn(false);
+    // Purge COMPLÈTE : aucun reste du compte précédent ne doit survivre
+    setUserProfile({} as UserProfile);
     try {
       // Révoque la session JWT côté serveur (cookie HttpOnly) — best-effort :
       // même si la requête échoue, la session locale est nettoyée.
