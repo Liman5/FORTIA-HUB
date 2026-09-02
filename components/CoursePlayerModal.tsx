@@ -21,13 +21,33 @@ interface CoursePlayerModalProps {
   onClose: () => void;
   studentName: string;
   onRateCourse?: (courseId: string, rating: number) => void;
+  /** Accès accordé (formation achetée / inscrit) — sinon le paywall s'affiche. */
+  hasAccess?: boolean;
+  isLoggedIn?: boolean;
+  onBuyCourse?: () => void;
+  onRequireLogin?: () => void;
+}
+
+// Convertit les URLs YouTube (regarder / partager / embed) en URL de lecteur embed.
+function toYoutubeEmbedUrl(raw?: string): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  if (!t) return null;
+  if (t.includes("youtube.com/embed/")) return t;
+  const match = t.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})/);
+  if (match) return `https://www.youtube.com/embed/${match[1]}`;
+  return null;
 }
 
 export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   course,
   onClose,
   studentName,
-  onRateCourse
+  onRateCourse,
+  hasAccess = true,
+  isLoggedIn = true,
+  onBuyCourse,
+  onRequireLogin
 }) => {
   const [activeTab, setActiveTab] = useState<'content' | 'quiz' | 'certificate'>('content');
   const chapters = course.chapters || [];
@@ -49,6 +69,11 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   const progressPercent = totalLessonsCount > 0 ? Math.round((completedLessonIds.length / totalLessonsCount) * 100) : 0;
 
   const isCourseCompleted = progressPercent === 100;
+
+  // Lecteur : détecte si la leçon courante est une vidéo YouTube ou un fichier vidéo direct (MP4/WebM/R2…)
+  const currentYoutubeEmbed = currentLesson?.videoUrl ? toYoutubeEmbedUrl(currentLesson.videoUrl) : null;
+  const currentIsVideoFile =
+    !!currentLesson?.videoUrl && currentLesson?.type === "video" && !currentYoutubeEmbed;
 
   const toggleLessonComplete = (lessonId: string) => {
     if (completedLessonIds.includes(lessonId)) {
@@ -83,7 +108,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 overflow-y-auto">
-      <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[92vh]">
+      <div className="relative bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[92vh]">
         
         {/* Top Header Bar */}
         <div className="bg-[#021231] text-white p-4 sm:p-5 flex items-center justify-between border-b border-[#D69E25]/40">
@@ -112,6 +137,59 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* ===== PAYWALL : l'accès aux vidéos / quiz exige l'achat de la formation ===== */}
+        {!hasAccess && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center overflow-y-auto bg-slate-50 p-4 sm:p-6">
+            <div className="max-w-md w-full mx-auto text-center space-y-5">
+              <div className="w-20 h-20 mx-auto rounded-3xl bg-amber-100 border-2 border-[#D69E25] flex items-center justify-center">
+                <Lock className="w-9 h-9 text-[#AB6F10]" />
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="inline-block text-[10px] font-black uppercase tracking-widest text-[#D69E25] bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
+                  Formation Payante
+                </span>
+                <h3 className="text-2xl font-black text-[#021231] leading-tight">{course.title}</h3>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Achetez cette formation pour débloquer les <strong>vidéos HD</strong>, le <strong>quiz d&apos;évaluation</strong> et votre <strong>certificat officiel</strong>.
+                </p>
+              </div>
+
+              <div className="bg-[#021231] text-white rounded-2xl border border-[#D69E25] px-4 py-5 shadow-xl">
+                <p className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">Accès complet à vie</p>
+                <p className="text-4xl font-black text-[#D69E25] mt-1">
+                  ${course.price || 0}
+                  <span className="text-sm font-bold text-slate-300"> US</span>
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1.5">Wave · Orange Money · Mobile Money · Crypto · Carte</p>
+              </div>
+
+              <div className="space-y-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isLoggedIn) {
+                      if (onBuyCourse) onBuyCourse();
+                    } else if (onRequireLogin) {
+                      onRequireLogin();
+                    }
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#D69E25] via-[#F6E05E] to-[#AB6F10] bg-[length:200%_auto] hover:bg-right text-[#021231] font-black text-xs uppercase tracking-wider shadow-lg shadow-[#D69E25]/30 transition-all hover:scale-[1.01] active:scale-[0.98]"
+                >
+                  {isLoggedIn ? `Acheter cette formation — ${course.price || 0} $US` : "Se connecter pour acheter"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full py-2.5 rounded-xl border border-slate-300 text-slate-500 hover:bg-slate-100 hover:text-slate-700 font-bold text-xs transition"
+                >
+                  Fermer l&apos;aperçu
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tab Selection Bar */}
         <div className="bg-slate-100 border-b border-slate-200 px-4 flex items-center gap-2 overflow-x-auto">
@@ -173,24 +251,60 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
               
               {/* Left Lesson Viewer */}
               <div className="lg:col-span-8 space-y-4">
-                <div className="bg-[#021231] rounded-xl overflow-hidden aspect-video flex items-center justify-center relative shadow-lg border border-[#D69E25]/30">
-                  {/* Simulated Video Player Banner */}
-                  <img 
-                    src={course.image} 
-                    alt={currentLesson?.title} 
-                    className="w-full h-full object-cover opacity-30"
-                  />
-                  <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center space-y-3 bg-gradient-to-t from-[#021231] via-transparent to-[#021231]/80">
-                    <div className="w-16 h-16 rounded-full bg-[#D69E25] text-[#021231] flex items-center justify-center shadow-2xl cursor-pointer hover:scale-110 transition">
-                      <PlayCircle className="w-10 h-10 fill-current" />
-                    </div>
-                    <span className="text-white font-extrabold text-sm sm:text-base max-w-md">
-                      {currentLesson?.title || 'Session de formation FORTIA HUB'}
-                    </span>
-                    <span className="text-xs text-[#D69E25] font-semibold bg-[#011D46] px-3 py-1 rounded-full border border-[#D69E25]/40">
-                      Vidéo HD • {currentLesson?.duration || '20 min'}
-                    </span>
-                  </div>
+                <div className="bg-black rounded-xl overflow-hidden aspect-video relative shadow-lg border border-[#D69E25]/30">
+                  {/* Leçon article / sans vidéo : affiche la couverture de la formation */}
+                  {!currentIsVideoFile && !currentYoutubeEmbed ? (
+                    <>
+                      <img
+                        src={course.image}
+                        alt={currentLesson?.title}
+                        className="w-full h-full object-cover opacity-40"
+                      />
+                      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center space-y-3 bg-gradient-to-t from-black/80 via-black/30 to-black/60">
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#D69E25] text-[#021231] flex items-center justify-center shadow-2xl">
+                          {currentLesson?.type === "article" ? (
+                            <FileText className="w-7 h-7 sm:w-8 sm:h-8" />
+                          ) : (
+                            <PlayCircle className="w-9 h-9 sm:w-10 sm:h-10" />
+                          )}
+                        </div>
+                        <span className="text-white font-extrabold text-sm sm:text-base max-w-md">
+                          {currentLesson?.title || "Session de formation FORTIA HUB"}
+                        </span>
+                        <span className="text-xs text-[#D69E25] font-semibold bg-black/60 px-3 py-1 rounded-full border border-[#D69E25]/40">
+                          {currentLesson?.type === "article"
+                            ? "Leçon Article"
+                            : `Vidéo HD • ${currentLesson?.duration || "20 min"}`}
+                        </span>
+                      </div>
+                    </>
+                  ) : currentYoutubeEmbed ? (
+                    <iframe
+                      className="absolute inset-0 w-full h-full border-0"
+                      src={currentYoutubeEmbed}
+                      title={currentLesson?.title || "Vidéo de formation FORTIA HUB"}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video
+                      key={currentLesson?.id}
+                      className="absolute inset-0 w-full h-full object-contain bg-black"
+                      src={currentLesson?.videoUrl}
+                      poster={course.image}
+                      controls
+                      controlsList="nodownload"
+                      playsInline
+                      preload="metadata"
+                      onEnded={() => {
+                        if (currentLesson?.id && !completedLessonIds.includes(currentLesson.id)) {
+                          toggleLessonComplete(currentLesson.id);
+                        }
+                      }}
+                    >
+                      Votre navigateur ne supporte pas la lecture vidéo HTML5.
+                    </video>
+                  )}
                 </div>
 
                 {/* Lesson Description & Actions */}

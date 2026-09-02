@@ -81,7 +81,7 @@ export function AcademyPage() {
   return (
     <div className="min-h-screen bg-[#021231] text-white selection:bg-[#D69E25]/30">
       {/* ==================== HERO SECTION ==================== */}
-      <section className="relative overflow-hidden pt-16 pb-14">
+      <section className="relative overflow-hidden pt-10 pb-6">
         {/* Background decorations */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(214,158,37,0.1)_0%,transparent_50%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(14,165,233,0.06)_0%,transparent_50%)]" />
@@ -101,7 +101,7 @@ export function AcademyPage() {
         />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center space-y-6">
+          <div className="text-center space-y-4">
             {/* Badge */}
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.9 }}

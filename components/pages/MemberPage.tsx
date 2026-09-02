@@ -22,6 +22,7 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
     isKycModalOpen,
     setKycModalOpen,
     logoutUser,
+    setSelectedCourseForPlayer,
     setOpenAuthModal,
     setAuthMode,
     loginUser,
@@ -154,7 +155,7 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
         digitalProducts={marketplaceProducts as any}
         orders={marketplaceOrders as any}
         marketplaceProducts={marketplaceProducts as any}
-        onOpenCourse={() => {}}
+        onOpenCourse={(course) => setSelectedCourseForPlayer((course as any) || null)}
         onLogout={logoutUser}
         onUpdateProfile={(updates) => loginUser(updates as any)}
         initialTab={initialTab || "progress"}

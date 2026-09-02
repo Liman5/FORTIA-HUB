@@ -13,7 +13,8 @@ import {
   EyeOff, 
   CheckCircle2, 
   TrendingUp, 
-  ArrowUpRight, 
+  ArrowUpRight,
+  Award, 
   Settings, 
   CreditCard, 
   Smartphone, 
@@ -306,66 +307,74 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         <div className="absolute -top-20 right-20 w-64 h-64 rounded-full bg-[#D69E25]/5 blur-3xl" />
         <div className="absolute inset-0 bg-grid-pattern opacity-5" />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-5">
-              {store.logo ? (
-                <motion.img 
-                  src={store.logo} 
-                  alt={store.name} 
-                  className="w-20 h-20 rounded-2xl object-cover border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20 shrink-0"
-                  animate={{ y: [0, -5, 0] }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                />
-              ) : (
-                <div className="w-20 h-20 rounded-2xl border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20 shrink-0 bg-[#021231] flex items-center justify-center">
-                  <Store className="w-8 h-8 text-[#D69E25]" />
-                </div>
-              )}
-              <div className="space-y-1 text-center md:text-left">
-                <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
-                  <h1 className="text-2xl font-black text-white">{store.name}</h1>
-                  <span className="bg-[#D69E25]/15 text-[#D69E25] border border-[#D69E25]/40 text-[10px] font-extrabold px-2.5 py-1 rounded-full">
-                    FORTIA Vendeur Pro
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10 space-y-6">
+          {/* Identité de la boutique + statut */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+            {store.logo ? (
+              <motion.img
+                src={store.logo}
+                alt={store.name}
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20 shrink-0 self-center sm:self-auto"
+                animate={{ y: [0, -5, 0] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              />
+            ) : (
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20 shrink-0 self-center sm:self-auto bg-[#021231] flex items-center justify-center">
+                <Store className="w-7 h-7 sm:w-8 sm:h-8 text-[#D69E25]" />
+              </div>
+            )}
+
+            <div className="flex-1 min-w-0 text-center sm:text-left space-y-2">
+              <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-3">
+                <h1 className="text-xl sm:text-2xl font-black text-white leading-tight truncate">{store.name}</h1>
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2">
+                  <span className="inline-flex items-center gap-1.5 bg-[#D69E25]/15 text-[#D69E25] border border-[#D69E25]/40 text-[10px] font-extrabold px-2.5 py-1 rounded-full">
+                    <Award className="w-3 h-3" /> FORTIA Vendeur Pro
                   </span>
-                </div>
-                <p className="text-xs text-slate-300">
-                  Propriétaire: <strong className="text-white">{store.ownerName}</strong> ({store.ownerEmail})
-                </p>
-                <div className="flex items-center justify-center md:justify-start gap-3 pt-1">
-                  <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Statut: Boutique Active
-                  </span>
-                  <span className="text-slate-500">•</span>
-                  <span className="text-[11px] text-slate-300">
-                    Commissions plateforme: <strong className="text-[#D69E25]">10%</strong>
+                  <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-[#021231] border border-emerald-300 text-[10px] font-black px-2.5 py-1 rounded-full shadow shadow-emerald-500/30">
+                    <CheckCircle2 className="w-3 h-3" /> Statut : Boutique Active
                   </span>
                 </div>
               </div>
-            </div>
 
-            {/* Quick Actions */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onViewPublicStore}
-                className="group relative inline-flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/15 hover:border-[#D69E25]/50 font-bold text-xs rounded-xl transition-all duration-300 shadow flex items-center gap-2 overflow-hidden"
-              >
-                <ExternalLink className="w-4 h-4 text-[#D69E25]" />
-                <span>Voir ma Boutique Publique</span>
-              </button>
+              <p className="text-[11px] sm:text-xs text-slate-300 truncate max-w-full">
+                Propriétaire : <strong className="text-white">{store.ownerName}</strong> · {store.ownerEmail}
+              </p>
 
-              <button
-                onClick={handleOpenAddProduct}
-                className="group relative inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#D69E25] via-[#F6E05E] to-[#AB6F10] bg-[length:200%_auto] hover:bg-right text-[#021231] font-black text-xs rounded-xl transition-all duration-300 shadow-lg shadow-[#D69E25]/30 overflow-hidden"
-              >
-                <span className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 group-hover:animate-shine transition-opacity" />
-                <Plus className="w-4 h-4" />
-                <span>Nouveau Produit</span>
-              </button>
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-1 text-[11px] text-slate-300">
+                <span>
+                  Commissions plateforme : <strong className="text-[#D69E25]">10%</strong>
+                </span>
+                <span className="hidden sm:inline text-slate-600">•</span>
+                <span className="flex items-center gap-1">
+                  <ShoppingBag className="w-3 h-3 text-[#D69E25]" />
+                  {storeProducts.length + (store.salesCount || 0)} produit{(storeProducts.length + (store.salesCount || 0)) > 1 ? "s" : ""}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Tab Navigation */}
+          {/* Quick Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-end">
+            <button
+              onClick={onViewPublicStore}
+              className="group relative w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/15 hover:border-[#D69E25]/50 font-bold text-xs rounded-xl transition-all duration-300 shadow overflow-hidden"
+            >
+              <ExternalLink className="w-4 h-4 text-[#D69E25]" />
+              <span>Voir ma Boutique Publique</span>
+            </button>
+
+            <button
+              onClick={handleOpenAddProduct}
+              className="group relative w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#D69E25] via-[#F6E05E] to-[#AB6F10] bg-[length:200%_auto] hover:bg-right text-[#021231] font-black text-xs rounded-xl transition-all duration-300 shadow-lg shadow-[#D69E25]/30 overflow-hidden"
+            >
+              <span className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 group-hover:animate-shine transition-opacity" />
+              <Plus className="w-4 h-4" />
+              <span>Nouveau Produit</span>
+            </button>
+          </div>
+
+        {/* Tab Navigation */}
           <div className="flex items-center gap-2 mt-8 border-t border-white/10 pt-4 overflow-x-auto scrollbar-none relative">
             {/* Petites flèches dorées indicatrices de scroll sur mobile (sans fond sombre) */}
             <div className="absolute pointer-events-none top-1/2 -translate-y-1/2 left-1 z-10 md:hidden">

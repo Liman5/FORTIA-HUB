@@ -19,7 +19,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
-import { uploadFileToR2 } from "@/lib/services/clientUpload";
+import { uploadCourseVideoDirect } from "@/lib/services/clientUpload";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
 
 interface InstructorDashboardProps {
@@ -596,14 +596,24 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                           onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
+                            if (!file.type?.startsWith("video/")) {
+                              setVideoUploadProgress("");
+                              alert("Veuillez choisir un fichier vidéo (MP4, MOV, WebM, MKV…).");
+                              return;
+                            }
                             setUploadingVideo(true);
-                            setVideoUploadProgress("Upload de la vidéo vers Cloudflare R2...");
+                            setVideoUploadProgress("Préparation de l'upload de la vidéo…");
                             try {
-                              const result = await uploadFileToR2(file, "course-media", center?.id || "instructor", false);
+                              const result = await uploadCourseVideoDirect(
+                                file,
+                                center?.id || "instructor",
+                                (pct) => {
+                                  setVideoUploadProgress(`Upload vidéo : ${pct}%`);
+                                }
+                              );
                               if (result.success) {
                                 setLessonVideoUrl(result.url);
                                 setVideoUploadProgress("");
-                                alert("Vidéo uploadée avec succès ! Le lien est inséré.");
                               } else {
                                 setVideoUploadProgress("");
                                 alert(result.error || "Erreur lors de l'upload de la vidéo.");
@@ -638,6 +648,34 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                             )}
                           </button>
                         </div>
+
+                        {lessonVideoUrl && !uploadingVideo && (
+                          <div className="space-y-2">
+                            <div className="rounded-xl overflow-hidden border border-emerald-500/40 bg-black">
+                              <video
+                                key={lessonVideoUrl}
+                                src={lessonVideoUrl}
+                                controls
+                                playsInline
+                                preload="metadata"
+                                className="w-full max-h-60 bg-black object-contain"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Vidéo prête — elle s&apos;affichera dans le lecteur de la formation.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => { setLessonVideoUrl(""); setVideoUploadProgress(""); }}
+                                className="text-[10px] text-slate-400 hover:text-red-400 font-bold transition"
+                                title="Retirer cette vidéo"
+                              >
+                                ✕ Retirer
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </>
                     )}
                     {lessonType === "article" && (

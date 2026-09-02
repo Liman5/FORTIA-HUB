@@ -64,6 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     submitVendorApplication,
     handlePaymentSuccess,
     addSupportSubmission,
+    addToCart,
     removeFromCart,
     clearCart,
     rateCourse,
@@ -85,6 +86,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (isUserLoggedIn) return;
     setAuthMode(mode);
     setOpenAuthModal(true);
+  };
+
+  // ===== Accès à une formation : obligatoirement payée / achetée =====
+  const playerCourse = selectedCourseForPlayer;
+  const playerHasAccess =
+    !!playerCourse &&
+    isUserLoggedIn &&
+    !!userProfile &&
+    (Number(playerCourse.price) === 0 ||
+      (userProfile.enrolledCourseIds || []).includes(playerCourse.id) ||
+      (userProfile.purchasedProductIds || []).includes(playerCourse.id) ||
+      (store.marketplaceOrders || []).some(
+        (o) =>
+          (o.productId === playerCourse.id ||
+            (o.productTitle || "").toLowerCase() === (playerCourse.title || "").toLowerCase()) &&
+          (o.buyerEmail || "").toLowerCase() === (userProfile.email || "").toLowerCase()
+      ));
+
+  const handleBuyCourseFromPlayer = () => {
+    if (!playerCourse) return;
+    addToCart({
+      id: playerCourse.id,
+      type: "course",
+      title: playerCourse.title,
+      price: Number(playerCourse.price) || 0,
+      image: playerCourse.image || "",
+      categoryLabel: playerCourse.categoryLabel,
+    });
+    setSelectedCourseForPlayer(null);
   };
 
   // Sidebar state
@@ -221,6 +251,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onClose={() => setSelectedCourseForPlayer(null)}
           studentName={userProfile.name}
           onRateCourse={(courseId, rating) => rateCourse(courseId, rating)}
+          hasAccess={playerHasAccess}
+          isLoggedIn={isUserLoggedIn}
+          onBuyCourse={handleBuyCourseFromPlayer}
+          onRequireLogin={() => handleOpenAuthModal("login")}
         />
       )}
 

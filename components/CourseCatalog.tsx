@@ -76,12 +76,12 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
   };
 
   return (
-    <section className="py-14 bg-[#021231] min-h-[600px] relative overflow-x-clip" id="courses-section">
+    <section className="py-8 bg-[#021231] min-h-[600px] relative overflow-x-clip" id="courses-section">
       {/* Background decoration */}
       <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/20 to-transparent" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(214,158,37,0.03)_0%,transparent_50%)]" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5 relative z-10">
         
         {/* Section Header - Supprimé : Programmes Académiques, Catalogue, Description */}
         {/* Level Filter Déplacé sous les catégories */}

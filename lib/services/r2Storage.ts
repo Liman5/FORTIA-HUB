@@ -152,6 +152,31 @@ export async function getSignedDownloadUrl(
 }
 
 /**
+ * URL publique lisible d'un objet R2 (domaine public configuré).
+ */
+export function getPublicObjectUrl(key: string): string {
+  return `${R2_PUBLIC_URL}/${key}`;
+}
+
+/**
+ * Génère une URL signée PUT permettant un upload DIRECT depuis le navigateur
+ * vers R2 (sans transiter par le serveur Next.js → pas de limite de taille
+ * du corps de requête, indispensable pour les vidéos de formation).
+ */
+export async function getPresignedUploadUrl(
+  key: string,
+  contentType: string,
+  expiresInSeconds = 900
+): Promise<string> {
+  const command = new PutObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+    ContentType: contentType,
+  });
+  return getSignedUrl(r2Client, command, { expiresIn: expiresInSeconds });
+}
+
+/**
  * Vérifie si un objet existe dans R2.
  */
 export async function existsInR2(key: string): Promise<boolean> {
