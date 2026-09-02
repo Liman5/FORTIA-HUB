@@ -279,6 +279,113 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
     if (onCertificateEarned) onCertificateEarned(currentCertificate as Certificate);
   };
 
+  // ===== Aperçu gratuit (sans achat) =====
+  // Le modal s'ouvre et affiche la formation (contenu, programme, prix) MAIS
+  // aucune action n'est possible : vidéos / quiz / attestation verrouillés
+  // tant que la formation n'est pas achetée.
+  if (!hasAccess) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 overflow-y-auto">
+        <div className="relative bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 flex flex-col my-auto max-h-[92vh] overflow-hidden">
+          {/* En-tête */}
+          <div className="bg-[#021231] text-white p-4 sm:p-5 flex items-center justify-between border-b border-[#D69E25]/40 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="bg-[#D69E25] text-[#021231] text-[10px] font-black px-2.5 py-1 rounded-full shrink-0">Aperçu</span>
+              <div className="min-w-0">
+                <p className="font-black text-sm truncate">{course.title}</p>
+                <p className="text-[10px] text-slate-300">{course.categoryLabel || "Formation FORTIA HUB"}</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg bg-white/5 hover:bg-white/15 text-slate-200 transition shrink-0"
+              aria-label="Fermer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+            {course.image && (
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200">
+                <img src={course.image} alt={course.title} className="w-full h-40 sm:h-52 object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <p className="absolute bottom-3 left-4 right-4 text-white text-xs font-bold drop-shadow">
+                  👁 Vous consultez l&apos;aperçu — les vidéos et le quiz restent verrouillés tant que la formation n&apos;est pas achetée.
+                </p>
+              </div>
+            )}
+
+            {/* CTA achat */}
+            <div className="rounded-2xl border-2 border-[#D69E25] p-4 flex flex-col sm:flex-row items-center justify-between gap-3 bg-amber-50">
+              <div className="text-center sm:text-left">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#AB6F10]">Accès complet à vie</p>
+                <p className="text-3xl font-black text-[#021231]">
+                  {course.price || 0} <span className="text-sm font-bold text-slate-500">$ US</span>
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                {isLoggedIn ? (
+                  <button
+                    type="button"
+                    onClick={() => { if (onBuyCourse) onBuyCourse(); }}
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-[#D69E25] via-[#F6E05E] to-[#AB6F10] bg-[length:200%_auto] hover:bg-right text-[#021231] font-black text-xs shadow-lg shadow-[#D69E25]/30 transition"
+                  >
+                    Acheter la formation
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { if (onRequireLogin) onRequireLogin(); }}
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl bg-[#021231] text-[#D69E25] font-black text-xs border border-[#D69E25]/50 transition"
+                  >
+                    Se connecter pour acheter
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-100 font-bold text-xs transition"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+
+            {/* Programme (lecture seule) */}
+            <div className="rounded-2xl border border-slate-200 p-4 space-y-3 bg-slate-50">
+              <p className="font-black text-xs text-[#021231] uppercase tracking-wider">Programme de la formation</p>
+              {course.chapters.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">Contenu en préparation…</p>
+              ) : (
+                course.chapters.map((ch, ci) => (
+                  <div key={ch.id || ci} className="space-y-1">
+                    <p className="text-xs font-extrabold text-slate-700">{ch.title}</p>
+                    <div className="space-y-1">
+                      {(ch.lessons || []).map((l) => (
+                        <div key={l.id || l.title} className="flex items-center justify-between text-[11px] text-slate-500 bg-white border border-slate-100 rounded-lg px-3 py-1.5">
+                          <span className="flex items-center gap-1.5 truncate">
+                            <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                            <span className="truncate">{l.title}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 shrink-0 ml-2">{l.duration}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-500 text-center font-medium">
+              🎓 Vidéos HD • Quiz d&apos;évaluation • Certificat officiel avec QR Code unique
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/90 overflow-y-auto">
       <div className="relative bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col my-auto max-h-[92vh]">
@@ -413,8 +520,10 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
           {/* Quick Mark All Button for Demo */}
           {!isCourseCompleted && (
             <button
+              type="button"
               onClick={markAllComplete}
-              className="ml-auto text-[11px] font-bold text-[#AB6F10] hover:underline"
+              className="hidden"
+              aria-hidden="true"
             >
               ⚡ Simuler fin de formation
             </button>

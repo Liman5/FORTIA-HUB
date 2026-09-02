@@ -133,6 +133,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Sidebar state
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  // Confirmation avant déconnexion
+  const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
 
   // Recherche globale : le modal s'ouvre dès que l'utilisateur tape,
   // mais reste fermé après une navigation vers la boutique (le filtre est conservé).
@@ -220,7 +222,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           isUserLoggedIn={isUserLoggedIn}
           userEmail={userProfile.email}
           userName={userProfile.name}
-          onLogout={logoutUser}
+          onLogout={() => setShowLogoutConfirm(true)}
           notifications={notifications}
           onMarkNotificationAsRead={markNotificationAsRead}
           onMarkAllNotificationsAsRead={markAllNotificationsAsRead}
@@ -367,6 +369,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Robot IA Fortia flottant sur toutes les pages */}
       <FloatingAiAssistant />
+
+      {/* Confirmation de déconnexion */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center space-y-5 border border-slate-200">
+            <div className="w-16 h-16 mx-auto rounded-full bg-red-50 border-2 border-red-200 flex items-center justify-center">
+              <span className="text-red-500 text-2xl">⏻</span>
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-black text-[#021231]">Se déconnecter ?</h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Voulez-vous vraiment vous déconnecter de votre compte FORTIA HUB ?
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="py-3 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold text-xs transition"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  logoutUser();
+                }}
+                className="py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-700 text-white font-black text-xs shadow-lg shadow-red-500/25 transition hover:brightness-110"
+              >
+                Se déconnecter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
