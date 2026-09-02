@@ -587,7 +587,15 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         {l.type === "video" ? <Video className="w-3.5 h-3.5 text-[#D69E25]" /> : <BookOpen className="w-3.5 h-3.5 text-sky-400" />}
                         {l.title} • {l.duration}
                       </span>
-                      <span className="text-[10px] text-slate-500 truncate max-w-[180px]">{l.videoUrl}</span>
+                      {l.type === "video" && l.videoUrl ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/40 rounded-full px-2 py-0.5">
+                          <CheckCircle2 className="w-3 h-3" /> Vidéo enregistrée ✓
+                        </span>
+                      ) : l.type === "video" && !l.videoUrl ? (
+                        <span className="shrink-0 text-[10px] font-bold text-red-400">Vidéo manquante ⚠</span>
+                      ) : (
+                        <span className="shrink-0 text-[10px] font-bold text-sky-400">Leçon Article</span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -709,7 +717,9 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                             className="px-3 py-2 bg-[#D69E25] text-[#021231] font-bold text-xs rounded-lg hover:bg-amber-400 transition flex items-center gap-1.5 shrink-0"
                           >
                             {uploadingVideo ? (
-                              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Upload...</>
+                              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Upload…</>
+                            ) : lessonVideoUrl ? (
+                              <><CheckCircle2 className="w-3.5 h-3.5" /> Vidéo uploadée ✓</>
                             ) : (
                               <><UploadCloud className="w-3.5 h-3.5" /> Fichier</>
                             )}
