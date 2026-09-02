@@ -10,9 +10,11 @@ import {
 } from "@/lib/services/authSession";
 import {
   createTwoFactorChallenge,
+  createTwoFactorSetup,
   isTwoFactorEnabled,
-  setTwoFactorEnabled,
+  saveTwoFactorProfile,
   verifyTwoFactorChallenge,
+  verifyTwoFactorCode,
 } from "@/lib/services/twoFactor";
 import bcrypt from "bcryptjs";
 
@@ -438,41 +440,17 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // === 2FA : si l'authentification à deux facteurs est activée, exiger
-        // le code de sécurité envoyé par e-mail AVANT de créer la session. ===
+        // === 2FA TOTP (Google Authenticator) ===
         const twoFactorEnabled = await isTwoFactorEnabled(user.id);
         if (twoFactorEnabled) {
-          const code = Math.floor(100000 + Math.random() * 900000).toString();
-          const twoFactorKey = `2fa:${user.email}`;
-          activeOtpsStore.set(twoFactorKey, {
-            otpCode: code,
-            sender: FROM_EMAIL,
-            expiresAt: Date.now() + 10 * 60 * 1000,
-          });
-
-          let emailSent = false;
-          if (resend) {
-            try {
-              const { data, error } = await resend.emails.send({
-                from: FROM_EMAIL,
-                to: [user.email],
-                subject: `${code} est votre code de sécurité Fortia Hub (2FA)`,
-                html: generateOtpEmailHtml(code, user.email),
-              });
-              if (!error && data?.id) emailSent = true;
-            } catch (e) {
-              console.warn("[2FA] Envoi du code de sécurité échoué:", e);
-            }
-          }
-
           const challenge = await createTwoFactorChallenge(user.id);
 
           return NextResponse.json({
             needsTwoFactor: true,
             twoFactorToken: challenge,
             message:
-              "Authentification à deux facteurs : un code de sécurité à 6 chiffres a été envoyé par e-mail.",
-            emailSent,
+              "Authentification à deux facteurs : saisissez le code à 6 chiffres de votre application Google Authenticator.",
+            emailSent: false,
           });
         }
 
@@ -577,28 +555,14 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const twoFactorKey = `2fa:${user.email}`;
-      const stored = activeOtpsStore.get(twoFactorKey);
-      if (!stored) {
+      // Vérification TOTP (Google Authenticator) contre le secret enregistré
+      const codeValid = await verifyTwoFactorCode(user.id, String(otp).trim());
+      if (!codeValid) {
         return NextResponse.json(
-          { success: false, error: "Aucun code de sécurité actif. Veuillez vous reconnecter." },
+          { success: false, error: "Code Google Authenticator incorrect ou expiré. Veuillez réessayer." },
           { status: 400 }
         );
       }
-      if (Date.now() > stored.expiresAt) {
-        activeOtpsStore.delete(twoFactorKey);
-        return NextResponse.json(
-          { success: false, error: "Le code de sécurité a expiré. Veuillez vous reconnecter." },
-          { status: 400 }
-        );
-      }
-      if (stored.otpCode !== String(otp).trim()) {
-        return NextResponse.json(
-          { success: false, error: "Code de sécurité incorrect. Veuillez réessayer." },
-          { status: 400 }
-        );
-      }
-      activeOtpsStore.delete(twoFactorKey);
 
       // Session JWT (cookie HttpOnly)
       let sessionToken: string | null = null;
@@ -643,9 +607,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ twoFactorEnabled: enabled });
     }
 
-    // ====== TOGGLE-2FA ======
-    // Active/désactive la 2FA. Le client envoie d'abord `send-otp` à son
-    // e-mail, puis fournit le code pour confirmer l'opération sensible.
+    // ====== 2FA-SETUP (Google Authenticator) ======
+    // Génère la clé secrète TOTP à afficher dans les Paramètres (QR + clé à copier).
+    if (body.action === "2fa-setup") {
+      const current = await getCurrentUser(request);
+      if (!current) {
+        return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+      }
+      const { secret, otpauthUrl } = await createTwoFactorSetup(current.id, current.email);
+      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+        otpauthUrl
+      )}`;
+      return NextResponse.json({ success: true, secret, otpauthUrl, qrCodeUrl });
+    }
+
+    // ====== TOGGLE-2FA (TOTP Google Authenticator) ======
+    // Activation : le code doit correspondre à l'application Google Authenticator
+    // (la clé secrète est déjà enregistrée par `2fa-setup`). Désactivation :
+    // vérifie le code courant avant de retirer le secret.
     if (body.action === "toggle-2fa") {
       const { enabled, otp } = body;
       const current = await getCurrentUser(request);
@@ -654,29 +633,36 @@ export async function POST(request: NextRequest) {
       }
       if (!otp || !/^\d{6}$/.test(String(otp).trim())) {
         return NextResponse.json(
-          { error: "Un code de sécurité à 6 chiffres est requis pour confirmer l'opération." },
+          { error: "Le code Google Authenticator doit comporter exactement 6 chiffres." },
           { status: 400 }
         );
       }
 
-      const twoFactorKey = `2fa:${current.email}`;
-      const stored =
-        activeOtpsStore.get(twoFactorKey) || activeOtpsStore.get(current.email.toLowerCase());
-      if (!stored || stored.otpCode !== String(otp).trim() || Date.now() > stored.expiresAt) {
-        activeOtpsStore.delete(twoFactorKey);
+      const codeValid = await verifyTwoFactorCode(current.id, String(otp).trim());
+      if (!codeValid) {
         return NextResponse.json(
-          { error: "Code de sécurité invalide ou expiré. Demandez un nouveau code." },
+          { error: "Code Google Authenticator incorrect. Vérifiez le code affiché dans votre application." },
           { status: 400 }
         );
       }
-      activeOtpsStore.delete(twoFactorKey);
 
-      await setTwoFactorEnabled(current.id, !!enabled);
+      if (enabled) {
+        // Conserve le secret enregistré lors du setup et active la 2FA
+        const existingProfile = await prisma.platformConfig.findUnique({
+          where: { key: `2fa:user:${current.id}` },
+          select: { value: true },
+        });
+        const secret = ((existingProfile?.value as any) || {}).secret || "";
+        await saveTwoFactorProfile(current.id, { enabled: true, secret });
+      } else {
+        await saveTwoFactorProfile(current.id, { enabled: false, secret: "" });
+      }
+
       return NextResponse.json({
         success: true,
         twoFactorEnabled: !!enabled,
         message: enabled
-          ? "Authentification à deux facteurs activée. Un code vous sera demandé à chaque connexion."
+          ? "Authentification à deux facteurs activée. Un code Google Authenticator vous sera demandé à chaque connexion."
           : "Authentification à deux facteurs désactivée.",
       });
     }

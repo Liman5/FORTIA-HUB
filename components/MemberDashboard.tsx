@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, Course, DigitalProduct, MarketplaceOrder } from '../types';
 import { generatePDFCertificate, downloadProductDeliverable } from '../utils/pdfGenerator';
-import { apiDeleteAccount, apiSendOtp, apiToggleTwoFactor, apiGetTwoFactorStatus } from '../services/api';
+import { apiDeleteAccount, apiToggleTwoFactor, apiGetTwoFactorStatus, apiTwoFactorSetup } from '../services/api';
 import { uploadFileToR2 } from '../lib/services/clientUpload';
 import { apiWritePlatform } from '../lib/services/platformWrite';
 import { usePwaInstall, promptInstall } from '../lib/pwa/pwaStore';
@@ -45,7 +45,6 @@ import {
   Bell,
   KeyRound,
   Smartphone,
-  RefreshCw,
   Check,
 } from 'lucide-react';
 import { useTheme } from '../lib/store/ThemeProvider';
@@ -131,6 +130,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const [twofaMessage, setTwofaMessage] = useState<string | null>(null);
   const [twofaError, setTwofaError] = useState<string | null>(null);
   const [twofaOtpSent, setTwofaOtpSent] = useState(false);
+  const [twofaSetup, setTwofaSetup] = useState<{ secret: string; otpauthUrl: string; qrCodeUrl: string } | null>(null);
 
   // Charger l'état 2FA depuis le serveur
   React.useEffect(() => {
@@ -191,31 +191,34 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     promptInstall();
   };
 
-  // ===== 2FA : envoi du code puis activation / désactivation =====
-  const sendTwoFactorCode = async () => {
+  // ===== 2FA TOTP (Google Authenticator) =====
+  const beginTwoFactorSetup = async () => {
     setTwofaMessage(null);
     setTwofaError(null);
-    setTwofaOtpSent(false);
-    setTwofaOtp('');
-    if (!user?.email) {
-      setTwofaError("Adresse e-mail introuvable sur le profil.");
+    setTwofaLoading(true);
+    const res = await apiTwoFactorSetup();
+    setTwofaLoading(false);
+    if (!res.success || !res.secret) {
+      setTwofaError(res.error || "Impossible de générer la clé 2FA.");
       return;
     }
-    setTwofaLoading(true);
-    const res = await apiSendOtp(user.email);
-    setTwofaLoading(false);
-    if (res.success) {
-      setTwofaOtpSent(true);
-      setTwofaMessage("Un code de sécurité à 6 chiffres a été envoyé à votre adresse e-mail.");
-    } else {
-      setTwofaError(res.message || "Impossible d'envoyer le code. Réessayez.");
+    setTwofaSetup({ secret: res.secret, otpauthUrl: res.otpauthUrl || "", qrCodeUrl: res.qrCodeUrl || "" });
+  };
+
+  const copyTwoFactorSecret = async () => {
+    if (!twofaSetup?.secret) return;
+    try {
+      await navigator.clipboard.writeText(twofaSetup.secret);
+      setTwofaMessage("Clé secrète copiée ! Collez-la dans Google Authenticator.");
+    } catch {
+      setTwofaMessage("Impossible de copier automatiquement : sélectionnez la clé manuellement.");
     }
   };
 
   const confirmTwoFactorToggle = async () => {
     if (!twofaModal) return;
     if (!/^\d{6}$/.test(twofaOtp.trim())) {
-      setTwofaError("Le code de sécurité doit comporter exactement 6 chiffres.");
+      setTwofaError("Le code Google Authenticator doit comporter exactement 6 chiffres.");
       return;
     }
     setTwofaLoading(true);
@@ -232,8 +235,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     setTwofaModal(null);
     setTwofaOtpSent(false);
     setTwofaOtp('');
+    setTwofaSetup(null);
     setTwofaMessage(enable
-      ? "Authentification à deux facteurs activée : un code vous sera demandé à chaque connexion."
+      ? "Authentification à deux facteurs activée : Google Authenticator vous demandera un code à chaque connexion."
       : "Authentification à deux facteurs désactivée.");
   };
 
@@ -1086,6 +1090,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     setTwofaMessage(null);
                     setTwofaError(null);
                     setTwofaModal(twoFactorEnabled ? 'disable' : 'enable');
+                    setTwofaSetup(null);
+                    setTwofaOtp('');
+                    setTwofaMessage(null);
+                    setTwofaError(null);
                   }}
                   className={`shrink-0 px-4 py-2 rounded-xl text-[10px] font-black transition border ${
                     twoFactorEnabled
@@ -1255,6 +1263,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   setTwofaModal(null);
                   setTwofaOtpSent(false);
                   setTwofaOtp('');
+                  setTwofaSetup(null);
+                  setTwofaError(null);
+                  setTwofaMessage(null);
                 }}
                 className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg transition"
                 aria-label="Fermer"
@@ -1267,14 +1278,21 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   <KeyRound className="w-6 h-6" />
                 </div>
                 <h3 className="text-lg font-black text-white">
-                  {twofaModal === 'enable' ? 'Activer la 2FA' : 'Désactiver la 2FA'}
+                  {twofaModal === 'enable' ? 'Activer la 2FA (Google Authenticator)' : 'Désactiver la 2FA'}
                 </h3>
-                <p className="text-xs text-slate-300">
-                  Un code de sécurité à 6 chiffres sera envoyé à{' '}
-                  <strong className="text-amber-300">{user?.email}</strong> pour confirmer l'opération.
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {twofaModal === 'enable'
+                    ? 'Scannez le QR Code ou copiez la clé secrète dans Google Authenticator, puis saisissez le code affiché pour confirmer.'
+                    : 'Saisissez le code à 6 chiffres actuellement affiché dans Google Authenticator pour confirmer la désactivation.'}
                 </p>
               </div>
 
+              {twofaMessage && (
+                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-[11px] font-semibold text-emerald-400">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  {twofaMessage}
+                </div>
+              )}
               {twofaError && (
                 <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-[11px] font-semibold text-red-400">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -1282,30 +1300,49 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 </div>
               )}
 
-              <div className="space-y-3">
+              {twofaModal === 'enable' && !twofaSetup ? (
                 <button
                   type="button"
-                  onClick={sendTwoFactorCode}
+                  onClick={beginTwoFactorSetup}
                   disabled={twofaLoading}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#D69E25]/10 border border-[#D69E25]/40 text-[#D69E25] font-black text-xs rounded-xl hover:bg-[#D69E25]/20 transition disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black text-xs rounded-xl hover:brightness-110 transition shadow-lg disabled:opacity-50"
                 >
-                  {twofaLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  {twofaOtpSent ? 'Renvoyer le code' : 'Envoyer le code de sécurité'}
+                  {twofaLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                  {twofaLoading ? 'Génération…' : '1. Générer ma clé secrète'}
                 </button>
-
-                {twofaOtpSent && (
-                  <>
+              ) : twofaModal === 'enable' && twofaSetup ? (
+                <div className="space-y-4">
+                  {twofaSetup.qrCodeUrl && (
+                    <div className="flex justify-center">
+                      <img src={twofaSetup.qrCodeUrl} alt="QR Code Google Authenticator" className="w-40 h-40 rounded-xl bg-white p-2" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-300 mb-1">Clé secrète à copier :</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-[#011D46] border border-[#D69E25]/50 rounded-lg px-3 py-2 text-[11px] font-mono text-amber-300 break-all select-all">
+                        {twofaSetup.secret}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={copyTwoFactorSecret}
+                        className="shrink-0 px-3 py-2 bg-[#D69E25] text-[#021231] font-black text-[11px] rounded-lg"
+                      >
+                        Copier
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Google Authenticator → « + » → « Saisir une clé » → collez cette clé.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
                     <input
                       type="text"
                       inputMode="numeric"
                       maxLength={6}
                       value={twofaOtp}
                       onChange={(e) => setTwofaOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="Saisir les 6 chiffres (ex: 123456)"
+                      placeholder="2. Saisir les 6 chiffres de Google Authenticator"
                       className="w-full bg-[#011D46] border border-[#D69E25]/60 text-center font-mono text-sm tracking-widest text-amber-300 rounded-xl px-4 py-3 focus:outline-none focus:border-[#D69E25]"
                     />
                     <button
@@ -1317,18 +1354,48 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       {twofaLoading ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          Vérification...
+                          Vérification…
                         </>
                       ) : (
                         <>
                           <ShieldCheck className="w-4 h-4" />
-                          {twofaModal === 'enable' ? 'Confirmer l' : 'Confirmer la d'}ésactivation
+                          Activer la 2FA
                         </>
                       )}
                     </button>
-                  </>
-                )}
-              </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={twofaOtp}
+                    onChange={(e) => setTwofaOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Code Google Authenticator (6 chiffres)"
+                    className="w-full bg-[#011D46] border border-[#D69E25]/60 text-center font-mono text-sm tracking-widest text-amber-300 rounded-xl px-4 py-3 focus:outline-none focus:border-[#D69E25]"
+                  />
+                  <button
+                    type="button"
+                    onClick={confirmTwoFactorToggle}
+                    disabled={twofaLoading || !twofaOtp}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black text-xs rounded-xl hover:brightness-110 transition shadow-lg disabled:opacity-50"
+                  >
+                    {twofaLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Vérification…
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-4 h-4" />
+                        Confirmer la désactivation
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
