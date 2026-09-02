@@ -1,6 +1,6 @@
-// Régénère toutes les icônes PWA depuis public/favicon.svg (source valide)
+// Régénère toutes les icônes PWA depuis public/official-logo.png (logo officiel FORTIA HUB)
 const sharp = require("sharp");
-const src = "public/favicon.svg";
+const src = "public/official-logo.png";
 
 async function gen(name, size) {
   await sharp(src).resize(size, size).png().toFile("public/" + name);
@@ -8,21 +8,15 @@ async function gen(name, size) {
 }
 
 async function genMaskable() {
-  // SVG "full-bleed" : fond plein (pas de coins arrondis), contenu dans la
-  // safe zone (80%) exigée par les navigateurs pour les icônes maskable.
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#021231"/>
-  <circle cx="256" cy="256" r="176" fill="none" stroke="#D69E25" stroke-width="16"/>
-  <path d="M 196 156 L 316 156 L 316 202 L 250 202 L 250 240 L 300 240 L 300 278 L 250 278 L 250 358 L 196 358 Z" fill="url(#goldGrad)"/>
-  <defs>
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FADF72"/>
-      <stop offset="50%" stop-color="#D69E25"/>
-      <stop offset="100%" stop-color="#B37E14"/>
-    </linearGradient>
-  </defs>
-</svg>`;
-  await sharp(Buffer.from(svg)).resize(512, 512).png().toFile("public/maskable-icon-512x512.png");
+  // Icône maskable : logo officiel centré sur fond blanc, contenu dans la
+  // safe zone (~80%) exigée par les navigateurs pour les icônes maskable.
+  const logo = await sharp(src).resize(440, 440).png().toBuffer();
+  await sharp({
+    create: { width: 512, height: 512, channels: 3, background: "#ffffff" },
+  })
+    .composite([{ input: logo, gravity: "center" }])
+    .png()
+    .toFile("public/maskable-icon-512x512.png");
   console.log("maskable-icon-512x512.png -> 512x512");
 }
 

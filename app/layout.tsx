@@ -10,8 +10,13 @@ export const metadata: Metadata = {
     "FORTIA HUB est la plateforme de référence pour l'apprentissage et les services professionnels d'élite. Formations certifiantes, boutique numérique, marketplace freelance et services d'agence.",
   manifest: "/manifest.json",
   icons: {
-    icon: "/favicon.svg",
-    apple: "/apple-touch-icon.png",
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
+      { url: "/pwa-192x192.png", type: "image/png", sizes: "192x192" },
+      { url: "/pwa-512x512.png", type: "image/png", sizes: "512x512" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" }],
   },
   openGraph: {
     title: "FORTIA HUB | LEARN. BUILD. SUCCEED.",

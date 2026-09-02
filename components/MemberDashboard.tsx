@@ -48,6 +48,7 @@ import {
   RefreshCw,
   Check,
 } from 'lucide-react';
+import { useTheme } from '../lib/store/ThemeProvider';
 
 interface MemberDashboardProps {
   user: UserProfile;
@@ -64,6 +65,10 @@ interface MemberDashboardProps {
   isProviderApproved?: boolean;
   providerTypeLabel?: string;
   hasApprovedStore?: boolean;
+  /** Une boutique existe mais est encore en attente d'approbation admin. */
+  hasPendingStore?: boolean;
+  /** Ouvre la modale de soumission / suivi du dossier KYC. */
+  onOpenKyc?: () => void;
   badgeType?: 'green' | 'gold' | 'none';
   onUpdateProfile?: (updates: Partial<UserProfile>) => void;
 }
@@ -81,11 +86,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   onOpenInstructor,
   providerProfileManager,
   isProviderApproved = false,
-  providerTypeLabel = '',
+  providerTypeLabel = 'Freelance',
   hasApprovedStore = false,
+  hasPendingStore = false,
+  onOpenKyc,
   badgeType,
   onUpdateProfile
 }) => {
+  const { isDarkMode } = useTheme();
   const [activeTab, setActiveTab] = useState<'progress' | 'certificates' | 'products' | 'payments' | 'settings'>(initialTab);
   const [isProviderFormOpen, setIsProviderFormOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -344,6 +352,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     { id: 'settings' as const, label: 'Paramètres', icon: Settings, count: 0, color: 'text-slate-400' },
   ];
 
+  // ===== États d'accès aux espaces (verrouillés tant que le KYC n'est pas validé) =====
+  const profileUnlocked = !!providerProfileManager;
+  const storeCanAccess = hasApprovedStore;
+  const storePending = !hasApprovedStore && hasPendingStore;
+  const storeCanApply = !hasApprovedStore && !hasPendingStore && isProviderApproved;
+  const instructorUnlocked = isProviderApproved;
+  const actionBaseClass =
+    'relative flex flex-col items-center justify-center gap-1.5 px-1.5 sm:px-3 py-3 rounded-2xl text-center font-black text-[10px] sm:text-xs leading-tight min-w-0 w-full transition overflow-hidden';
+  const actionLockedClass =
+    'bg-slate-500/10 border border-slate-400/40 text-slate-400 hover:bg-slate-500/20 cursor-pointer';
+
   return (
     <section className="py-10 bg-[#021231] min-h-[600px] relative overflow-hidden">
       {/* Background decorations */}
@@ -433,38 +452,115 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           </div>
         </motion.div>
 
-        {/* ===== NAVIGATION BUTTONS ===== */}
+        {/* ===== NAVIGATION BUTTONS : Profil Freelance / Boutique / Formateur ===== */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
-          className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+          className="w-full"
         >
-          <button
-            type="button"
-            onClick={() => { setIsProviderFormOpen(!isProviderFormOpen); const el = document.getElementById('provider-profile-section'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
-            className="group flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-[#D69E25]/40 text-slate-200 hover:bg-[#D69E25]/10 hover:text-[#D69E25] transition font-bold text-xs"
-          >
-            <User className="w-4 h-4 text-[#D69E25]" />
-            <span>Mon Profil {providerTypeLabel}</span>
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isProviderFormOpen ? 'rotate-180' : ''}`} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenVendor && onOpenVendor()}
-            className="group flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-400/40 text-emerald-400 hover:bg-emerald-500/20 transition font-bold text-xs"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>{hasApprovedStore ? 'Accéder à ma Boutique' : 'Devenir Vendeur'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenInstructor && onOpenInstructor()}
-            className="group flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-sky-500/10 border border-sky-400/40 text-sky-400 hover:bg-sky-500/20 transition font-bold text-xs"
-          >
-            <BookOpen className="w-4 h-4" />
-            <span>Espace Formateur</span>
-          </button>
+          {/* Une seule rangée horizontale, sans scroll, responsive (3 colonnes) */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {/* ---- Mon Profil Freelance ---- */}
+            <button
+              type="button"
+              title={profileUnlocked ? "Gérer mon profil professionnel" : "Soumettez et faites valider votre KYC pour débloquer cet espace."}
+              onClick={() => {
+                if (!profileUnlocked) {
+                  if (onOpenKyc) onOpenKyc();
+                  return;
+                }
+                setIsProviderFormOpen((v) => !v);
+                const el = document.getElementById('provider-profile-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className={`${actionBaseClass} ${profileUnlocked
+                ? 'bg-gradient-to-r from-[#D69E25] via-[#F0C24B] to-[#AB6F10] text-[#021231] shadow-lg shadow-[#D69E25]/25 hover:brightness-110 active:scale-[0.98] cursor-pointer'
+                : actionLockedClass}`}
+            >
+              <span className="flex items-center justify-center gap-1">
+                <User className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                {profileUnlocked && (
+                  <ChevronDown className={`w-3 h-3 transition-transform ${isProviderFormOpen ? 'rotate-180' : ''}`} />
+                )}
+              </span>
+              <span className="w-full">Mon Profil {profileUnlocked ? providerTypeLabel || 'Freelance' : 'Freelance'}</span>
+              {!profileUnlocked && (
+                <span className="absolute top-1 right-1 text-current"><Lock className="w-3 h-3" /></span>
+              )}
+            </button>
+
+            {/* ---- Boutique / Devenir Vendeur ---- */}
+            <button
+              type="button"
+              title={
+                storeCanAccess
+                  ? "Accéder à mon Espace Vendeur"
+                  : storePending
+                  ? "Votre boutique est en attente d'approbation par l'administration"
+                  : isProviderApproved
+                  ? "Créer ma boutique sur la Marketplace"
+                  : "Soumettez et faites valider votre KYC pour devenir vendeur."
+              }
+              onClick={() => {
+                if (storePending) return; // boutique pas encore approuvée : accès refusé
+                if (!storeCanAccess && !storeCanApply) {
+                  if (onOpenKyc) onOpenKyc();
+                  return;
+                }
+                if (onOpenVendor) onOpenVendor();
+              }}
+              className={`${actionBaseClass} ${storeCanAccess || storeCanApply
+                ? 'bg-gradient-to-r from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25 hover:brightness-110 active:scale-[0.98] cursor-pointer'
+                : storePending
+                ? 'bg-gradient-to-r from-amber-500/70 to-amber-600/70 text-[#021231] cursor-not-allowed'
+                : actionLockedClass}`}
+            >
+              <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+              <span className="w-full">
+                {storeCanAccess ? 'Accéder à ma Boutique' : storePending ? 'Boutique en attente' : 'Devenir Vendeur'}
+              </span>
+              {(storePending || (!storeCanAccess && !storeCanApply)) && (
+                <span className="absolute top-1 right-1 text-current"><Lock className="w-3 h-3" /></span>
+              )}
+            </button>
+
+            {/* ---- Espace Formateur ---- */}
+            <button
+              type="button"
+              title={instructorUnlocked ? "Ouvrir mon Espace Formateur" : "Soumettez et faites valider votre KYC pour débloquer l'Espace Formateur."}
+              onClick={() => {
+                if (!instructorUnlocked) {
+                  if (onOpenKyc) onOpenKyc();
+                  return;
+                }
+                if (onOpenInstructor) onOpenInstructor();
+              }}
+              className={`${actionBaseClass} ${instructorUnlocked
+                ? 'bg-gradient-to-r from-sky-500 to-blue-700 text-white shadow-lg shadow-sky-500/25 hover:brightness-110 active:scale-[0.98] cursor-pointer'
+                : actionLockedClass}`}
+            >
+              <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+              <span className="w-full">Espace Formateur</span>
+              {!instructorUnlocked && (
+                <span className="absolute top-1 right-1 text-current"><Lock className="w-3 h-3" /></span>
+              )}
+            </button>
+          </div>
+
+          {/* Aide contextuelle selon les espaces encore verrouillés */}
+          {!isProviderApproved && (
+            <p className="mt-2.5 flex items-center justify-center gap-1.5 text-center text-[11px] font-semibold text-slate-400">
+              <Lock className="w-3 h-3 shrink-0" />
+              Soumettez votre dossier KYC et faites-le valider pour débloquer vos espaces Freelance, Boutique et Formateur.
+            </p>
+          )}
+          {isProviderApproved && storePending && (
+            <p className="mt-2.5 flex items-center justify-center gap-1.5 text-center text-[11px] font-semibold text-amber-400">
+              <Lock className="w-3 h-3 shrink-0" />
+              Votre boutique est en attente d&apos;approbation : elle sera accessible dès validation par l&apos;administration.
+            </p>
+          )}
         </motion.div>
 
         {/* ===== PROVIDER PROFILE ===== */}
@@ -490,7 +586,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 className="w-full py-5 rounded-2xl border-2 border-dashed border-[#D69E25]/50 bg-[#D69E25]/5 text-[#D69E25] hover:bg-[#D69E25]/15 hover:border-[#D69E25] transition font-bold text-xs flex items-center justify-center gap-2"
               >
                 <User className="w-4 h-4" />
-                <span>Consulter mon Profil {providerTypeLabel || 'Prestataire'}</span>
+                <span>Consulter mon Profil {providerTypeLabel || 'Freelance'}</span>
                 <ChevronDown className="w-3.5 h-3.5" />
               </button>
             )
@@ -499,9 +595,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
         {/* ===== TABS ===== */}
         <div className="relative">
-          {/* Arrière-plan dégradé pour indiquer le scroll */}
-          <div className="absolute pointer-events-none inset-y-0 left-0 w-10 bg-gradient-to-r from-[#021231] to-transparent z-10 opacity-80" />
-          <div className="absolute pointer-events-none inset-y-0 right-0 w-10 bg-gradient-to-l from-[#021231] to-transparent z-10 opacity-80" />
+          {/* Arrière-plan dégradé pour indiquer le scroll (mode sombre uniquement,
+              sinon il apparaît noir en mode clair) */}
+          {isDarkMode && (
+            <>
+              <div className="absolute pointer-events-none inset-y-0 left-0 w-10 bg-gradient-to-r from-[#021231] to-transparent z-10 opacity-80" />
+              <div className="absolute pointer-events-none inset-y-0 right-0 w-10 bg-gradient-to-l from-[#021231] to-transparent z-10 opacity-80" />
+            </>
+          )}
           {/* Petites flèches latérales décoratives */}
           <div className="absolute pointer-events-none left-1 top-1/2 -translate-y-1/2 z-20 text-[#D69E25] animate-pulse sm:hidden">
             <ChevronDown className="w-3.5 h-3.5 -rotate-90" />

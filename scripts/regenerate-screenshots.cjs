@@ -1,6 +1,6 @@
-// Régénère les captures d'écran du manifest (screenshots) depuis le logo
+// Régénère les captures d'écran du manifest (screenshots) depuis le logo officiel
 const sharp = require("sharp");
-const src = "public/favicon.svg";
+const src = "public/official-logo.png";
 
 async function makeScreenshot(name, width, height, logoSize) {
   const logo = await sharp(src).resize(logoSize, logoSize).png().toBuffer();

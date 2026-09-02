@@ -1,10 +1,11 @@
-const CACHE_NAME = 'fortia-hub-cache-v1';
+const CACHE_NAME = 'fortia-hub-cache-v2';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/favicon.svg',
   '/favicon.png',
+  '/official-logo.png',
   '/pwa-192x192.png',
   '/pwa-512x512.png',
   '/maskable-icon-512x512.png',

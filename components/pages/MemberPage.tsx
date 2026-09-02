@@ -46,14 +46,16 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
   const kycApproved = isProviderApproved || (!!myKyc && (kycStatus === "Approuvé" || kycStatus === "Approuve"));
   const kycRejected = !!myKyc && (kycStatus === "Rejeté" || kycStatus === "Rejete");
 
-  // Boutique approuvée du vendeur connecté (par email) - doit être passé au MemberDashboard
-  const myApprovedStore =
-    userProfile?.email &&
-    stores.find(
-      (s) =>
-        (s.ownerEmail === userProfile.email || s.ownerEmail?.toLowerCase() === userProfile.email?.toLowerCase()) &&
-        (s.status === "active" || s.status === "pending")
-    );
+  // Boutique du vendeur connecté (par email) — l'accès au dashboard vendeur n'est
+  // accordé que si la boutique est réellement approuvée (statut "active").
+  const ownedStores = userProfile?.email
+    ? stores.filter(
+        (s) =>
+          (s.ownerEmail === userProfile.email || s.ownerEmail?.toLowerCase() === userProfile.email?.toLowerCase())
+      )
+    : [];
+  const myApprovedStore = ownedStores.find((s) => s.status === "active") || null;
+  const myPendingStore = ownedStores.find((s) => s.status === "pending") || null;
 
   // Centre de formation du membre connecté
   const hasTrainingCenter = (trainingCenters || []).some((c) => c.ownerId === userProfile?.id);
@@ -143,8 +145,10 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
           />
         ) : null}
         isProviderApproved={isProviderApproved || kycApproved}
-        providerTypeLabel={myFreelance ? "Freelance" : myEnterprise ? "Entreprise" : "Prestataire"}
+        providerTypeLabel={myFreelance ? "Freelance" : myEnterprise ? "Entreprise" : "Freelance"}
         hasApprovedStore={!!myApprovedStore}
+        hasPendingStore={!!myPendingStore}
+        onOpenKyc={() => setKycModalOpen(true)}
         badgeType={myFreelance?.badge || myEnterprise ? "gold" : (myFreelance as any)?.badge || undefined}
         courses={courses}
         digitalProducts={marketplaceProducts as any}

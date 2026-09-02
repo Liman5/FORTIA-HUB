@@ -17,7 +17,6 @@ export function VendorPage() {
     isUserLoggedIn,
     userProfile,
     stores,
-    activeVendorStore,
     marketplaceProducts,
     marketplaceOrders,
     payoutRequests,
@@ -64,15 +63,51 @@ export function VendorPage() {
     );
   }
 
-  // === Boutique du vendeur CONNECTÉ (par email) : prioritaire sur la 1ère boutique ===
-  const myStore =
-    (userProfile?.email &&
-      (stores.find((s) => s.ownerEmail === userProfile.email) ||
-        stores.find((s) => s.ownerEmail?.toLowerCase() === userProfile.email?.toLowerCase()))) ||
-    activeVendorStore;
+  // === Boutique du vendeur CONNECTÉ uniquement =====
+  // Sécurité : un compte ne peut gérer QUE sa propre boutique, et uniquement
+  // si celle-ci a été approuvée (statut "active"). On ne retombe JAMAIS sur
+  // activeVendorStore (boutique d'une autre personne consultée au préalable).
+  const userEmail = (userProfile?.email || "").trim().toLowerCase();
+  const myStore = userEmail
+    ? stores.find(
+        (s) => s.ownerEmail?.trim().toLowerCase() === userEmail && s.status === "active"
+      ) || null
+    : null;
+  const myPendingStore = userEmail
+    ? stores.find(
+        (s) => s.ownerEmail?.trim().toLowerCase() === userEmail && s.status === "pending"
+      ) || null
+    : null;
+
+  // L'utilisateur est connecté mais sa boutique est encore en attente d'approbation
+  if (!myStore && myPendingStore) {
+    return (
+      <div className="py-16 px-4 max-w-2xl mx-auto text-center space-y-6">
+        <div className="p-8 sm:p-10 bg-[#011D46]/90 border-2 border-[#D69E25]/40 rounded-3xl space-y-5 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto">
+            <Lock className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black text-white">Boutique en attente d&apos;approbation</h2>
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium max-w-lg mx-auto">
+              Votre demande de boutique est en cours de validation par l&apos;administration.
+              Vous recevrez une notification dès que votre boutique sera approuvée et
+              accessible depuis votre Espace Vendeur.
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveTab("member")}
+            className="px-6 py-3 bg-[#D69E25] text-[#021231] font-black rounded-xl text-xs shadow-lg hover:bg-amber-400 transition cursor-pointer"
+          >
+            Retour à mon Espace Membre
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Si l'utilisateur est connecté mais n'a PAS encore de boutique approuvée
-  if (!myStore?.id && !stores.some((s) => s.ownerEmail === userProfile?.email)) {
+  if (!myStore) {
     return (
       <div className="py-16 px-4 max-w-2xl mx-auto text-center space-y-6">
         <div className="p-8 sm:p-10 bg-[#011D46]/90 border-2 border-[#D69E25]/40 rounded-3xl space-y-5 shadow-2xl">
