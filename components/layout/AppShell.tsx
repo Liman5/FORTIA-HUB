@@ -277,6 +277,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             }
           }}
           onCertificateEarned={handleEarnedCertificate}
+          userAccountId={userProfile?.id}
         />
       )}
 

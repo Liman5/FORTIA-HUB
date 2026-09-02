@@ -3,6 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Course, Lesson, Certificate } from '../types';
 import { generatePDFCertificate, triggerCelebrationConfetti } from '../utils/pdfGenerator';
+import {
+  saveLessonOffline,
+  loadOfflineVideoUrl,
+  isLessonOffline,
+  deleteLessonOffline,
+} from '../lib/services/offlineVideo';
 import { 
   X, 
   CheckCircle, 
@@ -32,6 +38,8 @@ interface CoursePlayerModalProps {
   onProgressChanged?: (percent: number) => void;
   /** Appelé quand l'apprenant débloque et enregistre son attestation. */
   onCertificateEarned?: (certificate: Certificate) => void;
+  /** ID du compte membre (nécessaire pour stocker la copie hors-ligne chiffrée). */
+  userAccountId?: string;
 }
 
 // Convertit les URLs YouTube (regarder / partager / embed) en URL de lecteur embed.
@@ -76,7 +84,8 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   onRequireLogin,
   initialProgress = 0,
   onProgressChanged,
-  onCertificateEarned
+  onCertificateEarned,
+  userAccountId
 }) => {
   const [activeTab, setActiveTab] = useState<'content' | 'quiz' | 'certificate'>('content');
   const chapters = course.chapters || [];
@@ -108,6 +117,88 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   const [rulesAccepted, setRulesAccepted] = useState(false);
   const [certificateGranted, setCertificateGranted] = useState(false);
   const skipProgressSync = useRef(true);
+
+  // ===== Copie hors-ligne (chiffrée AES en local) =====
+  const [offlineReady, setOfflineReady] = useState(false);
+  const [offlineBusy, setOfflineBusy] = useState(false);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+  const [offlineCode, setOfflineCode] = useState("");
+  const [localVideoUrl, setLocalVideoUrl] = useState<{ url: string; revoke: () => void } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (localVideoUrl) {
+      localVideoUrl.revoke();
+      setLocalVideoUrl(null);
+    }
+    if (!userAccountId || !currentLesson?.id) {
+      setOfflineReady(false);
+      return;
+    }
+    setOfflineError(null);
+    setOfflineReady(false);
+    isLessonOffline(userAccountId, course.id, currentLesson.id).then((ok) => {
+      if (!cancelled) setOfflineReady(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userAccountId, course.id, currentLesson?.id]);
+
+  const downloadForOffline = async () => {
+    if (!userAccountId || !currentLesson?.id) return;
+    setOfflineBusy(true);
+    setOfflineError(null);
+    try {
+      await saveLessonOffline({
+        userId: userAccountId,
+        courseId: course.id,
+        lessonId: currentLesson.id,
+        videoUrl: currentLesson.videoUrl || "",
+        videoProtected: !!currentLesson.videoProtected,
+        videoCodeHash: currentLesson.videoCodeHash,
+        code: currentLesson.videoProtected ? offlineCode.trim() : undefined,
+      });
+      setOfflineReady(true);
+    } catch (err: any) {
+      setOfflineError(err?.message || "Erreur lors du téléchargement hors-ligne.");
+    } finally {
+      setOfflineBusy(false);
+    }
+  };
+
+  const playLocalCopy = async () => {
+    if (!userAccountId || !currentLesson?.id) return;
+    setOfflineError(null);
+    try {
+      const loaded = await loadOfflineVideoUrl(
+        userAccountId,
+        course.id,
+        currentLesson.id,
+        currentLesson.videoProtected ? offlineCode.trim() : undefined
+      );
+      if (loaded) {
+        if (localVideoUrl) localVideoUrl.revoke();
+        setLocalVideoUrl(loaded);
+      } else {
+        setOfflineError("Copie hors-ligne introuvable : téléchargez-la d'abord.");
+      }
+    } catch (err: any) {
+      setOfflineError(err?.message || "Impossible de lire la copie hors-ligne.");
+    }
+  };
+
+  const removeLocalCopy = async () => {
+    if (!userAccountId || !currentLesson?.id) return;
+    if (localVideoUrl) {
+      localVideoUrl.revoke();
+      setLocalVideoUrl(null);
+    }
+    await deleteLessonOffline(userAccountId, course.id, currentLesson.id).catch(() => {});
+    setOfflineReady(false);
+    setOfflineCode("");
+  };
 
   const totalLessonsCount = chapters.reduce((acc, ch) => acc + (ch.lessons ? ch.lessons.length : 0), 0);
   const progressPercent = totalLessonsCount > 0 ? Math.round((completedLessonIds.length / totalLessonsCount) * 100) : 0;
@@ -371,7 +462,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                     <video
                       key={currentLesson?.id}
                       className="absolute inset-0 w-full h-full object-contain bg-black"
-                      src={currentLesson?.videoUrl}
+                      src={localVideoUrl ? localVideoUrl.url : currentLesson?.videoUrl}
                       poster={course.image}
                       controls
                       controlsList="nodownload"
@@ -387,6 +478,96 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                     </video>
                   )}
                 </div>
+
+                {/* ===== Vidéo hors-ligne (copie locale chiffrée AES) ===== */}
+                {hasAccess && currentIsVideoFile && userAccountId && currentLesson?.id && (
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                    {currentLesson.videoProtected && (
+                      <p className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-start gap-2">
+                        <Lock className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>
+                          🔒 Cette vidéo est <strong>cryptée par le formateur</strong> — accessible hors connexion sur FORTIA HUB
+                          après saisie du code secret fourni par le formateur (description / commentaire de la leçon).
+                        </span>
+                      </p>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 justify-between">
+                      <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        {offlineReady ? (
+                          <>
+                            <CheckCircle className="w-4 h-4 text-emerald-500" />
+                            Disponible hors-ligne (fichier chiffré localement)
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4 text-[#AB6F10]" />
+                            Regarder plus tard sans connexion
+                          </>
+                        )}
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!offlineReady ? (
+                          <button
+                            type="button"
+                            onClick={downloadForOffline}
+                            disabled={offlineBusy || (currentLesson.videoProtected ? offlineCode.trim().length < 4 : false)}
+                            className="px-3.5 py-2 bg-[#021231] text-[#D69E25] font-black text-[11px] rounded-lg border border-[#D69E25]/50 transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-[#011D46]"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            {offlineBusy ? "Téléchargement..." : "Télécharger hors-ligne"}
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={playLocalCopy}
+                              disabled={offlineBusy || (currentLesson.videoProtected ? offlineCode.trim().length < 4 : false)}
+                              className="px-3.5 py-2 bg-emerald-600 text-white font-black text-[11px] rounded-lg transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-emerald-500"
+                            >
+                              ▶ Lire ma copie hors-ligne
+                            </button>
+                            <button
+                              type="button"
+                              onClick={removeLocalCopy}
+                              className="px-3 py-2 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 font-bold text-[11px] rounded-lg transition"
+                            >
+                              Supprimer
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {currentLesson.videoProtected && (
+                      <div className="flex flex-col sm:flex-row items-center gap-2">
+                        <input
+                          type="text"
+                          value={offlineCode}
+                          onChange={(e) => setOfflineCode(e.target.value)}
+                          placeholder="Code secret de déchiffrement fourni par le formateur"
+                          className="flex-1 w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#D69E25]"
+                        />
+                        {offlineReady && (
+                          <button
+                            type="button"
+                            onClick={playLocalCopy}
+                            className="w-full sm:w-auto px-3.5 py-2 bg-[#D69E25] text-[#021231] font-black text-[11px] rounded-lg"
+                          >
+                            Débloquer la lecture
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {offlineError && (
+                      <p className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
+                        {offlineError}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Lesson Description & Actions */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
 import { uploadCourseVideoDirect } from "@/lib/services/clientUpload";
+import { hashSecret } from "@/lib/services/offlineVideo";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
 
 interface InstructorDashboardProps {
@@ -72,7 +73,17 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
 
   // Chapters & lessons builder
   const [chapters, setChapters] = useState<
-    { title: string; lessons: { title: string; duration: string; type: "video" | "article"; videoUrl: string }[] }[]
+    {
+      title: string;
+      lessons: {
+        title: string;
+        duration: string;
+        type: "video" | "article";
+        videoUrl: string;
+        videoProtected?: boolean;
+        videoCodeHash?: string;
+      }[];
+    }[]
   >([]);
   const [chapterTitle, setChapterTitle] = useState("");
   const [lessonTitle, setLessonTitle] = useState("");
@@ -94,6 +105,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const videoFileRef = useRef<HTMLInputElement>(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState("");
+  const [videoSecretCode, setVideoSecretCode] = useState("");
 
   const myCourses = (courses || []).filter((c) => c.instructorId === center?.ownerId || c.centerId === center?.id);
   const totalStudents = myCourses.reduce((s, c) => s + (c.studentsCount || 0), 0);
@@ -361,6 +373,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                                   duration: l.duration || "15 min",
                                   type: l.type === "quiz" ? ("article" as const) : ((l.type || "video") as "video" | "article"),
                                   videoUrl: l.videoUrl || "",
+                                  videoProtected: (l as any).videoProtected,
+                                  videoCodeHash: (l as any).videoCodeHash || "",
                                 })),
                               }))
                             );
@@ -425,6 +439,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                             duration: l.duration || "15 min",
                             type: l.type === "quiz" ? ("article" as const) : ((l.type || "video") as "video" | "article"),
                             videoUrl: l.videoUrl || "",
+                                  videoProtected: (l as any).videoProtected,
+                                  videoCodeHash: (l as any).videoCodeHash || "",
                           })),
                         }))
                       );
@@ -693,19 +709,61 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       <Loader2 className="w-3 h-3 animate-spin" /> {videoUploadProgress}
                     </p>
                   )}
+                  {lessonVideoUrl && (
+                    <div className="space-y-1.5">
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="text"
+                          value={videoSecretCode}
+                          onChange={(e) => setVideoSecretCode(e.target.value)}
+                          placeholder="🔒 Code secret (facultatif) — protège la copie hors-ligne"
+                          className="flex-1 bg-[#011D46] border border-amber-500/40 text-xs rounded-lg p-2.5 text-white placeholder:text-slate-500"
+                        />
+                        {videoSecretCode.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => setVideoSecretCode("")}
+                            className="px-3 py-2 bg-slate-800 text-slate-300 hover:text-red-400 text-[10px] font-bold rounded-lg"
+                          >
+                            ✕ Retirer le code
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        {videoSecretCode.trim().length >= 4
+                          ? "✅ La copie hors-ligne sera chiffrée. Communiquez ce code aux apprenants (description / commentaire) — sans lui, la vidéo restera illisible hors connexion."
+                          : "Si vous saisissez un code (4 caractères min.), la copie hors-ligne sera chiffrée AES et ne pourra être lue qu'avec ce code."}
+                      </p>
+                    </div>
+                  )}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (!lessonTitle.trim()) { alert("Indiquez un titre de leçon."); return; }
+                      let videoProtected = false;
+                      let videoCodeHash = "";
+                      const code = videoSecretCode.trim();
+                      if (lessonType === "video" && code) {
+                        if (code.length < 4) { alert("Le code secret doit contenir au moins 4 caractères."); return; }
+                        videoProtected = true;
+                        videoCodeHash = await hashSecret(code);
+                      }
                       const updated = [...chapters];
                       updated[activeChapterIdx] = {
                         ...updated[activeChapterIdx],
                         lessons: [
                           ...updated[activeChapterIdx].lessons,
-                          { title: lessonTitle, duration: lessonDuration, type: lessonType, videoUrl: lessonVideoUrl },
+                          {
+                            title: lessonTitle,
+                            duration: lessonDuration,
+                            type: lessonType,
+                            videoUrl: lessonVideoUrl,
+                            videoProtected,
+                            videoCodeHash,
+                          },
                         ],
                       };
                       setChapters(updated);
-                      setLessonTitle(""); setLessonDuration("15 min"); setLessonVideoUrl("");
+                      setLessonTitle(""); setLessonDuration("15 min"); setLessonVideoUrl(""); setVideoSecretCode("");
                     }}
                     className="px-4 py-2 bg-sky-600 text-white font-bold text-xs rounded-lg"
                   >
@@ -823,6 +881,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         duration: l.duration,
                         type: l.type,
                         videoUrl: l.videoUrl,
+                        videoProtected: (l as any).videoProtected,
+                        videoCodeHash: (l as any).videoCodeHash || "",
                       })),
                     })),
                     quiz: quizQuestions.map((q, qi) => ({
@@ -864,6 +924,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         duration: l.duration,
                         type: l.type,
                         videoUrl: l.videoUrl,
+                        videoProtected: (l as any).videoProtected,
+                        videoCodeHash: (l as any).videoCodeHash || "",
                       })),
                     })),
                     quiz: quizQuestions.map((q, qi) => ({

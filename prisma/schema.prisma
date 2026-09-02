@@ -445,6 +445,8 @@ model CourseLesson {
   type         LessonType  @default(video)
   videoUrl     String      @default("") @map("video_url")
   content      String      @default("")
+  videoProtected Boolean   @default(false) @map("video_protected")
+  videoCodeHash String     @default("") @map("video_code_hash")
   displayOrder Int         @default(0) @map("display_order")
   createdAt    DateTime    @default(now()) @map("created_at")
 

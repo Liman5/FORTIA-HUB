@@ -39,7 +39,8 @@ type WriteAction =
   | "update-enterprise-profile"
   | "update-store"
   | "update-profile"
-  | "sync-user-learning";
+  | "sync-user-learning"
+  | "issue-certificate";
 
 export interface WriteResult {
   success: boolean;
@@ -50,6 +51,19 @@ export interface WriteResult {
   reviewsCount?: number;
   alreadyRated?: boolean;
   message?: string;
+  // Attestation officielle délivrée (action "issue-certificate")
+  certificate?: {
+    id: string;
+    studentName: string;
+    courseTitle: string;
+    category: string;
+    issueDate: string;
+    grade: string;
+    qrCodeUrl: string;
+    verified: boolean;
+    courseId?: string;
+    userId?: string;
+  };
 }
 
 /**

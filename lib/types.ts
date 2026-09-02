@@ -20,6 +20,10 @@ export interface Lesson {
   videoUrl?: string;
   content?: string;
   isCompleted?: boolean;
+  /** Vidéo protégée par le formateur (copie hors-ligne chiffrée). */
+  videoProtected?: boolean;
+  /** Hachage SHA-256 du code secret (jamais le code en clair). */
+  videoCodeHash?: string;
 }
 
 export interface CourseChapter {
@@ -168,7 +172,7 @@ export interface CartItem {
 }
 
 export interface Certificate {
-  id: string; // e.g. "FORTIA-2026-CRYP-9482"
+  id: string; // Numéro unique officiel (contrainte unique en base) — ex: "FORTIA-2026-CRYP-9482"
   studentName: string;
   courseTitle: string;
   category: string;
@@ -176,6 +180,10 @@ export interface Certificate {
   grade: string;
   qrCodeUrl: string;
   verified: boolean;
+  /** ID de la formation (rattache l'attestation au parcours membre). */
+  courseId?: string;
+  /** ID utilisateur du titulaire (le numéro est rattaché à la personne). */
+  userId?: string;
 }
 
 export type BadgeType = 'green' | 'gold' | 'none';

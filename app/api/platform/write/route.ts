@@ -563,6 +563,92 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, enrolledCount: enrolled.length, certificateCount: certificates.length });
       }
 
+      // ============ DÉLIVRANCE ATTESTATION OFFICIELLE ============
+      // Génère un numéro UNIQUE en base (contrainte certificate_number),
+      // rattaché à la personne (userId) et à la formation (courseId).
+      case "issue-certificate": {
+        const { userId, courseId, courseTitle, studentName, category, grade } = data;
+        if (!userId || !courseTitle) {
+          return NextResponse.json({ error: "userId et courseTitle requis" }, { status: 400 });
+        }
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+          return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+        }
+
+        const today = new Date();
+        const cat =
+          String(category || "FORT")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-zA-Z0-9]/g, "")
+            .toUpperCase()
+            .slice(0, 4) || "FORT";
+        const issueDate = today.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        const safeName = studentName || user.name;
+
+        let finalCertificate: any = null;
+        for (let attempt = 0; attempt < 5 && !finalCertificate; attempt++) {
+          let random = "";
+          for (let i = 0; i < 8; i++) random += chars[Math.floor(Math.random() * chars.length)];
+          const number = `FORTIA-${today.getFullYear()}-${cat}-${random}`;
+          try {
+            const row = await prisma.certificate.create({
+              data: {
+                certificateNumber: number,
+                userId,
+                courseId: courseId || undefined,
+                studentName: safeName,
+                courseTitle,
+                category,
+                issueDate,
+                grade: grade || "Mention Excellent (98%)",
+                qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                  "FORTIA-HUB-CERT:" + number
+                )}`,
+                verified: true,
+              } as any,
+            });
+            finalCertificate = {
+              id: number,
+              studentName: safeName,
+              courseTitle,
+              category,
+              issueDate,
+              grade: grade || "Mention Excellent (98%)",
+              qrCodeUrl: row.qrCodeUrl,
+              verified: true,
+              courseId: courseId || undefined,
+              userId,
+            };
+          } catch (e: any) {
+            const msg = String(e?.message || "");
+            // Collision sur certificate_number (P2002) → on regénère un numéro
+            if (!msg.includes("P2002") && !msg.toLowerCase().includes("unique")) throw e;
+          }
+        }
+        if (!finalCertificate) {
+          return NextResponse.json({ error: "Impossible de générer un numéro unique" }, { status: 409 });
+        }
+
+        // Ajoute l'attestation au compte membre (earnedCertificates)
+        let certificates: any[] = [];
+        try {
+          const parsed = JSON.parse(String(user.earnedCertificates || "[]"));
+          if (Array.isArray(parsed)) certificates = parsed;
+        } catch {}
+        if (!certificates.some((c: any) => c.id === finalCertificate.id)) {
+          certificates = [finalCertificate, ...certificates];
+          await prisma.user.update({
+            where: { id: userId },
+            data: { earnedCertificates: certificates as any } as any,
+          });
+        }
+
+        return NextResponse.json({ success: true, certificate: finalCertificate });
+      }
+
       // ============ COMMANDE PAYEE ============
       case "submit-order": {
         const created = await prisma.marketplaceOrder.create({
@@ -728,6 +814,8 @@ export async function POST(req: NextRequest) {
                     type: lesson.type || "video",
                     videoUrl: lesson.videoUrl || "",
                     content: lesson.content || "",
+                    videoProtected: !!(lesson as any).videoProtected,
+                    videoCodeHash: String((lesson as any).videoCodeHash || ""),
                     displayOrder: li,
                   } as any,
                 });
@@ -1287,6 +1375,8 @@ export async function POST(req: NextRequest) {
                     type: lesson.type || "video",
                     videoUrl: lesson.videoUrl || "",
                     content: lesson.content || "",
+                    videoProtected: !!(lesson as any).videoProtected,
+                    videoCodeHash: String((lesson as any).videoCodeHash || ""),
                     displayOrder: li,
                   } as any,
                 });
