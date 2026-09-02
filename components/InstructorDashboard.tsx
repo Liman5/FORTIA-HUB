@@ -814,6 +814,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         lessons: [
                           ...updated[activeChapterIdx].lessons,
                           {
+                            id: `lesson-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
                             title: lessonTitle,
                             duration: lessonDuration,
                             type: lessonType,
