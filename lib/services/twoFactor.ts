@@ -9,6 +9,7 @@
 // ============================================================
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 import { generateTotpSecret, buildOtpauthUrl, verifyTotp } from "./totp";
 
 const TWO_FACTOR_KEY_PREFIX = "2fa:user:";
@@ -85,8 +86,39 @@ export async function verifyTwoFactorChallenge(token: string): Promise<string | 
 
 export interface TwoFactorProfile {
   enabled: boolean;
-  /** Clé secrète base32 Google Authenticator (jamais renvoyée côté client). */
+  /** Clé secrète base32 (reçue en clair uniquement à la création, jamais stockée en clair). */
   secret?: string;
+}
+
+interface EncryptedPayload {
+  iv: string;
+  data: string;
+}
+
+function masterKey(): Buffer {
+  const secret = process.env.JWT_SECRET || "fortia-2fa-fallback-secret-change-me";
+  return createHash("sha256").update(secret).digest();
+}
+
+function encryptValue(plain: string): EncryptedPayload {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", masterKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    iv: iv.toString("base64"),
+    data: Buffer.concat([encrypted, tag]).toString("base64"),
+  };
+}
+
+function decryptValue(payload: EncryptedPayload): string {
+  const iv = Buffer.from(payload.iv, "base64");
+  const combined = Buffer.from(payload.data, "base64");
+  const data = combined.subarray(0, combined.length - 16);
+  const tag = combined.subarray(combined.length - 16);
+  const decipher = createDecipheriv("aes-256-gcm", masterKey(), iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
 }
 
 async function readTwoFactorProfile(userId: string): Promise<TwoFactorProfile> {
@@ -96,36 +128,43 @@ async function readTwoFactorProfile(userId: string): Promise<TwoFactorProfile> {
       select: { value: true },
     });
     const value = (row?.value as any) || {};
+    if (value.secretEnc && value.secretEnc.iv && value.secretEnc.data) {
+      return { enabled: value.enabled === true, secret: decryptValue(value.secretEnc) };
+    }
+    // Compatibilité : ancien enregistrement en clair → retourné mais re-chiffré à la prochaine écriture
     return { enabled: value.enabled === true, secret: value.secret || "" };
   } catch {
     return { enabled: false, secret: "" };
   }
 }
 
-/** Enregistre le profil 2FA (secret + état) d'un utilisateur. */
+/** Enregistre le profil 2FA. Le secret est CHIFFRÉ (AES-256-GCM, clé dérivée de JWT_SECRET). */
 export async function saveTwoFactorProfile(userId: string, profile: TwoFactorProfile): Promise<void> {
   const key = TWO_FACTOR_KEY_PREFIX + userId;
+  const stored: any = { enabled: profile.enabled };
+  if (profile.secret) {
+    stored.secretEnc = encryptValue(profile.secret);
+  }
   await prisma.platformConfig.upsert({
     where: { key },
     create: {
       key,
-      value: profile as any,
-      description: "2FA TOTP Google Authenticator de l'utilisateur",
+      value: stored,
+      description: "2FA TOTP Google Authenticator de l'utilisateur (secret chiffré)",
     },
-    update: { value: profile as any },
+    update: { value: stored },
   });
 }
 
-/** Retourne la clé secrète TOTP enregistrée (vide si aucune). */
+/** Retourne la clé secrète TOTP déchiffrée (vide si aucune). */
 export async function getTwoFactorSecret(userId: string): Promise<string> {
   const profile = await readTwoFactorProfile(userId);
   return profile.secret || "";
 }
 
 /**
- * Prépare l'activation : génère une clé secrète TOTP et l'enregistre
+ * Prépare l'activation : génère une clé secrète TOTP et l'enregistre chiffrée
  * (état `enabled: false` tant que le code Google Authenticator n'est pas validé).
- * Retourne le secret (à afficher) et l'URL otpauth pour le QR Code.
  */
 export async function createTwoFactorSetup(
   userId: string,

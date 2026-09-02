@@ -129,6 +129,10 @@ interface AppStoreContextValue {
   markAllNotificationsAsRead: () => void;
   deleteNotification: (id: string) => void;
   clearNotifications: () => void;
+  // Données personnelles filtrées par le serveur (endpoint /api/me)
+  myOrders: MarketplaceOrder[];
+  myNotifications: AppNotification[];
+  myKycSubmissions: KycSubmission[];
 
   // Course Player
   selectedCourseForPlayer: Course | null;
@@ -258,6 +262,18 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
               return merged;
             });
           }
+          // Charge les données personnelles FILTRÉES par le serveur (jamais celles d'un autre)
+          if (mounted) {
+            fetch("/api/me", { cache: "no-store" })
+              .then((r) => r.json())
+              .then((me) => {
+                if (!mounted || !me?.success) return;
+                setMyOrders((me.orders || []) as MarketplaceOrder[]);
+                setMyNotifications((me.notifications || []) as AppNotification[]);
+                setMyKycSubmissions((me.kycSubmissions || []) as KycSubmission[]);
+              })
+              .catch(() => {});
+          }
         } else {
           // Session invalide/expirée/révoquée → nettoyage de l'état local
           if (mounted) {
@@ -351,6 +367,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [openAuthModal, setOpenAuthModal] = useState(false);
   // Anti-flash : reste true tant que la session serveur n'est pas vérifiée
   const [sessionChecking, setSessionChecking] = useState(true);
+  // Données personnelles filtrées par le serveur (/api/me)
+  const [myOrders, setMyOrders] = useState<MarketplaceOrder[]>([]);
+  const [myNotifications, setMyNotifications] = useState<AppNotification[]>([]);
+  const [myKycSubmissions, setMyKycSubmissions] = useState<KycSubmission[]>([]);
 
   // ======== RECHARGEMENT DES DONNÉES PLATFORM (à la demande) ========
   // Déclaration `function` (hoistée) : appelée par le useEffect initial et
@@ -1436,6 +1456,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       setAdmin: setIsAdmin,
       isAdminAuthModalOpen,
       setAdminAuthModalOpen: setIsAdminAuthModalOpen,
+      myOrders,
+      myNotifications,
+      myKycSubmissions,
       notifications,
       markNotificationAsRead,
       markAllNotificationsAsRead,
@@ -1534,6 +1557,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       logoutUser,
       isAdmin,
       isAdminAuthModalOpen,
+      myOrders,
+      myNotifications,
+      myKycSubmissions,
       notifications,
       markNotificationAsRead,
       markAllNotificationsAsRead,

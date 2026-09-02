@@ -11,6 +11,7 @@ import {
 import {
   createTwoFactorChallenge,
   createTwoFactorSetup,
+  getTwoFactorSecret,
   isTwoFactorEnabled,
   saveTwoFactorProfile,
   verifyTwoFactorChallenge,
@@ -647,12 +648,8 @@ export async function POST(request: NextRequest) {
       }
 
       if (enabled) {
-        // Conserve le secret enregistré lors du setup et active la 2FA
-        const existingProfile = await prisma.platformConfig.findUnique({
-          where: { key: `2fa:user:${current.id}` },
-          select: { value: true },
-        });
-        const secret = ((existingProfile?.value as any) || {}).secret || "";
+        // Conserve le secret (déchiffré) enregistré lors du setup et active la 2FA
+        const secret = await getTwoFactorSecret(current.id);
         await saveTwoFactorProfile(current.id, { enabled: true, secret });
       } else {
         await saveTwoFactorProfile(current.id, { enabled: false, secret: "" });

@@ -40,6 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     sessionChecking,
     logoutUser,
     notifications,
+    myNotifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
     deleteNotification,
@@ -244,7 +245,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           userEmail={userProfile.email}
           userName={userProfile.name}
           onLogout={() => setShowLogoutConfirm(true)}
-          notifications={notifications}
+          notifications={(myNotifications && myNotifications.length > 0 ? myNotifications : notifications)}
           onMarkNotificationAsRead={markNotificationAsRead}
           onMarkAllNotificationsAsRead={markAllNotificationsAsRead}
           onDeleteNotification={deleteNotification}

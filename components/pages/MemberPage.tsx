@@ -20,6 +20,8 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
     freelances,
     enterprises,
     kycSubmissions,
+    myKycSubmissions,
+    myOrders,
     isKycModalOpen,
     setKycModalOpen,
     logoutUser,
@@ -37,8 +39,9 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
   const myEnterprise = (enterprises || []).find((e) => (e as any).userId === userProfile?.id || e.id === userProfile?.id);
   const isProviderApproved = !!myFreelance || !!myEnterprise;
 
-  // Dernière demande KYC de l'utilisateur connecté (par applicantId ou email)
-  const myKyc = (kycSubmissions || []).find(
+  // Dernière demande KYC de l'utilisateur connecté (source serveur /api/me d'abord)
+  const kycSource = myKycSubmissions && myKycSubmissions.length > 0 ? myKycSubmissions : kycSubmissions || [];
+  const myKyc = kycSource.find(
     (k) =>
       (k.applicantId && userProfile?.id && k.applicantId === userProfile.id) ||
       (userProfile?.email && k.email && k.email.toLowerCase() === userProfile.email.toLowerCase())
@@ -166,7 +169,7 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
         badgeType={myFreelance?.badge || myEnterprise ? "gold" : (myFreelance as any)?.badge || undefined}
         courses={courses}
         digitalProducts={marketplaceProducts as any}
-        orders={marketplaceOrders as any}
+        orders={myOrders as any}
         marketplaceProducts={marketplaceProducts as any}
         onOpenCourse={(course) => setSelectedCourseForPlayer((course as any) || null)}
         onLogout={logoutUser}
