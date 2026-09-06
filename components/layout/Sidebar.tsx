@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useActiveSection } from "@/lib/store/useActiveSection";
 import { usePwaInstall, promptInstall, getInstallDiagnostics } from "@/lib/pwa/pwaStore";
 import { Download, Check } from "lucide-react";
+import { APP_VERSION, RELEASE_NOTES } from "@/lib/appInfo";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -38,6 +39,7 @@ export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: Si
   const { setActiveTab } = useActiveSection();
   const { isInstalled, isIOS } = usePwaInstall();
   const [installMsg, setInstallMsg] = useState<string | null>(null);
+  const [showNotes, setShowNotes] = useState(false);
 
   const handleNav = (tab: string) => {
     setActiveTab(tab);
@@ -207,8 +209,34 @@ export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: Si
                 </div>
               )}
               <div className="sidebar-footer-text text-[10px] text-slate-500 font-semibold">
-                FORTIA HUB © {new Date().getFullYear()}
+                FORTIA HUB © {new Date().getFullYear()} · v{APP_VERSION}
               </div>
+              <button
+                type="button"
+                onClick={() => setShowNotes((v) => !v)}
+                className="w-full text-left text-[10px] text-[#D69E25] hover:text-amber-300 font-black underline decoration-dotted"
+              >
+                {showNotes ? "▾ Masquer" : "▸ Voir les dernières corrections"} (v{RELEASE_NOTES[0]?.version || APP_VERSION})
+              </button>
+              {showNotes && (
+                <div className="px-3 py-2 rounded-xl bg-white/[0.03] border border-[#D69E25]/20 space-y-1.5 max-h-40 overflow-y-auto">
+                  {RELEASE_NOTES.map((r) => (
+                    <div key={r.version} className="space-y-1">
+                      <p className="text-[10px] font-black text-[#D69E25]">
+                        v{r.version} — {r.date}
+                      </p>
+                      <ul className="space-y-1">
+                        {r.items.map((item, i) => (
+                          <li key={i} className="text-[10px] text-slate-400 leading-snug flex items-start gap-1.5">
+                            <Check className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="sidebar-footer-sub text-[10px] text-slate-600">LEARN. BUILD. SUCCEED.</div>
             </div>
           </motion.div>

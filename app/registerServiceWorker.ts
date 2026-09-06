@@ -36,10 +36,10 @@ export function registerServiceWorker() {
         installingWorker.onstatechange = () => {
           if (installingWorker.state === "installed") {
             if (navigator.serviceWorker.controller) {
-              // Nouvelle version disponible → bascule immédiate + rechargement.
+              // Nouvelle version disponible → bascule immédiate (le rechargement
+              // est déclenché par "controllerchange" ci-dessous).
               console.log("[PWA] Nouvelle version de FORTIA HUB disponible → mise à jour...");
               installingWorker.postMessage({ type: "SKIP_WAITING" });
-              setTimeout(() => window.location.reload(), 300);
             } else {
               console.log("[PWA] Contenu mis en cache pour un usage hors-ligne.");
             }
@@ -47,11 +47,22 @@ export function registerServiceWorker() {
         };
       };
 
-      // Événement de mise à jour activée (après skipWaiting + reload)
+      // Rechargement fiable quand le nouveau worker prend le contrôle
+      let refreshing = false;
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        // On évite une boucle de rechargements : le reload est déjà déclenché
-        // dans onstatechange, on loggue simplement l'activation.
-        console.log("[PWA] Nouveau Service Worker actif.");
+        if (refreshing) return;
+        refreshing = true;
+        console.log("[PWA] Nouvelle version activée → rechargement de l'application.");
+        window.location.reload();
+      });
+
+      // Vérification périodique des mises à jour (utile quand l'app reste ouverte)
+      const checkForUpdates = () => {
+        registration.update().catch(() => {});
+      };
+      setInterval(checkForUpdates, 15 * 60 * 1000); // toutes les 15 minutes
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") checkForUpdates();
       });
     })
     .catch((error) => {
