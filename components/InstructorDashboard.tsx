@@ -652,7 +652,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       className="bg-[#011D46] border border-slate-700 text-xs rounded-lg p-2.5 text-white"
                     />
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-2.5 w-full">
                     <select
                       value={lessonType}
                       onChange={(e) => setLessonType(e.target.value as "video" | "article")}
@@ -728,8 +728,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         </div>
 
                         {lessonVideoUrl && !uploadingVideo && (
-                          <div className="space-y-2">
-                            <div className="rounded-xl overflow-hidden border border-emerald-500/40 bg-black">
+                          <div className="space-y-2 w-full max-w-full overflow-hidden">
+                            <div className="w-full rounded-xl overflow-hidden border border-emerald-500/40 bg-black">
                               <video
                                 key={lessonVideoUrl}
                                 src={lessonVideoUrl}
