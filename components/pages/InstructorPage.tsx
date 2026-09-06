@@ -34,11 +34,26 @@ export function InstructorPage() {
     paymentItems,
     setPaymentItems,
     addSupportSubmission,
+    platformLoaded,
+    sessionChecking,
     setOpenAuthModal,
     setAuthMode,
   } = useAppStore();
 
   const [pendingStorage, setPendingStorage] = React.useState<PendingStorage | null>(null);
+
+  // Anti-flash au rechargement : on n'affiche JAMAIS « créer votre centre » ou
+  // « connectez-vous » tant que la session et les données ne sont pas chargées.
+  if (!platformLoaded || sessionChecking) {
+    return (
+      <div className="min-h-screen bg-[#021231] text-white flex flex-col items-center justify-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-[#D69E25]/20 border border-[#D69E25]/40 flex items-center justify-center">
+          <span className="block w-6 h-6 border-2 border-[#D69E25] border-t-transparent rounded-full animate-spin" style={{ animationDuration: "1s" }} />
+        </div>
+        <p className="text-xs font-bold text-slate-400 animate-pulse">Chargement de votre Espace Formateur…</p>
+      </div>
+    );
+  }
 
   // Centre du formateur connecté (par ownerId)
   const myCenter =
