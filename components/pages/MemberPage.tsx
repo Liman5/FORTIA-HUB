@@ -37,7 +37,13 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
   // userId est renvoyé par la base même si absent du type TS → cast via any
   const myFreelance = (freelances || []).find((f) => (f as any).userId === userProfile?.id || f.id === userProfile?.id);
   const myEnterprise = (enterprises || []).find((e) => (e as any).userId === userProfile?.id || e.id === userProfile?.id);
-  const isProviderApproved = !!myFreelance || !!myEnterprise;
+  // Source de vérité : la base (profil freelance/entreprise OU statut KYC/badge renvoyé par le serveur)
+  const serverKycApproved =
+    userProfile?.kycStatus === "approuve" ||
+    userProfile?.kycStatus === "Approuvé" ||
+    userProfile?.badge === "green" ||
+    userProfile?.badge === "gold";
+  const isProviderApproved = serverKycApproved || !!myFreelance || !!myEnterprise;
 
   // Dernière demande KYC de l'utilisateur connecté (source serveur /api/me d'abord)
   const kycSource = myKycSubmissions && myKycSubmissions.length > 0 ? myKycSubmissions : kycSubmissions || [];

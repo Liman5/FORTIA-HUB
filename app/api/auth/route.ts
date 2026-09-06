@@ -480,6 +480,7 @@ export async function POST(request: NextRequest) {
             avatar: user.avatar || "",
             badge: user.badge || "none",
             accountType: user.accountType,
+            kycStatus: user.kycStatus || "non_soumis",
             twoFactorEnabled: false,
           },
         });
@@ -591,6 +592,7 @@ export async function POST(request: NextRequest) {
           avatar: user.avatar || "",
           badge: user.badge || "none",
           accountType: user.accountType,
+          kycStatus: user.kycStatus || "non_soumis",
           twoFactorEnabled: true,
         },
       });
