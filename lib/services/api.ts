@@ -193,48 +193,67 @@ export async function apiRegisterUser(
  * Login user via Backend REST API (/api/auth)
  * Si l'utilisateur a activé la 2FA, la réponse contient `needsTwoFactor`
  * et `twoFactorToken` : il faut alors appeler `apiVerifyTwoFactor`.
+ * Résilient : réessaie automatiquement si le service est momentanément
+ * indisponible (503 / réseau) au lieu de forcer l'utilisateur à attendre.
  */
 export async function apiLoginUser(
   payload: AuthLoginPayload
 ): Promise<ApiResponse<LoginResult>> {
-  try {
-    const response = await fetch("/api/auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "login", ...payload }),
-    });
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "login", ...payload }),
+      });
 
-    const data = await response.json();
+      const data = await response.json().catch(() => null);
 
-    if (!response.ok) {
-      return {
-        success: false,
-        error: data.error || "Connexion refusée : Adresse e-mail ou mot de passe incorrect.",
-      };
-    }
+      // Service momentanément indisponible → nouvelle tentative automatique
+      if (response.status === 503 && attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+        continue;
+      }
 
-    if (data.needsTwoFactor) {
+      if (!response.ok) {
+        return {
+          success: false,
+          error:
+            data?.error ||
+            "Connexion impossible. Vérifiez vos identifiants et réessayez.",
+        };
+      }
+
+      if (data.needsTwoFactor) {
+        return {
+          success: true,
+          data: {
+            needsTwoFactor: true,
+            twoFactorToken: data.twoFactorToken,
+            message: data.message,
+          },
+        };
+      }
+
       return {
         success: true,
-        data: {
-          needsTwoFactor: true,
-          twoFactorToken: data.twoFactorToken,
-          message: data.message,
-        },
+        data: { user: data.user },
+      };
+    } catch (err) {
+      // Erreur réseau : on réessaie avant d'abandonner
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      return {
+        success: false,
+        error:
+          "Connexion impossible pour le moment. Vérifiez votre connexion internet puis réessayez.",
       };
     }
-
-    return {
-      success: true,
-      data: { user: data.user },
-    };
-  } catch (err) {
-    // Erreur réseau : aucune connexion simulée
-    return {
-      success: false,
-      error: "Connexion impossible : le serveur est injoignable. Vérifiez votre connexion et réessayez.",
-    };
   }
+  return { success: false, error: "Connexion impossible. Réessayez." };
 }
 
 /**
