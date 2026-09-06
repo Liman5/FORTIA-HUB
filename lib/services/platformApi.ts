@@ -64,6 +64,16 @@ export function writePlatformCache(data: PlatformData): void {
   }
 }
 
+/** Supprime le cache (à appeler après toute écriture importante). */
+export function clearPlatformCache(): void {
+  try {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem(PLATFORM_CACHE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function isPlatformCacheFresh(savedAt: number): boolean {
   return Date.now() - savedAt < CACHE_MAX_AGE_MS;
 }

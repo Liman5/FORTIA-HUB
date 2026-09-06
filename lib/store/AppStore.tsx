@@ -29,7 +29,7 @@ import {
   InstructorStoragePurchase,
 } from "@/lib/types";
 
-import { apiFetchPlatformData } from "@/lib/services/platformApi";
+import { apiFetchPlatformData, clearPlatformCache } from "@/lib/services/platformApi";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 
 interface AppStoreContextValue {
@@ -556,8 +556,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         instructorAvatar: updates.instructor?.avatar,
         learningOutcomes: updates.learningOutcomes,
         isPublished: (updates as any).isPublished,
+        chapters: (updates as any).chapters || [],
+        quiz: (updates as any).quiz || [],
       });
       alert("✅ Formation mise à jour avec succès !");
+      clearPlatformCache();
+      refreshPlatformData();
     },
     []
   );
@@ -624,6 +628,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
           setCourses((prev) =>
             prev.map((c) => (c.id === tempId ? { ...c, id: res.id as string } : c))
           );
+          clearPlatformCache();
+          refreshPlatformData();
         }
       });
     },
