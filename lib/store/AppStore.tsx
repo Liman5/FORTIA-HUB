@@ -275,8 +275,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
               .catch(() => {});
           }
         } else {
-          // Session invalide/expirée/révoquée → nettoyage de l'état local
-          if (mounted) {
+          // Seule une vraie 401 (session invalide/expirée) entraîne la déconnexion.
+          // Une erreur 500 / réseau (base momentanément indisponible) ne doit JAMAIS
+          // déconnecter l'utilisateur : on conserve sa session locale.
+          if (res.status === 401 && mounted) {
             setIsUserLoggedIn(false);
             setUserProfile({} as UserProfile);
             try {

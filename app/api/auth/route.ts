@@ -491,8 +491,11 @@ export async function POST(request: NextRequest) {
       } catch (dbError: any) {
         console.warn("[AUTH] Base inaccessible pour la connexion:", dbError?.message);
         return NextResponse.json(
-          { error: "Base de données inaccessible. Impossible de vérifier vos identifiants." },
-          { status: 500 }
+          {
+            error:
+              "Le service est momentanément indisponible. Veuillez réessayer dans quelques instants. Si le problème persiste, vérifiez votre connexion ou contactez le support FORTIA HUB.",
+          },
+          { status: 503 }
         );
       }
     }
