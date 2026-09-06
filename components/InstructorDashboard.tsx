@@ -924,10 +924,6 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   alert("Ajoutez au moins une leçon (titre + vidéo) en cliquant sur « + Ajouter la Leçon » avant de publier la formation.");
                   return;
                 }
-                if (lessonTitle.trim() && activeChapterIdx !== null && chapters[activeChapterIdx]) {
-                  alert("Vous avez une leçon en cours de saisie : cliquez sur « + Ajouter la Leçon » pour l'enregistrer dans le chapitre avant de publier.");
-                  return;
-                }
 
                 if (editingCourseId) {
                   // MODE ÉDITION : mettre à jour la formation existante
