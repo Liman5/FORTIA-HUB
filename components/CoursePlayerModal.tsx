@@ -96,11 +96,11 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   }, []);
   const initialLesson: Lesson = chapters[0]?.lessons?.[0] || {
     id: 'default',
-    title: 'Introduction au Cours',
-    duration: '05:00',
-    type: 'video',
-    videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    content: 'Bienvenue dans cette formation.'
+    title: course.title || 'Cette formation n\u2019a pas encore de leçon',
+    duration: '00:00',
+    type: 'article',
+    videoUrl: '',
+    content: 'Aucune leçon disponible pour le moment. Revenez plus tard.'
   };
 
   const [currentLesson, setCurrentLesson] = useState<Lesson>(initialLesson);

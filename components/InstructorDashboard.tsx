@@ -703,7 +703,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                             }
                           }}
                         />
-                        <div className="flex flex-1 gap-2">
+                        <div className="flex flex-1 flex-col sm:flex-row gap-2">
                           <input
                             type="text"
                             value={lessonVideoUrl}
@@ -920,6 +920,14 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               onClick={() => {
                 if (!title.trim()) { alert("Veuillez indiquer un titre."); return; }
                 const totalLessons = chapters.reduce((s, ch) => s + ch.lessons.length, 0);
+                if (totalLessons === 0) {
+                  alert("Ajoutez au moins une leçon (titre + vidéo) en cliquant sur « + Ajouter la Leçon » avant de publier la formation.");
+                  return;
+                }
+                if (lessonTitle.trim() && activeChapterIdx !== null && chapters[activeChapterIdx]) {
+                  alert("Vous avez une leçon en cours de saisie : cliquez sur « + Ajouter la Leçon » pour l'enregistrer dans le chapitre avant de publier.");
+                  return;
+                }
 
                 if (editingCourseId) {
                   // MODE ÉDITION : mettre à jour la formation existante
