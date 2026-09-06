@@ -649,6 +649,36 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, certificate: finalCertificate });
       }
 
+  // ============ STOCKAGE FORMATEUR ============
+  // Incrémente/décrémente le stockage réellement utilisé (quota plateforme).
+  case "register-course-media-storage": {
+    const { centerId, deltaBytes } = data;
+    if (!centerId) {
+      return NextResponse.json({ error: "centerId requis" }, { status: 400 });
+    }
+    const centerDoc = await prisma.trainingCenter.findUnique({ where: { id: centerId } });
+    if (!centerDoc) {
+      return NextResponse.json({ error: "Centre introuvable" }, { status: 404 });
+    }
+    const current =
+      typeof centerDoc.storageUsedBytes === "bigint"
+        ? centerDoc.storageUsedBytes
+        : BigInt(Number(centerDoc.storageUsedBytes || 0));
+    const delta = BigInt(Math.round(Number(deltaBytes) || 0));
+    const next = current + delta < BigInt(0) ? BigInt(0) : current + delta;
+
+    const updated = await prisma.trainingCenter.update({
+      where: { id: centerId },
+      data: { storageUsedBytes: next } as any,
+    });
+
+    return NextResponse.json({
+      success: true,
+      storageUsedBytes: Number(next),
+      storageQuotaGb: updated.storageQuotaGb,
+    });
+  }
+
       // ============ COMMANDE PAYEE ============
       case "submit-order": {
         const created = await prisma.marketplaceOrder.create({

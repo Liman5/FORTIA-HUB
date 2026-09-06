@@ -40,7 +40,8 @@ type WriteAction =
   | "update-store"
   | "update-profile"
   | "sync-user-learning"
-  | "issue-certificate";
+  | "issue-certificate"
+  | "register-course-media-storage";
 
 export interface WriteResult {
   success: boolean;

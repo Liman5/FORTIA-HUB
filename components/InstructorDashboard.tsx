@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   GraduationCap,
   Plus,
@@ -22,6 +22,7 @@ import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase
 import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2 } from "@/lib/services/clientUpload";
 import { hashSecret } from "@/lib/services/offlineVideo";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
+import { apiWritePlatform } from "@/lib/services/platformWrite";
 
 interface InstructorDashboardProps {
   center: TrainingCenter | null;
@@ -123,6 +124,17 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     const lesson = chapters[ci]?.lessons[li];
     if (!lesson) return;
     if (!window.confirm(`Supprimer la leçon « ${lesson.title} » ?\nLa vidéo sera supprimée de Cloudflare et de la base.`)) return;
+    // Libère l'espace du quota plateforme selon la taille réelle du fichier
+    fetch(lesson.videoUrl, { method: "HEAD" })
+      .then((r) => {
+        const len = r.headers.get("content-length");
+        if (len) {
+          const n = Number(len);
+          setUsedBytes((b) => Math.max(0, b - n));
+          apiWritePlatform("register-course-media-storage", { centerId: center?.id, deltaBytes: -n });
+        }
+      })
+      .catch(() => {});
     deleteVideoFromR2(lesson.videoUrl);
     setChapters((prev) =>
       prev.map((ch, i) => (i === ci ? { ...ch, lessons: ch.lessons.filter((_, j) => j !== li) } : ch))
@@ -138,6 +150,11 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   // Image de couverture : upload fichier (pas seulement URL)
   const coverFileRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
+  // Quota de stockage réellement utilisé (quota plateforme du formateur)
+  const [usedBytes, setUsedBytes] = useState<number>(() => Number((center as any)?.storageUsedBytes || 0));
+  useEffect(() => {
+    setUsedBytes(Number((center as any)?.storageUsedBytes || 0));
+  }, [center?.id, (center as any)?.storageUsedBytes]);
 
   const myCourses = (courses || []).filter((c) => c.instructorId === center?.ownerId || c.centerId === center?.id);
   const totalStudents = myCourses.reduce((s, c) => s + (c.studentsCount || 0), 0);
@@ -145,8 +162,10 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     .filter((c) => c.instructorId === center?.ownerId)
     .reduce((s, c) => s + c.instructorEarningsUsd, 0);
 
-  const usedGb = center ? center.storageUsedBytes / (1024 * 1024 * 1024) : 0;
-  const usedPct = center && center.storageQuotaGb > 0 ? Math.min((usedGb / center.storageQuotaGb) * 100, 100) : 0;
+  const quotaGb = center?.storageQuotaGb || 4;
+  const quotaBytes = quotaGb * 1024 * 1024 * 1024;
+  const usedGb = usedBytes / (1024 * 1024 * 1024);
+  const usedPct = quotaBytes > 0 ? Math.min((usedBytes / quotaBytes) * 100, 100) : 0;
 
   if (!isUserLoggedIn) {
     return (
@@ -700,6 +719,19 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
 
                     {lessonType === "video" && (
                       <>
+                        {usedPct >= 80 && (
+                          <div
+                            className={`rounded-lg border p-2.5 text-[11px] font-bold ${
+                              usedPct >= 100
+                                ? "bg-red-500/15 border-red-500/50 text-red-300"
+                                : "bg-amber-500/10 border-amber-500/40 text-amber-300"
+                            }`}
+                          >
+                            {usedPct >= 100
+                              ? `🚫 Stockage plein (${quotaGb} Go) — supprimez des vidéos pour libérer de l'espace avant d'uploader.`
+                              : `⚠️ Stockage utilisé : ${usedGb.toFixed(2)} / ${quotaGb} Go (${Math.round(usedPct)} %). Pensez à libérer de l'espace.`}
+                          </div>
+                        )}
                         <input
                           ref={videoFileRef}
                           type="file"
@@ -724,6 +756,13 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                               }
                               deleteVideoFromR2(lessonVideoUrl);
                             }
+                            if (usedBytes + file.size > quotaBytes) {
+                              alert(
+                                `Stockage du centre atteint (${quotaGb} Go utilisés) : supprimez d'abord des vidéos pour libérer de l'espace avant d'en uploader de nouvelles.`
+                              );
+                              if (videoFileRef.current) videoFileRef.current.value = "";
+                              return;
+                            }
                             setUploadingVideo(true);
                             setVideoUploadProgress("Préparation de l'upload de la vidéo…");
                             try {
@@ -737,6 +776,12 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                               if (result.success) {
                                 setLessonVideoUrl(result.url);
                                 setVideoUploadProgress("");
+                                // Comptabilise le poids réel dans le quota du formateur
+                                setUsedBytes((b) => b + file.size);
+                                apiWritePlatform("register-course-media-storage", {
+                                  centerId: center?.id,
+                                  deltaBytes: file.size,
+                                });
                               } else {
                                 setVideoUploadProgress("");
                                 alert(result.error || "Erreur lors de l'upload de la vidéo.");
@@ -792,7 +837,28 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                               </p>
                               <button
                                 type="button"
-                                onClick={() => { setLessonVideoUrl(""); setVideoUploadProgress(""); }}
+                                onClick={() => {
+                                  const urlToRemove = lessonVideoUrl;
+                                  setLessonVideoUrl("");
+                                  setVideoUploadProgress("");
+                                  if (urlToRemove) {
+                                    if (!window.confirm("Retirer cette vidéo ?\nLe fichier sera supprimé de Cloudflare et l'espace libéré.")) {
+                                      setLessonVideoUrl(urlToRemove);
+                                      return;
+                                    }
+                                    fetch(urlToRemove, { method: "HEAD" })
+                                      .then((r) => {
+                                        const len = r.headers.get("content-length");
+                                        if (len) {
+                                          const n = Number(len);
+                                          setUsedBytes((b) => Math.max(0, b - n));
+                                          apiWritePlatform("register-course-media-storage", { centerId: center?.id, deltaBytes: -n });
+                                        }
+                                      })
+                                      .catch(() => {});
+                                    deleteVideoFromR2(urlToRemove);
+                                  }
+                                }}
                                 className="text-[10px] text-slate-400 hover:text-red-400 font-bold transition"
                                 title="Retirer cette vidéo"
                               >
