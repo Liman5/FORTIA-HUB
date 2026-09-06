@@ -19,7 +19,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
-import { uploadCourseVideoDirect, uploadFileToR2 } from "@/lib/services/clientUpload";
+import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2 } from "@/lib/services/clientUpload";
 import { hashSecret } from "@/lib/services/offlineVideo";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
 
@@ -107,6 +107,34 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState("");
   const [videoSecretCode, setVideoSecretCode] = useState("");
+
+  // ===== Gestion fichiers vidéo R2 : suppression / remplacement =====
+  const extractR2Key = (url?: string): string | null => {
+    if (!url) return null;
+    const idx = url.indexOf("course-media/");
+    return idx === -1 ? null : url.slice(idx);
+  };
+  const deleteVideoFromR2 = (url?: string) => {
+    const key = extractR2Key(url);
+    if (key) deleteFileFromR2(key).catch(() => {});
+  };
+
+  const askAndRemoveLesson = (ci: number, li: number) => {
+    const lesson = chapters[ci]?.lessons[li];
+    if (!lesson) return;
+    if (!window.confirm(`Supprimer la leçon « ${lesson.title} » ?\nLa vidéo sera supprimée de Cloudflare et de la base.`)) return;
+    deleteVideoFromR2(lesson.videoUrl);
+    setChapters((prev) =>
+      prev.map((ch, i) => (i === ci ? { ...ch, lessons: ch.lessons.filter((_, j) => j !== li) } : ch))
+    );
+  };
+
+  const askDeleteCourse = (id: string, title?: string) => {
+    if (!window.confirm(`Supprimer la formation « ${title || ""} » ?\nToutes ses vidéos seront supprimées de Cloudflare et de la base.`)) return;
+    const c = courses.find((x) => x.id === id);
+    (c?.chapters || []).forEach((ch) => (ch.lessons || []).forEach((l) => deleteVideoFromR2(l.videoUrl)));
+    onDeleteCourse(id);
+  };
   // Image de couverture : upload fichier (pas seulement URL)
   const coverFileRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -392,7 +420,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         <button onClick={() => onSuspendCourse(c.id)} className="flex-1 py-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1">
                           <EyeOff className="w-3 h-3" /> Suspendre
                         </button>
-                        <button onClick={() => onDeleteCourse(c.id)} className="p-1.5 bg-red-500/20 text-red-400 rounded-lg">
+                        <button onClick={() => askDeleteCourse(c.id, c.title)} className="p-1.5 bg-red-500/20 text-red-400 rounded-lg">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -456,7 +484,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                     Modifier
                   </button>
                   <button onClick={() => onSuspendCourse(c.id)} className="px-3 py-1.5 bg-amber-500/20 text-amber-300 rounded-lg text-[10px] font-bold">Suspendre</button>
-                  <button onClick={() => onDeleteCourse(c.id)} className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-[10px] font-bold">Supprimer</button>
+                  <button onClick={() => askDeleteCourse(c.id, c.title)} className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-[10px] font-bold">Supprimer</button>
                 </div>
               </div>
             ))}
@@ -597,6 +625,14 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       ) : (
                         <span className="shrink-0 text-[10px] font-bold text-sky-400">Leçon Article</span>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => askAndRemoveLesson(ci, li)}
+                        className="shrink-0 p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition"
+                        title="Supprimer cette leçon (DB + Cloudflare)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -676,6 +712,17 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                               setVideoUploadProgress("");
                               alert("Veuillez choisir un fichier vidéo (MP4, MOV, WebM, MKV…).");
                               return;
+                            }
+                            // Remplacement d'une vidéo déjà insérée → suppression de l'ancienne sur Cloudflare
+                            if (lessonVideoUrl) {
+                              const ok = window.confirm(
+                                "Remplacer la vidéo actuelle ?\nL'ancienne vidéo sera supprimée de Cloudflare pour libérer de l'espace."
+                              );
+                              if (!ok) {
+                                if (videoFileRef.current) videoFileRef.current.value = "";
+                                return;
+                              }
+                              deleteVideoFromR2(lessonVideoUrl);
                             }
                             setUploadingVideo(true);
                             setVideoUploadProgress("Préparation de l'upload de la vidéo…");
