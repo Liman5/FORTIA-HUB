@@ -40,7 +40,6 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
   // Source de vérité : la base (profil freelance/entreprise OU statut KYC/badge renvoyé par le serveur)
   const serverKycApproved =
     userProfile?.kycStatus === "approuve" ||
-    userProfile?.kycStatus === "Approuvé" ||
     userProfile?.badge === "green" ||
     userProfile?.badge === "gold";
   const isProviderApproved = serverKycApproved || !!myFreelance || !!myEnterprise;
