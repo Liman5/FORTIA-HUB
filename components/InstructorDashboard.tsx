@@ -919,7 +919,48 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             <button
               onClick={() => {
                 if (!title.trim()) { alert("Veuillez indiquer un titre."); return; }
-                const totalLessons = chapters.reduce((s, ch) => s + ch.lessons.length, 0);
+                // AJOUT AUTOMATIQUE : la leçon en cours est enregistrée sans obliger
+                // à cliquer sur « + Ajouter la Leçon » (chapitre auto-créé si besoin).
+                if (videoSecretCode.trim()) {
+                  alert("Une leçon protégée par code secret doit être ajoutée via le bouton « + Ajouter la Leçon ».");
+                  return;
+                }
+                let workingChapters = [...chapters];
+                const pendingTitle = lessonTitle.trim();
+                if (pendingTitle) {
+                  if (workingChapters.length === 0) {
+                    workingChapters = [{ title: chapterTitle.trim() || "Chapitre 1", lessons: [] }];
+                    setChapters(workingChapters);
+                  }
+                  const ci =
+                    activeChapterIdx !== null && workingChapters[activeChapterIdx]
+                      ? activeChapterIdx
+                      : workingChapters.length - 1;
+                  const lastLesson = workingChapters[ci].lessons[workingChapters[ci].lessons.length - 1];
+                  if (!lastLesson || lastLesson.title !== pendingTitle) {
+                    workingChapters[ci] = {
+                      ...workingChapters[ci],
+                      lessons: [
+                        ...workingChapters[ci].lessons,
+                        {
+                          id: `lesson-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                          title: lessonTitle,
+                          duration: lessonDuration,
+                          type: lessonType,
+                          videoUrl: lessonVideoUrl,
+                          videoProtected: false,
+                          videoCodeHash: "",
+                        },
+                      ],
+                    };
+                    setChapters(workingChapters);
+                    setLessonTitle("");
+                    setLessonDuration("15 min");
+                    setLessonVideoUrl("");
+                    setVideoSecretCode("");
+                  }
+                }
+                const totalLessons = workingChapters.reduce((s, ch) => s + ch.lessons.length, 0);
                 if (totalLessons === 0) {
                   alert("Ajoutez au moins une leçon (titre + vidéo) en cliquant sur « + Ajouter la Leçon » avant de publier la formation.");
                   return;
@@ -939,7 +980,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                     image,
                     level: level as any,
                     learningOutcomes: [],
-                    chapters: chapters.map((ch, ci) => ({
+                    chapters: workingChapters.map((ch, ci) => ({
                       id: `chapter-${Date.now()}-${ci}`,
                       title: ch.title,
                       lessons: ch.lessons.map((l, li) => ({
@@ -982,7 +1023,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                     image,
                     instructor: { name: userEmail || "Formateur", role: "Formateur", avatar: "" },
                     learningOutcomes: [],
-                    chapters: chapters.map((ch, ci) => ({
+                    chapters: workingChapters.map((ch, ci) => ({
                       id: `chapter-${Date.now()}-${ci}`,
                       title: ch.title,
                       lessons: ch.lessons.map((l, li) => ({
