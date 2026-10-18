@@ -19,6 +19,13 @@ const adapter = new PrismaPg({
     process.env.NODE_ENV === "development"
       ? { rejectUnauthorized: false }
       : undefined,
+  // Pool borné : au démarrage, l'app demande plusieurs domaines en parallèle.
+  // Sans limite explicite, le pool sature et Prisma renvoie P2039
+  // (« Timed out fetching a new connection from the connection pool »).
+  max: Number(process.env.DATABASE_POOL_MAX) || 10,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 20_000,
+  keepAlive: true,
 });
 
 // Singleton Prisma pour éviter les connexions multiples en dev

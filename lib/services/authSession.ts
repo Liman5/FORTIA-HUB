@@ -10,6 +10,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { withDbRetry } from "@/lib/server/dbRetry";
 
 /** Nom du cookie de session utilisateur. */
 export const SESSION_COOKIE_NAME = "fh_session";
@@ -74,12 +75,14 @@ export async function createUserSession(
 ): Promise<{ token: string; expiresAt: Date }> {
   // Nettoyage des sessions expirées de cet utilisateur (best-effort, jamais d'impact
   // sur les sessions actives). Évite l'accumulation en base à chaque connexion.
-  try {
-    await cleanupExpiredSessions(user.id);
-  } catch (e: any) {
-    console.warn("[AUTH SESSION] Nettoyage des sessions expirées:", e?.message);
-  }
-
+  // Nettoyage BORNÉ (1,2 s maximum) : une suppression lente ne doit jamais
+  // retarder ni faire échouer la connexion (pool PostgreSQL saturé).
+  await Promise.race([
+    cleanupExpiredSessions(user.id).catch((e: any) => {
+      console.warn("[AUTH SESSION] Nettoyage des sessions expirées:", e?.message);
+    }),
+    new Promise((resolve) => setTimeout(resolve, 1200)),
+  ]);
   const token = await signSessionToken(user.id, user.email);
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
 
@@ -153,33 +156,68 @@ export async function getCurrentUser(request: NextRequest): Promise<{
   const payload = await verifySessionToken(token);
   if (!payload?.sub) return null;
 
-  const session = await prisma.session.findUnique({
-    where: { token },
-    select: { userId: true, expiresAt: true },
-  });
+  // Lecture résiliente : si le pool PostgreSQL est saturé (P2039), on
+  // réessaie au lieu de faire échouer TOUTE la requête API (500 côté
+  // marketplace/services). En dernier recours : traité comme « non connecté ».
+  let session: { userId: string | null; expiresAt: Date } | null = null;
+  try {
+    session = await withDbRetry(() =>
+      prisma.session.findUnique({
+        where: { token },
+        select: { userId: true, expiresAt: true },
+      })
+    );
+  } catch (error) {
+    console.warn("[AUTH SESSION] Lecture de session impossible :", (error as Error)?.message);
+    return null;
+  }
   if (!session || session.expiresAt < new Date()) return null;
   if (session.userId !== payload.sub) return null;
 
   // Sécurité : on ne lit QUE la ligne du compte authentifié (jamais un autre user)
-  const user = await prisma.user.findUnique({
-    where: { id: payload.sub },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      avatar: true,
-      badge: true,
-      accountType: true,
-      isActive: true,
-      kycStatus: true,
-      enrolledCourseIds: true,
-      purchasedProductIds: true,
-      courseProgress: true,
-      earnedCertificates: true,
-      paymentHistory: true,
-    },
-  });
+  interface SessionUserRow {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    avatar: string;
+    badge: string;
+    accountType: string;
+    isActive: boolean;
+    kycStatus: string;
+    enrolledCourseIds: string[];
+    purchasedProductIds: string[];
+    courseProgress: unknown;
+    earnedCertificates: unknown;
+    paymentHistory: unknown;
+  }
+  let user: SessionUserRow | null = null;
+  try {
+    user = await withDbRetry(() =>
+      prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          avatar: true,
+          badge: true,
+          accountType: true,
+          isActive: true,
+          kycStatus: true,
+          enrolledCourseIds: true,
+          purchasedProductIds: true,
+          courseProgress: true,
+          earnedCertificates: true,
+          paymentHistory: true,
+        },
+      })
+    );
+  } catch (error) {
+    console.warn("[AUTH SESSION] Lecture du compte impossible :", (error as Error)?.message);
+    return null;
+  }
   if (!user || !user.isActive) return null;
 
   const safeArray = (v: any): any[] => (Array.isArray(v) ? v : []);

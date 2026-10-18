@@ -56,14 +56,25 @@ export default function LoginPage() {
     setError(null);
     setSuccess(null);
 
-    if (!email || !password) {
+    // Sur mobile, le clavier ajoute parfois un espace ou une majuscule :
+    // l'e-mail est normalisé ici (le mot de passe, lui, n'est jamais modifié).
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail || !password) {
       setError("Veuillez renseigner votre adresse e-mail et votre mot de passe.");
       return;
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
+      setError("Cette adresse e-mail n'est pas valide. Vérifiez-la et réessayez.");
+      return;
+    }
+
     setLoading(true);
-    const res = await apiLoginUser({ email, password });
+    setSuccess("Connexion en cours…");
+    const res = await apiLoginUser({ email: cleanEmail, password });
     setLoading(false);
+    setSuccess(null);
 
     if (!res.success || !res.data) {
       setError(res.error || "Connexion refusée : Adresse e-mail ou mot de passe incorrect.");
@@ -232,7 +243,13 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="votre@email.com"
-                  className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 pl-10 text-white focus:outline-none focus:border-[#D69E25]"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  autoComplete="email"
+                  spellCheck={false}
+                  enterKeyHint="next"
+                  className="w-full bg-[#021231] border border-slate-700 text-sm rounded-xl p-3 pl-10 text-white focus:outline-none focus:border-[#D69E25]"
                 />
               </div>
             </div>
@@ -246,7 +263,12 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 pl-10 pr-10 text-white focus:outline-none focus:border-[#D69E25]"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  autoComplete="current-password"
+                  spellCheck={false}
+                  enterKeyHint="go"
+                  className="w-full bg-[#021231] border border-slate-700 text-sm rounded-xl p-3 pl-10 pr-10 text-white focus:outline-none focus:border-[#D69E25]"
                 />
                 <button
                   type="button"

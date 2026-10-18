@@ -200,18 +200,24 @@ export async function apiLoginUser(
   payload: AuthLoginPayload
 ): Promise<ApiResponse<LoginResult>> {
   const MAX_ATTEMPTS = 3;
+  /** Délai maximal par tentative : sur mobile, une requête peut rester bloquée. */
+  const ATTEMPT_TIMEOUT_MS = 20_000;
+
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
     try {
       const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "login", ...payload }),
+        signal: controller.signal,
       });
 
       const data = await response.json().catch(() => null);
 
       // Service momentanément indisponible → nouvelle tentative automatique
-      if (response.status === 503 && attempt < MAX_ATTEMPTS - 1) {
+      if ((response.status === 503 || response.status === 504) && attempt < MAX_ATTEMPTS - 1) {
         await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
         continue;
       }
@@ -241,7 +247,7 @@ export async function apiLoginUser(
         data: { user: data.user },
       };
     } catch (err) {
-      // Erreur réseau : on réessaie avant d'abandonner
+      // Erreur réseau (ou délai dépassé) : on réessaie avant d'abandonner
       if (attempt < MAX_ATTEMPTS - 1) {
         await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
         continue;
@@ -251,6 +257,8 @@ export async function apiLoginUser(
         error:
           "Connexion impossible pour le moment. Vérifiez votre connexion internet puis réessayez.",
       };
+    } finally {
+      clearTimeout(timer);
     }
   }
   return { success: false, error: "Connexion impossible. Réessayez." };

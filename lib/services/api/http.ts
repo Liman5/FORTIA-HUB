@@ -13,7 +13,13 @@
 // Les domaines « lourds mais peu changeants » sont persistés dans
 // localStorage ; les domaines volatils (notifications, commandes)
 // restent en MÉMOIRE pour ne pas saturer le quota.
+//
+// Toutes les requêtes passent par une FILE D'ATTENTE (au plus 4 en
+// parallèle) : sans cela, la rafale de domaines demandée au démarrage
+// sature le pool PostgreSQL et Prisma renvoie `P2039`, ce qui faisait
+// échouer la connexion (« service momentanément indisponible »).
 // ============================================================
+import { scheduledFetch } from "./queue";
 
 export interface CacheEntry<T> {
   data: T;
@@ -107,6 +113,30 @@ export function isFresh(entry: CacheEntry<unknown> | null, domain: CacheDomain):
 }
 
 /**
+ * Exécute la requête HTTP en respectant la file d'attente (au plus 4 en
+ * parallèle) et en réessayant une fois si le serveur répond « surchargé »
+ * (503/504 : pool PostgreSQL épuisé, P2039 côté Prisma).
+ */
+async function runFetch(url: string, method: string, body?: unknown): Promise<Response> {
+  const run = () =>
+    fetch(url, {
+      method,
+      cache: "no-store",
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+  let response = await scheduledFetch(`${method} ${url}`, run);
+
+  if (method === "GET" && (response.status === 503 || response.status === 504)) {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    response = await scheduledFetch(`${method} ${url}#retry`, run);
+  }
+
+  return response;
+}
+
+/**
  * Requête JSON avec cache par domaine.
  * @param options.force  Ignore le cache frais (après une écriture)
  * @param options.suffix Clé secondaire (ex : identifiant de formation)
@@ -123,12 +153,7 @@ export async function fetchDomain<T>(
   if (!force && isFresh(cached, domain)) return cached!.data;
 
   try {
-    const response = await fetch(url, {
-      method,
-      cache: "no-store",
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const response = await runFetch(url, method, body);
 
     if (!response.ok) {
       // 401 / 404 / 500 : on ne casse pas l'interface, on sert le cache s'il existe

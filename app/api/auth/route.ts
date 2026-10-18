@@ -18,6 +18,7 @@ import {
   verifyTwoFactorCode,
 } from "@/lib/services/twoFactor";
 import { notifyUser } from "@/lib/services/notifyUser";
+import { isRetryableDbError, withDbRetry } from "@/lib/server/dbRetry";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -423,9 +424,13 @@ export async function POST(request: NextRequest) {
 
       // Connexion via Supabase (Prisma + bcrypt)
       try {
-        const user = await prisma.user.findUnique({
-          where: { email: normalizedEmail },
-        });
+        // Lecture résiliente : si le pool est saturé (P2039), on réessaie
+        // au lieu d'afficher « service momentanément indisponible ».
+        const user = await withDbRetry(() =>
+          prisma.user.findUnique({
+            where: { email: normalizedEmail },
+          })
+        );
 
         if (!user) {
           return NextResponse.json(
@@ -434,7 +439,20 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+        // Un compte sans mot de passe (import, compte social) doit être guidé
+        // vers la réinitialisation — bcrypt lèverait une exception technique.
+        const storedHash = String(user.passwordHash || "");
+        if (!/^\$2[aby]\$/.test(storedHash)) {
+          return NextResponse.json(
+            {
+              error:
+                "Ce compte n'a pas de mot de passe défini. Utilisez « Mot de passe oublié » pour en créer un, ou contactez le support FORTIA HUB.",
+            },
+            { status: 401 }
+          );
+        }
+
+        const passwordMatches = await bcrypt.compare(password, storedHash);
         if (!passwordMatches) {
           return NextResponse.json(
             { error: "Connexion refusée : Adresse e-mail ou mot de passe incorrect." },
@@ -490,13 +508,31 @@ export async function POST(request: NextRequest) {
         }
         return response;
       } catch (dbError: any) {
-        console.warn("[AUTH] Base inaccessible pour la connexion:", dbError?.message);
+        // Journalisation précise (code Prisma) pour diagnostiquer sans deviner.
+        const code = String(dbError?.code || "");
+        console.error("[AUTH] Échec technique de la connexion:", {
+          code,
+          message: dbError?.message,
+        });
+
+        if (isRetryableDbError(dbError)) {
+          return NextResponse.json(
+            {
+              error:
+                "Le serveur est momentanément très sollicité. Réessayez dans quelques secondes — vos identifiants n'ont pas été refusés.",
+              code: "SERVER_BUSY",
+            },
+            { status: 503 }
+          );
+        }
+
         return NextResponse.json(
           {
             error:
-              "Le service est momentanément indisponible. Veuillez réessayer dans quelques instants. Si le problème persiste, vérifiez votre connexion ou contactez le support FORTIA HUB.",
+              "Connexion impossible pour une raison technique. Réessayez, puis contactez le support FORTIA HUB si le problème persiste.",
+            code: code || "AUTH_ERROR",
           },
-          { status: 503 }
+          { status: 500 }
         );
       }
     }
