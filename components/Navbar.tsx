@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTheme } from "@/lib/store/ThemeProvider";
 import { Logo } from "./Logo";
@@ -12,7 +12,6 @@ import {
   Moon,
   LogIn,
   UserPlus,
-  ShoppingCart,
   LogOut,
   X,
   CheckCircle2,
@@ -24,13 +23,13 @@ import {
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  cartCount: number;
-  setIsCartOpen: (open: boolean) => void;
   isAdmin: boolean;
   setIsAdmin: (admin: boolean) => void;
+  /** Ouvre le modal de recherche globale (formations, produits, services…). */
+  onOpenSearch?: () => void;
+  /** Texte de recherche saisi dans l'en-tête (le modal n'affiche que les résultats). */
   searchQuery: string;
   setSearchQuery: (query: string) => void;
-  onOpenAuthModal?: (mode: "signup" | "login") => void;
   isUserLoggedIn?: boolean;
   userEmail?: string;
   userName?: string;
@@ -42,18 +41,18 @@ interface NavbarProps {
   siteContent?: any;
   onOpenSidebar?: () => void;
   isLandingPage?: boolean;
+  /** Masque la recherche globale de l'en-tête (pages dédiées : /member, /services). */
+  hideSearch?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
-  cartCount,
-  setIsCartOpen,
   isAdmin,
   setIsAdmin,
+  onOpenSearch,
   searchQuery,
   setSearchQuery,
-  onOpenAuthModal,
   isUserLoggedIn,
   userEmail,
   userName,
@@ -62,11 +61,25 @@ export const Navbar: React.FC<NavbarProps> = ({
   siteContent,
   onOpenSidebar,
   isLandingPage,
+  hideSearch,
 }) => {
   const { isDarkMode, toggleTheme } = useTheme();
 
   const [mounted, setMounted] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  // Barre de recherche dépliée sur mobile (la saisie reste DANS l'en-tête)
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const mobileSearchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isMobileSearchOpen) mobileSearchRef.current?.focus();
+  }, [isMobileSearchOpen]);
+
+  /** Saisie dans l'en-tête : alimente le store et ouvre le modal de résultats. */
+  const handleSearchInput = (value: string) => {
+    setSearchQuery(value);
+    onOpenSearch?.();
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -126,48 +139,61 @@ export const Navbar: React.FC<NavbarProps> = ({
       )}
 
       {/* HEAD APP - Minimal */}
-      <header className="sticky top-0 z-40 bg-[#021231]/95 backdrop-blur-md border-b border-[#D69E25]/30 text-white shadow-xl">
+      <header id="app-header" className="sticky top-0 z-40 bg-[#021231]/95 backdrop-blur-md border-b border-[#D69E25]/30 text-white shadow-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
-          {/* Logo */}
+          {/* Logo — dans l'app header : UNIQUEMENT l'icône de marque,
+              sans le mot-symbole « FORTIA HUB » ni la tagline. */}
           <div
             onClick={() => setActiveTab("landing")}
             className="cursor-pointer shrink-0 transition hover:opacity-90"
             title="Accueil FORTIA HUB"
           >
-            <Logo variant="light" size="md" />
+            <Logo variant="compact" size="md" />
           </div>
 
-          {/* Desktop Search - masqué sur la landing page */}
-          {!isLandingPage && (
-            <div className="hidden lg:flex items-center relative flex-1 max-w-xs mx-2">
-              <Search className="absolute left-3 w-3.5 h-3.5 text-slate-400" />
+          {/* Recherche — la SAISIE se fait ici, dans l'en-tête ; le modal affiche les résultats */}{" "}
+          {!isLandingPage && !hideSearch && (
+            <div className="hidden lg:flex items-center gap-3 flex-1 max-w-2xl mx-3 h-11 px-4 rounded-2xl bg-[#011D46]/80 border border-[#D69E25]/30 focus-within:border-[#D69E25] transition">
+              <Search className="w-4 h-4 text-[#D69E25] shrink-0" />
               <input
-                type="text"
+                id="app-search-input"
+                type="search"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Rechercher dans la boutique..."
-                className="w-full bg-[#011D46]/80 text-xs text-white placeholder-slate-400 pl-8 pr-3 py-1.5 rounded-full border border-[#D69E25]/30 focus:outline-none focus:border-[#D69E25] transition"
+                onChange={(event) => handleSearchInput(event.target.value)}
+                onFocus={() => onOpenSearch?.()}
+                placeholder="Rechercher une formation, un produit, un service…"
+                aria-label="Rechercher"
+                className="flex-1 min-w-0 bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none"
               />
+              {searchQuery.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="text-slate-400 hover:text-white transition shrink-0"
+                  aria-label="Effacer la recherche"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              ) : null}
             </div>
           )}
 
           {/* Global Controls Only */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Cart - masqué sur la landing page */}
-            {!isLandingPage && (
+            {/* Recherche (mobile / tablette) : déplie la barre de l'en-tête */}
+            {!isLandingPage && !hideSearch && (
               <button
-                onClick={() => setIsCartOpen(true)}
-                className="relative p-2 rounded-xl bg-[#011D46]/80 text-slate-200 hover:text-[#D69E25] border border-[#D69E25]/30 transition shadow"
-                title="Panier"
+                type="button"
+                onClick={() => setIsMobileSearchOpen((open) => !open)}
+                className="lg:hidden p-2 rounded-xl bg-[#011D46]/80 text-slate-200 hover:text-[#D69E25] border border-[#D69E25]/30 transition shadow"
+                title="Rechercher"
+                aria-label="Ouvrir la recherche"
               >
-                <ShoppingCart className="w-4 h-4" />
-                {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">
-                    {cartCount}
-                  </span>
-                )}
+                <Search className="w-4 h-4" />
               </button>
             )}
+
+            {/* Panier → barre du bas (badge) ; Académie et Marketplace → accueil. */}
 
             {/* Notifications - Popup Dropdown avec max 5 (masqué sur la landing page) */}
             {!isLandingPage && (
@@ -331,6 +357,37 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
           </div>
+
+          {/* Barre de recherche mobile : la SAISIE reste dans l'en-tête */}
+          {!isLandingPage && !hideSearch && isMobileSearchOpen && (
+            <div className="lg:hidden pb-3">
+              <div className="flex items-center gap-2 h-11 px-3 rounded-2xl bg-[#011D46]/80 border border-[#D69E25]/40 focus-within:border-[#D69E25] transition">
+                <Search className="w-4 h-4 text-[#D69E25] shrink-0" />
+                <input
+                  ref={mobileSearchRef}
+                  id="app-search-input-mobile"
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => handleSearchInput(event.target.value)}
+                  onFocus={() => onOpenSearch?.()}
+                  placeholder="Rechercher une formation, un produit…"
+                  aria-label="Rechercher"
+                  className="flex-1 min-w-0 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileSearchOpen(false);
+                    setSearchQuery("");
+                  }}
+                  className="text-slate-400 hover:text-white transition shrink-0"
+                  aria-label="Fermer la recherche"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </header>
     </>

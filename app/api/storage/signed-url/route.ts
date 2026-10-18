@@ -1,22 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSignedDownloadUrl, existsInR2 } from "@/lib/services/r2Storage";
+import { getSignedDownloadUrl, existsInR2, isPrivateKey } from "@/lib/services/r2Storage";
+import {
+  getStorageActor,
+  parseStorageKey,
+  canReadPrivateKey,
+} from "@/lib/server/storageAccess";
 
 export const dynamic = "force-dynamic";
 
+/** Durée maximale d'une URL signée pour un fichier PRIVÉ (6 h). */
+const MAX_PRIVATE_TTL = 6 * 60 * 60;
+/** Durée maximale pour une image publique (24 h). */
+const MAX_PUBLIC_TTL = 24 * 60 * 60;
+
 /**
  * POST /api/storage/signed-url
- * Body (JSON) :
- *   - key    : clé R2 complète du fichier (bucket/entityId/fileName)
- *   - expiresInSeconds : durée de validité en secondes (défaut 3600, max 86400)
+ * Body (JSON) : { key, expiresInSeconds? }
+ *
+ * • Dossier PUBLIC (images) → URL signée accordée à tous.
+ * • Dossier PRIVÉ (KYC, livrables produits, vidéos) → session obligatoire
+ *   ET vérification des droits en base (acheteur, formateur, propriétaire,
+ *   administrateur). Aucune donnée personnelle n'est servie sans contrôle.
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const key = (body?.key as string) || "";
-    const expiresIn = Math.min(
-      Math.max(Number(body?.expiresInSeconds) || 3600, 60),
-      86400
-    );
+    const key = String(body?.key || "");
+    const isPrivate = isPrivateKey(key);
 
     if (!key) {
       return NextResponse.json({ error: "Clé R2 manquante" }, { status: 400 });
@@ -27,6 +37,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Clé R2 invalide" }, { status: 400 });
     }
 
+    const parsed = parseStorageKey(key);
+    if (!parsed) {
+      return NextResponse.json({ error: "Clé R2 invalide" }, { status: 400 });
+    }
+
+    // ====== AUTORISATION ======
+    if (isPrivate) {
+      const actor = await getStorageActor(req);
+      if (!actor) {
+        return NextResponse.json(
+          { error: "Authentification requise pour ce fichier." },
+          { status: 401 }
+        );
+      }
+      const allowed = await canReadPrivateKey(actor, parsed);
+      if (!allowed) {
+        return NextResponse.json(
+          { error: "Vous n'avez pas accès à ce fichier." },
+          { status: 403 }
+        );
+      }
+    }
+
+    const maxTtl = isPrivate ? MAX_PRIVATE_TTL : MAX_PUBLIC_TTL;
+    const expiresIn = Math.min(
+      Math.max(Number(body?.expiresInSeconds) || (isPrivate ? 3600 : 7200), 60),
+      maxTtl
+    );
+
     // Vérifier que le fichier existe
     const exists = await existsInR2(key);
     if (!exists) {
@@ -36,7 +75,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Générer l'URL signée
     const signedUrl = await getSignedDownloadUrl(key, expiresIn);
 
     return NextResponse.json({
@@ -44,6 +82,7 @@ export async function POST(req: NextRequest) {
       key,
       url: signedUrl,
       expiresIn,
+      private: isPrivate,
     });
   } catch (error: any) {
     console.error("[R2 Signed URL] Erreur:", error);

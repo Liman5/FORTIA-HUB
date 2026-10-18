@@ -20,28 +20,37 @@ export function AdminHeader({
   onLogout,
 }: AdminHeaderProps) {
   const { isDarkMode, toggleTheme } = useTheme();
-  const [now, setNow] = useState(new Date());
+  // ⚠️ Hydratation : aucune heure n'est produite pendant le rendu serveur ni
+  // au premier rendu client. `now` reste `null` jusqu'au montage, ce qui rend
+  // le HTML serveur et le premier rendu client IDENTIQUES (sinon React signale
+  // « Hydration failed » car l'heure change entre les deux).
+  const [now, setNow] = useState<Date | null>(null);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
-  // Horloge temps réel
+  // Horloge temps réel (démarrée APRÈS le montage)
   useEffect(() => {
+    setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const dateStr = now.toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-  const timeStr = now.toLocaleTimeString("fr-FR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const dateStr = now
+    ? now.toLocaleDateString("fr-FR", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "";
+  const timeStr = now
+    ? now.toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : "--:--:--";
 
   // Fermer au clic extérieur
   useEffect(() => {
@@ -83,7 +92,9 @@ export function AdminHeader({
           {/* Horloge mobile compacte */}
           <div className="md:hidden px-2 py-1 bg-[#011D46]/80 border border-[#D69E25]/30 rounded-lg">
             <span className="text-[11px] font-black text-white tabular-nums">
-              {now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+              {now
+                ? now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+                : "--:--"}
             </span>
           </div>
 

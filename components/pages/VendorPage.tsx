@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { useAppStore } from "@/lib/store/AppStore";
+import { useAuth, useMarketplace } from "@/lib/store/domains/contexts";
 import { useActiveSection } from "@/lib/store/useActiveSection";
 import { VendorDashboard } from "@/components/VendorDashboard";
 import { Lock } from "lucide-react";
@@ -13,22 +13,8 @@ function getStoreSlug(store: { slug?: string; name?: string }): string {
 }
 
 export function VendorPage() {
-  const {
-    isUserLoggedIn,
-    userProfile,
-    stores,
-    marketplaceProducts,
-    marketplaceOrders,
-    payoutRequests,
-    addProduct,
-    updateProduct,
-    deleteProduct,
-    updateStore,
-    requestPayout,
-    openStore,
-    setOpenAuthModal,
-    setAuthMode,
-  } = useAppStore();
+  const { isUserLoggedIn, userProfile } = useAuth();
+  const { stores, marketplaceProducts, marketplaceOrders, payoutRequests, addProduct, updateProduct, deleteProduct, updateStore, requestPayout, openStore } = useMarketplace();
 
   const { setActiveTab } = useActiveSection();
   const router = useRouter();
@@ -50,10 +36,7 @@ export function VendorPage() {
             </p>
           </div>
           <button
-            onClick={() => {
-              setAuthMode("login");
-              setOpenAuthModal(true);
-            }}
+            onClick={() => router.push("/login")}
             className="px-6 py-3 bg-[#D69E25] text-[#021231] font-black rounded-xl text-xs shadow-lg hover:bg-amber-400 transition cursor-pointer"
           >
             Se Connecter à Mon Compte

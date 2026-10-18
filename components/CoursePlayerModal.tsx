@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Course, Lesson, Certificate } from '../types';
 import { generatePDFCertificate, triggerCelebrationConfetti } from '../utils/pdfGenerator';
+import { resolveStorageUrl } from '@/lib/services/clientUpload';
 import {
   saveLessonOffline,
   loadOfflineVideoUrl,
@@ -122,6 +123,10 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   // ===== Copie hors-ligne (chiffrée AES en local) =====
   const [offlineReady, setOfflineReady] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState(false);
+  /** Progression du téléchargement HORS-LIGNE de tout le cours. */
+  const [courseDownload, setCourseDownload] = useState<{ done: number; total: number } | null>(
+    null
+  );
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const [offlineCode, setOfflineCode] = useState("");
   const [localVideoUrl, setLocalVideoUrl] = useState<{ url: string; revoke: () => void } | null>(null);
@@ -147,6 +152,92 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userAccountId, course.id, currentLesson?.id]);
 
+  // Les vidéos sont stockées dans le bucket PRIVÉ : `videoUrl` contient donc une
+  // CLÉ (« course-media/… »), pas une URL publique. On la résout en URL signée
+  // au moment de la lecture (le serveur vérifie que l'apprenant y a droit).
+  const [signedVideoUrl, setSignedVideoUrl] = useState<string>("");
+
+  useEffect(() => {
+    const raw = currentLesson?.videoUrl || "";
+    setSignedVideoUrl("");
+    if (!raw) return;
+
+    // URL http(s) directement exploitable
+    if (/^https?:\/\//i.test(raw) && !raw.includes("X-Amz-Signature")) {
+      setSignedVideoUrl(raw);
+      return;
+    }
+
+    let cancelled = false;
+    resolveStorageUrl(raw)
+      .then((url) => {
+        if (!cancelled && url) setSignedVideoUrl(url);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentLesson?.id, currentLesson?.videoUrl]);
+
+  /**
+   * Télécharge TOUT le cours pour le mode hors-ligne (file d'attente séquentielle).
+   * Chaque vidéo est d'abord résolue en URL signée (bucket privé), puis chiffrée
+   * et stockée dans IndexedDB par `saveLessonOffline`.
+   */
+  const downloadWholeCourseOffline = async () => {
+    if (!userAccountId || !course?.chapters?.length) return;
+
+    const lessons = course.chapters
+      .flatMap((chapter) => chapter.lessons || [])
+      .filter((lesson) => !!lesson.videoUrl);
+
+    if (lessons.length === 0) {
+      setOfflineError("Aucune vidéo à télécharger dans ce cours.");
+      return;
+    }
+
+    setOfflineError(null);
+    setCourseDownload({ done: 0, total: lessons.length });
+
+    const already = new Set<string>();
+    for (const lesson of lessons) {
+      try {
+        if (await isLessonOffline(userAccountId, course.id, lesson.id)) {
+          already.add(lesson.id);
+        }
+      } catch {
+        // ignore : on retente le téléchargement
+      }
+    }
+
+    let done = already.size;
+    setCourseDownload({ done, total: lessons.length });
+
+    for (const lesson of lessons) {
+      if (already.has(lesson.id)) continue;
+      try {
+        const resolved = await resolveStorageUrl(lesson.videoUrl || "");
+        if (resolved) {
+          await saveLessonOffline({
+            userId: userAccountId,
+            courseId: course.id,
+            lessonId: lesson.id,
+            videoUrl: resolved,
+            videoProtected: !!lesson.videoProtected,
+            videoHash: lesson.videoCodeHash,
+          } as never);
+        }
+      } catch {
+        // On poursuit la file : une leçon en échec ne bloque pas les autres
+      }
+      done += 1;
+      setCourseDownload({ done, total: lessons.length });
+    }
+
+    setCourseDownload(null);
+  };
+
   const downloadForOffline = async () => {
     if (!userAccountId || !currentLesson?.id) return;
     setOfflineBusy(true);
@@ -156,7 +247,8 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
         userId: userAccountId,
         courseId: course.id,
         lessonId: currentLesson.id,
-        videoUrl: currentLesson.videoUrl || "",
+        // La vidéo privée doit être résolue en URL signée AVANT le téléchargement
+        videoUrl: signedVideoUrl || currentLesson.videoUrl || "",
         videoProtected: !!currentLesson.videoProtected,
         videoCodeHash: currentLesson.videoCodeHash,
         code: currentLesson.videoProtected ? offlineCode.trim() : undefined,
@@ -578,7 +670,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                     <video
                       key={currentLesson?.id}
                       className="absolute inset-0 w-full h-full object-contain bg-black"
-                      src={localVideoUrl ? localVideoUrl.url : currentLesson?.videoUrl}
+                      src={localVideoUrl ? localVideoUrl.url : signedVideoUrl || currentLesson?.videoUrl}
                       poster={course.image}
                       controls
                       controlsList="nodownload"
@@ -624,6 +716,20 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                       </p>
 
                       <div className="flex flex-wrap items-center gap-2">
+                        {/* Téléchargement de TOUT le cours (file d'attente) */}
+                        <button
+                          type="button"
+                          onClick={downloadWholeCourseOffline}
+                          disabled={!!courseDownload}
+                          className="px-3.5 py-2 bg-white/5 text-slate-200 font-black text-[11px] rounded-lg border border-white/20 transition flex items-center gap-1.5 disabled:opacity-60"
+                          title="Enregistrer toutes les vidéos du cours pour la lecture hors-ligne"
+                        >
+                          <Download className="w-3.5 h-3.5 text-[#D69E25]" />
+                          {courseDownload
+                            ? `Cours : ${courseDownload.done}/${courseDownload.total}…`
+                            : "Télécharger tout le cours"}
+                        </button>
+
                         {!offlineReady ? (
                           <button
                             type="button"

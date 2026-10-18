@@ -1,7 +1,21 @@
 // ============================================================
-// FORTIA HUB — Service de stockage Cloudflare R2 (compatible S3)
-// Description : Upload, suppression et génération d'URL signées
-// Utilise @aws-sdk/client-s3 avec l'endpoint R2 Cloudflare.
+// FORTIA HUB — Stockage Cloudflare R2 (compatible S3)
+// ------------------------------------------------------------
+// ⚠️ SÉCURITÉ : DEUX buckets distincts
+//
+//   1. BUCKET PUBLIC  (CLOUDFLARE_BUCKET_NAME)
+//      → uniquement des IMAGES destinées à être visibles par tous :
+//        `store-images`, `blog-images`, `site-media`, `product-images`
+//      → accessible via le domaine public (URL permanente acceptée)
+//
+//   2. BUCKET PRIVÉ   (CLOUDFLARE_PRIVATE_BUCKET_NAME)
+//      → documents d'identité KYC, livrables produits (PDF/ZIP),
+//        vidéos et supports de formation, attestations
+//      → AUCUN domaine public activé : lecture par URL signée seulement,
+//        après vérification des droits dans /api/storage/signed-url
+//
+// Règle absolue : `getPublicObjectUrl()` ne construit JAMAIS d'URL
+// publique pour un dossier privé (elle renvoie une chaîne vide).
 // ============================================================
 
 import {
@@ -18,13 +32,30 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const R2_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || "";
 const R2_ACCESS_KEY_ID = process.env.CLOUDFLARE_BUCKET_ACCESS_KEY || "";
 const R2_SECRET_ACCESS_KEY = process.env.CLOUDFLARE_BUCKET_SECRET_KEY || "";
-const R2_BUCKET_NAME = process.env.CLOUDFLARE_BUCKET_NAME || "fortia-hub-storage";
+
+/**
+ * Clés DÉDIÉES au bucket privé (facultatif, recommandé).
+ * Si elles sont renseignées, tous les accès au bucket privé (KYC, livrables
+ * produits, vidéos) utilisent ce jeton à privilèges limités ; sinon les clés
+ * principales servent de repli.
+ *
+ * Variables : CLOUDFLARE_PRIVATE_BUCKET_ACCESS_KEY / _SECRET_KEY
+ */
+const R2_PRIVATE_ACCESS_KEY_ID = process.env.CLOUDFLARE_PRIVATE_BUCKET_ACCESS_KEY || "";
+const R2_PRIVATE_SECRET_ACCESS_KEY = process.env.CLOUDFLARE_PRIVATE_BUCKET_SECRET_KEY || "";
+
+/** Bucket PUBLIC (images uniquement). */
+const R2_PUBLIC_BUCKET = process.env.CLOUDFLARE_BUCKET_NAME || "fortia-hub-storage";
+
+/** Bucket PRIVÉ (KYC, livrables, vidéos). Vide = non configuré. */
+const R2_PRIVATE_BUCKET = process.env.CLOUDFLARE_PRIVATE_BUCKET_NAME || "";
+
 const R2_ENDPOINT =
   process.env.CLOUDFLARE_BUCKET_ENDPOINT ||
   `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+
 const R2_PUBLIC_URL =
-  process.env.CLOUDFLARE_BUCKET_PUBLIC_URL ||
-  `https://storage.fortia-hub.com`;
+  process.env.CLOUDFLARE_BUCKET_PUBLIC_URL || "https://storage.fortia-hub.com";
 
 if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
   console.warn(
@@ -32,7 +63,15 @@ if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
   );
 }
 
-// --- Client S3 compatible R2 ---
+if (!R2_PRIVATE_BUCKET) {
+  console.warn(
+    "[R2] ⚠️ CLOUDFLARE_PRIVATE_BUCKET_NAME n'est pas défini : les documents KYC, " +
+      "livrables produits et vidéos de formation restent dans le bucket public. " +
+      "Créez un bucket privé (sans domaine public) et renseignez la variable."
+  );
+}
+
+// --- Client S3 compatible R2 (bucket PUBLIC : images) ---
 export const r2Client = new S3Client({
   region: "auto",
   endpoint: R2_ENDPOINT,
@@ -41,6 +80,69 @@ export const r2Client = new S3Client({
     secretAccessKey: R2_SECRET_ACCESS_KEY,
   },
 });
+
+// --- Client S3 dédié au bucket PRIVÉ (clés dédiées, sinon repli) ---
+const r2PrivateClient = new S3Client({
+  region: "auto",
+  endpoint: R2_ENDPOINT,
+  credentials: {
+    accessKeyId: R2_PRIVATE_ACCESS_KEY_ID || R2_ACCESS_KEY_ID,
+    secretAccessKey: R2_PRIVATE_SECRET_ACCESS_KEY || R2_SECRET_ACCESS_KEY,
+  },
+});
+
+/**
+ * Sélectionne le client à utiliser selon le bucket cible : jeton dédié au
+ * bucket privé s'il est configuré, sinon jeton principal.
+ */
+function clientForBucket(bucket: string): S3Client {
+  const hasDedicatedKeys = !!R2_PRIVATE_ACCESS_KEY_ID && !!R2_PRIVATE_SECRET_ACCESS_KEY;
+  if (bucket === R2_PRIVATE_BUCKET && hasDedicatedKeys) return r2PrivateClient;
+  return r2Client;
+}
+
+/** Les clés dédiées au bucket privé sont-elles configurées ? */
+export function hasDedicatedPrivateKeys(): boolean {
+  return !!R2_PRIVATE_ACCESS_KEY_ID && !!R2_PRIVATE_SECRET_ACCESS_KEY;
+}
+
+// --- Dossiers publics / privés ---
+/** Dossiers dont les fichiers peuvent être exposés publiquement (images). */
+export const PUBLIC_FOLDER_NAMES = [
+  "store-images",
+  "blog-images",
+  "site-media",
+  "product-images",
+] as const;
+
+/** Indique si un dossier (1er segment de la clé) est public. */
+export function isPublicFolder(folder: string): boolean {
+  return (PUBLIC_FOLDER_NAMES as readonly string[]).includes(folder);
+}
+
+/** Indique si la clé correspond à un objet privé. */
+export function isPrivateKey(key: string): boolean {
+  const [folder] = String(key || "").split("/");
+  return !!folder && !isPublicFolder(folder);
+}
+
+/**
+ * Détermine le bucket cible à partir de la clé.
+ * Les dossiers privés sont écrits dans le bucket privé.
+ */
+export function bucketForKey(key: string): string {
+  if (isPublicFolder(String(key || "").split("/")[0])) return R2_PUBLIC_BUCKET;
+  return R2_PRIVATE_BUCKET || R2_PUBLIC_BUCKET;
+}
+
+/** Le bucket privé est-il configuré ? */
+export function isPrivateBucketConfigured(): boolean {
+  return !!R2_PRIVATE_BUCKET;
+}
+
+export function getBucketNames(): { publicBucket: string; privateBucket: string } {
+  return { publicBucket: R2_PUBLIC_BUCKET, privateBucket: R2_PRIVATE_BUCKET };
+}
 
 // --- Utilitaires de chemin ---
 export interface R2KeyParts {
@@ -60,9 +162,7 @@ export function buildR2Key(bucket: string, entityId: string, fileName: string): 
   return `${safeBucket}/${safeEntity}/${safeName}`;
 }
 
-/**
- * Décompose une clé R2 en segments.
- */
+/** Décompose une clé R2 en segments. */
 export function parseR2Key(key: string): R2KeyParts {
   const parts = key.split("/");
   return {
@@ -72,9 +172,7 @@ export function parseR2Key(key: string): R2KeyParts {
   };
 }
 
-/**
- * Extrait uniquement le nom de fichier (sans chemin).
- */
+/** Extrait uniquement le nom de fichier (sans chemin). */
 export function getFileNameFromKey(key: string): string {
   const parts = key.split("/");
   return parts[parts.length - 1] || key;
@@ -83,13 +181,16 @@ export function getFileNameFromKey(key: string): string {
 // --- Opérations de base ---
 
 /**
- * Uploade un fichier (Buffer, Uint8Array ou string) vers R2.
- * @param bucket   Bucket R2 (ex: 'product-files', 'store-images', 'course-media', 'kyc-documents', 'blog-images', 'site-media')
- * @param entityId ID de l'entité (produit, boutique, cours, soumission KYC, article)
- * @param fileName Nom du fichier avec extension
- * @param body     Contenu du fichier
+ * Téléverse un fichier vers R2 dans le bucket approprié (public ou privé
+ * selon le 1er segment de la clé).
+ *
+ * @param bucket      Dossier logique (ex: 'product-files', 'store-images'…)
+ * @param entityId    ID de l'entité (produit, boutique, cours, dossier KYC…)
+ * @param fileName    Nom de fichier avec extension
+ * @param body        Contenu
  * @param contentType Type MIME
- * @param isPublic Rendre l'objet public (lecture via URL publique)
+ * @param isPublic    Accepté pour compatibilité : la destination réelle est
+ *                    décidée par le dossier (jamais par ce paramètre).
  */
 export async function uploadToR2(
   bucket: string,
@@ -98,92 +199,96 @@ export async function uploadToR2(
   body: Buffer | Uint8Array | string,
   contentType: string,
   isPublic = false
-): Promise<{ key: string; url: string }> {
+): Promise<{ key: string; url: string; bucket: string }> {
   const key = buildR2Key(bucket, entityId, fileName);
+  const targetBucket = bucketForKey(key);
+  const publiclyReadable = isPublicFolder(bucket) && isPublic;
 
-  await r2Client.send(
+  await clientForBucket(targetBucket).send(
     new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
+      Bucket: targetBucket,
       Key: key,
       Body: body,
       ContentType: contentType,
-      ...(isPublic
-        ? {}
-        : {
-            // Pour les buckets privés, le bucket R2 doit être configuré
-            // avec une règle de durée de vie ou les fichiers seront
-            // accessibles via URL signée uniquement.
-          }),
     })
   );
 
   return {
     key,
-    url: `${R2_PUBLIC_URL}/${key}`,
+    // Aucune URL publique n'est jamais construite pour un objet privé.
+    url: publiclyReadable ? getPublicObjectUrl(key) : "",
+    bucket: targetBucket,
   };
 }
 
-/**
- * Supprime un fichier de R2.
- */
+/** Supprime un fichier de R2 (dans le bucket approprié). */
 export async function deleteFromR2(key: string): Promise<void> {
-  await r2Client.send(
+  const bucket = bucketForKey(key);
+  await clientForBucket(bucket).send(
     new DeleteObjectCommand({
-      Bucket: R2_BUCKET_NAME,
+      Bucket: bucket,
       Key: key,
     })
   );
 }
 
 /**
- * Génère une URL signée (accès temporaire) pour un fichier privé.
- * @param key     Clé R2 complète (bucket/entity/file)
- * @param expiresInSeconds Durée de validité en secondes (défaut 1h)
+ * URL signée de LECTURE (accès temporaire) — seule voie d'accès aux
+ * fichiers privés. L'autorisation est vérifiée par l'appelant
+ * (`/api/storage/signed-url`).
  */
 export async function getSignedDownloadUrl(
   key: string,
-  expiresInSeconds = 3600
+  expiresInSeconds = 900
 ): Promise<string> {
+  const bucket = bucketForKey(key);
   const command = new GetObjectCommand({
-    Bucket: R2_BUCKET_NAME,
+    Bucket: bucket,
     Key: key,
   });
-  return getSignedUrl(r2Client, command, { expiresIn: expiresInSeconds });
+  return getSignedUrl(clientForBucket(bucket), command, { expiresIn: expiresInSeconds });
 }
 
 /**
- * URL publique lisible d'un objet R2 (domaine public configuré).
+ * URL publique permanente d'un objet.
+ * ⚠️ Renvoie une chaîne vide pour tout fichier privé (KYC, livrables,
+ * vidéos de formation) : ces fichiers ne doivent jamais être exposés.
  */
 export function getPublicObjectUrl(key: string): string {
+  if (isPrivateKey(key)) {
+    console.warn(
+      `[R2] Refus de générer une URL publique pour un objet privé : ${key}. ` +
+        "Utilisez une URL signée (/api/storage/signed-url)."
+    );
+    return "";
+  }
   return `${R2_PUBLIC_URL}/${key}`;
 }
 
 /**
- * Génère une URL signée PUT permettant un upload DIRECT depuis le navigateur
- * vers R2 (sans transiter par le serveur Next.js → pas de limite de taille
- * du corps de requête, indispensable pour les vidéos de formation).
+ * URL signée PUT pour un upload DIRECT depuis le navigateur (vidéos volumineuses).
  */
 export async function getPresignedUploadUrl(
   key: string,
   contentType: string,
   expiresInSeconds = 900
 ): Promise<string> {
+  const bucket = bucketForKey(key);
   const command = new PutObjectCommand({
-    Bucket: R2_BUCKET_NAME,
+    Bucket: bucket,
     Key: key,
     ContentType: contentType,
   });
-  return getSignedUrl(r2Client, command, { expiresIn: expiresInSeconds });
+  return getSignedUrl(clientForBucket(bucket), command, { expiresIn: expiresInSeconds });
 }
 
-/**
- * Vérifie si un objet existe dans R2.
- */
+/** Vérifie si un objet existe dans R2. */
 export async function existsInR2(key: string): Promise<boolean> {
+  const bucket = bucketForKey(key);
   try {
-    await r2Client.send(
+    await clientForBucket(bucket).send(
       new HeadObjectCommand({
-        Bucket: R2_BUCKET_NAME,
+        Bucket: bucket,
         Key: key,
       })
     );
@@ -193,63 +298,108 @@ export async function existsInR2(key: string): Promise<boolean> {
   }
 }
 
-/**
- * Liste les fichiers d'un dossier (préfixe) dans R2.
- */
+/** Liste les fichiers d'un dossier (préfixe) dans R2. */
 export async function listR2Objects(prefix = ""): Promise<string[]> {
-  const result = await r2Client.send(
+  const bucket = bucketForKey(prefix);
+  const result = await clientForBucket(bucket).send(
     new ListObjectsV2Command({
-      Bucket: R2_BUCKET_NAME,
+      Bucket: bucket,
       Prefix: prefix,
     })
   );
   return (result.Contents || []).map((obj) => obj.Key || "");
 }
 
-// --- Helpers pour les buckets FORTIA HUB ---
-
+// ============================================================
+// DOSSIERS FORTIA HUB
+// ============================================================
 export const R2_BUCKETS = {
+  // --- Dossiers PRIVÉS (bucket privé, URL signées uniquement) ---
+  /** Livrables produits téléchargeables (PDF, ZIP…) */
   PRODUCT_FILES: "product-files",
+  /** Vidéos et supports de formation */
   COURSE_MEDIA: "course-media",
+  /** Pièces d'identité et documents KYC */
   KYC_DOCUMENTS: "kyc-documents",
+  // --- Dossiers PUBLICS (bucket public, images visibles) ---
+  /** Logos et bannières de boutiques */
   STORE_IMAGES: "store-images",
+  /** Images de produits */
+  PRODUCT_IMAGES: "product-images",
+  /** Images du site (CMS) */
   SITE_MEDIA: "site-media",
+  /** Images d'articles de blog */
   BLOG_IMAGES: "blog-images",
 } as const;
 
 export type R2BucketName = (typeof R2_BUCKETS)[keyof typeof R2_BUCKETS];
 
 /**
- * Uploade une image de boutique (logo/bannière) — bucket public store-images.
+ * Vérifie qu'un dossier est autorisé pour un usage donné.
+ * Empêche l'écriture dans un dossier inconnu (protection contre les abus).
  */
-export function uploadStoreImage(storeId: string, fileName: string, body: Buffer | Uint8Array, contentType: string) {
+export function isAllowedFolder(folder: string): boolean {
+  return (Object.values(R2_BUCKETS) as readonly string[]).includes(folder);
+}
+
+/** Téléverse une image de boutique (logo/bannière) — dossier PUBLIC. */
+export function uploadStoreImage(
+  storeId: string,
+  fileName: string,
+  body: Buffer | Uint8Array,
+  contentType: string
+) {
   return uploadToR2(R2_BUCKETS.STORE_IMAGES, storeId, fileName, body, contentType, true);
 }
 
-/**
- * Uploade un fichier livrable produit — bucket privé product-files.
- */
-export function uploadProductFile(productId: string, fileName: string, body: Buffer | Uint8Array, contentType: string) {
-  return uploadToR2(R2_BUCKETS.PRODUCT_FILES, productId, fileName, body, contentType);
+/** Téléverse une image de produit — dossier PUBLIC. */
+export function uploadProductImage(
+  productId: string,
+  fileName: string,
+  body: Buffer | Uint8Array,
+  contentType: string
+) {
+  return uploadToR2(R2_BUCKETS.PRODUCT_IMAGES, productId, fileName, body, contentType, true);
 }
 
-/**
- * Uploade un média de cours (vidéo/PDF) — bucket privé course-media.
- */
-export function uploadCourseMedia(courseId: string, fileName: string, body: Buffer | Uint8Array, contentType: string) {
-  return uploadToR2(R2_BUCKETS.COURSE_MEDIA, courseId, fileName, body, contentType);
+/** Téléverse un fichier livrable produit — dossier PRIVÉ. */
+export function uploadProductFile(
+  productId: string,
+  fileName: string,
+  body: Buffer | Uint8Array,
+  contentType: string
+) {
+  return uploadToR2(R2_BUCKETS.PRODUCT_FILES, productId, fileName, body, contentType, false);
 }
 
-/**
- * Uploade un document KYC — bucket privé kyc-documents.
- */
-export function uploadKycDocument(submissionId: string, fileName: string, body: Buffer | Uint8Array, contentType: string) {
-  return uploadToR2(R2_BUCKETS.KYC_DOCUMENTS, submissionId, fileName, body, contentType);
+/** Téléverse un média de cours (vidéo/PDF) — dossier PRIVÉ. */
+export function uploadCourseMedia(
+  courseId: string,
+  fileName: string,
+  body: Buffer | Uint8Array,
+  contentType: string
+) {
+  return uploadToR2(R2_BUCKETS.COURSE_MEDIA, courseId, fileName, body, contentType, false);
 }
 
-/**
- * Uploade une image de blog — bucket public blog-images.
- */
-export function uploadBlogImage(postId: string, fileName: string, body: Buffer | Uint8Array, contentType: string) {
-  return uploadToR2(R2_BUCKETS.BLOG_IMAGES, postId, fileName, body, contentType);
+/** Téléverse un document KYC — dossier PRIVÉ. */
+export function uploadKycDocument(
+  submissionId: string,
+  fileName: string,
+  body: Buffer | Uint8Array,
+  contentType: string
+) {
+  return uploadToR2(R2_BUCKETS.KYC_DOCUMENTS, submissionId, fileName, body, contentType, false);
 }
+
+/** Téléverse une image de blog — dossier PUBLIC. */
+export function uploadBlogImage(
+  postId: string,
+  fileName: string,
+  body: Buffer | Uint8Array,
+  contentType: string
+) {
+  return uploadToR2(R2_BUCKETS.BLOG_IMAGES, postId, fileName, body, contentType, true);
+}
+
+

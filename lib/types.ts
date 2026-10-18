@@ -12,6 +12,20 @@ export type CourseCategory =
   | 'secretariat'
   | 'informatique';
 
+/**
+ * Catégorie de formation telle que stockée en base
+ * (table `course_categories`) — utilisée pour construire les filtres.
+ */
+export interface CourseCategoryRecord {
+  id: string;
+  code: string;
+  label: string;
+  description?: string;
+  iconName?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
 export interface Lesson {
   id: string;
   title: string;
@@ -107,6 +121,10 @@ export interface Course {
   chapters: CourseChapter[];
   quiz?: QuizQuestion[];
   badge?: string;
+  /** Mise en avant éditoriale (colonne `is_featured` en base). */
+  isFeatured?: boolean;
+  /** Date de publication réelle (colonne `created_at`), utilisée par la vue « Nouveautés ». */
+  createdAt?: string;
 }
 
 export type DigitalProductType = 
@@ -160,6 +178,36 @@ export interface ServicePackage {
   featured?: boolean;         // Met en avant la carte
   isActive?: boolean;         // Visible sur la page services
   displayOrder?: number;      // Ordre d'affichage dans la page services
+  /** Visuel de la carte (image Cloudflare R2, dossier `site-media`).
+   *  Affiché à GAUCHE de la carte ; la description reste à droite. */
+  image?: string;
+  /** Point focal du recadrage de l'image (« 50% 50% », « 50% 20% »…) :
+   *  appliqué en `object-position` sur la carte, mobile comme web. */
+  imagePosition?: string;
+}
+
+// ============================================================
+// BANNIÈRES DU SITE (gérées depuis l'admin, affichées en haut du site)
+// ============================================================
+export type BannerAnimation = 'none' | 'fade' | 'slide' | 'zoom' | 'flip';
+export type BannerLinkTarget = 'internal' | 'external';
+
+export interface SiteBanner {
+  id: string;
+  title: string;
+  subtitle?: string;
+  /** Image importée sur Cloudflare R2 (dossier `site-media`). */
+  imageUrl: string;
+  /** Animation d'apparition / transition de la bannière. */
+  animation?: BannerAnimation;
+  /** Durée d'affichage de la bannière avant la suivante (millisecondes). */
+  intervalMs?: number;
+  /** Bouton d'action : libellé + lien (interne ou externe). */
+  buttonLabel?: string;
+  buttonLink?: string;
+  linkTarget?: BannerLinkTarget;
+  isActive?: boolean;
+  displayOrder?: number;
 }
 
 export interface CartItem {
@@ -319,7 +367,7 @@ export interface UserProfile {
   email: string;
   phone: string;
   avatar: string;
-  accountType: 'buyer' | 'freelance' | 'enterprise';
+  accountType: 'buyer' | 'freelance' | 'enterprise' | 'admin' | 'superadmin' | 'super_admin';
   badge: BadgeType;
   twoFactorEnabled?: boolean;
   kycStatus: 'non_soumis' | 'en_attente' | 'approuve' | 'rejete';
@@ -442,6 +490,8 @@ export interface MarketplaceOrder {
   productTitle: string;
   amountUsd: number;
   platformCommissionUsd: number; // e.g., 10%
+  /** Type de vente, pour l'application du taux de commission du bon domaine. */
+  saleScope?: "digital_product" | "course" | "service" | "storage";
   vendorEarningsUsd: number;      // e.g., 90%
   paymentGateway: 'Wave API' | 'Orange Money API' | 'MTN Money API' | 'Card Stripe API' | 'PayPal API' | 'Crypto USDT TRC20';
   transactionRef: string;

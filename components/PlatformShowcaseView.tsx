@@ -41,14 +41,12 @@ interface PlatformShowcaseViewProps {
   setActiveTab: (tab: string) => void;
   onOpenAdminAuth?: () => void;
   siteContent?: SiteContent;
-  onOpenAuthModal?: (mode: 'login' | 'signup') => void;
 }
 
 export const PlatformShowcaseView: React.FC<PlatformShowcaseViewProps> = ({
   setActiveTab,
   onOpenAdminAuth,
-  siteContent,
-  onOpenAuthModal
+  siteContent
 }) => {
   const [activeLegalModal, setActiveLegalModal] = useState<'cgu' | 'privacy' | 'refund' | 'kyc' | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>('product');

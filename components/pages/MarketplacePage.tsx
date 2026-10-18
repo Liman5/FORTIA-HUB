@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { useAppStore } from "@/lib/store/AppStore";
+import { useMarketplace, useCommerce, useAuth, useUi } from "@/lib/store/domains/contexts";
 import { DigitalShop } from "@/components/DigitalShop";
 import { FreelanceMarketplace } from "@/components/FreelanceMarketplace";
 import { EnterpriseDirectory } from "@/components/EnterpriseDirectory";
@@ -11,9 +12,6 @@ import {
   ShoppingBag,
   Users,
   Building2,
-  BadgeCheck,
-  ShieldCheck,
-  Zap,
   Loader2,
 } from "lucide-react";
 
@@ -24,31 +22,41 @@ function getStoreSlug(store: { slug?: string; name?: string }): string {
 
 export function MarketplacePage() {
   const router = useRouter();
-  const {
-    marketplaceProducts,
-    stores,
-    addToCart,
-    setPaymentItems,
-    setPaymentGatewayOpen,
-    isAdmin,
-    deleteProduct,
-    updateProduct,
-    selectedStore,
-    setVendorApplicationModalOpen,
-    isUserLoggedIn,
-    setOpenAuthModal,
-    setAuthMode,
-    freelances,
-    enterprises,
-    feeConfig,
-    setKycModalOpen,
-    orderService,
-    platformLoaded,
-    searchQuery,
-    setSearchQuery,
-  } = useAppStore();
+  const searchParams = useSearchParams();
+    const { setVendorApplicationModalOpen, setKycModalOpen, searchQuery, setSearchQuery } = useUi();
+  const { isAdmin, isUserLoggedIn, feeConfig } = useAuth();
+  const { marketplaceProducts, stores, deleteProduct, updateProduct, selectedStore, freelances, enterprises } = useMarketplace();
+  const { addToCart, orderService } = useCommerce();
+  const { platformLoaded } = useAppStore();
 
   const [activeSection, setActiveSection] = useState<"shop" | "freelance" | "enterprise">("shop");
+
+  /* ----- Onglet et filtre pilotés par l'URL (?section=…&type=…) ----- */
+  const sectionParam = searchParams?.get("section") || null;
+  const typeParam = searchParams?.get("type") || null;
+
+  useEffect(() => {
+    if (sectionParam === "freelance") setActiveSection("freelance");
+    else if (sectionParam === "enterprise") setActiveSection("enterprise");
+    else if (sectionParam === "shop") setActiveSection("shop");
+  }, [sectionParam]);
+
+  const handleSectionChange = (section: "shop" | "freelance" | "enterprise") => {
+    setActiveSection(section);
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    if (section === "shop") params.delete("section");
+    else params.set("section", section);
+    const query = params.toString();
+    router.replace(query ? `/marketplace?${query}` : "/marketplace", { scroll: false });
+  };
+
+  const handleTypeFilterChange = (filterId: string) => {
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    if (!filterId || filterId === "all") params.delete("type");
+    else params.set("type", filterId);
+    const query = params.toString();
+    router.replace(query ? `/marketplace?${query}` : "/marketplace", { scroll: false });
+  };
 
   const handleInstantBuy = (item: {
     id: string;
@@ -58,16 +66,16 @@ export function MarketplacePage() {
     image: string;
     categoryLabel?: string;
   }) => {
-    setPaymentItems([item]);
-    setPaymentGatewayOpen(true);
+    // Un seul chemin d'achat : ajout au panier puis étape paiement de la page /cart.
+    addToCart(item);
+    router.push("/cart?payer=1");
   };
 
   const handleOpenVendorApplication = () => {
     if (isUserLoggedIn) {
       setVendorApplicationModalOpen(true);
     } else {
-      setAuthMode("login");
-      setOpenAuthModal(true);
+      router.push("/login");
     }
   };
 
@@ -78,21 +86,16 @@ export function MarketplacePage() {
 
   const handleOpenKyc = () => {
     if (!isUserLoggedIn) {
-      setAuthMode("login");
-      setOpenAuthModal(true);
+      router.push("/login");
     } else {
       setKycModalOpen(true);
     }
   };
 
-  const totalProducts = marketplaceProducts.filter(p => p.isPublished || isAdmin).length;
-  const totalFreelances = freelances.length;
-  const totalEnterprises = enterprises.length;
-
   const tabs = [
-    { id: "shop" as const, label: "Produits", icon: ShoppingBag, count: totalProducts },
-    { id: "freelance" as const, label: "Freelances", icon: Users, count: totalFreelances },
-    { id: "enterprise" as const, label: "Entreprises", icon: Building2, count: totalEnterprises },
+    { id: "shop" as const, label: "Produits", icon: ShoppingBag },
+    { id: "freelance" as const, label: "Freelances", icon: Users },
+    { id: "enterprise" as const, label: "Entreprises", icon: Building2 },
   ];
 
   // If a store is selected (ancien flux interne), redirige vers la page publique dédiée
@@ -136,56 +139,12 @@ export function MarketplacePage() {
         />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center space-y-4">
-            {/* Title */}
-            <motion.h1
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
-              className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-[1.1]"
-            >
-              Boutique Digitale &{" "}
-              <span className="animated-gradient-text inline-block">Freelances</span>
-            </motion.h1>
-
-            {/* Subtitle */}
-            <motion.p
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}
-              className="text-slate-400 text-xs sm:text-sm max-w-xl mx-auto font-medium leading-relaxed"
-            >
-              Produits numériques, ebooks et services freelance vérifiés KYC.
-            </motion.p>
-
-            {/* Trust badges */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.35 }}
-              className="flex flex-wrap items-center justify-center gap-2 text-[10px] font-semibold text-slate-400"
-            >
-              <span className="flex items-center gap-1.5 bg-white/5 backdrop-blur-xl border border-emerald-400/20 rounded-full px-2.5 py-1">
-                <BadgeCheck className="w-3 h-3 text-emerald-400" />
-                KYC vérifiés
-              </span>
-              <span className="flex items-center gap-1.5 bg-white/5 backdrop-blur-xl border border-[#D69E25]/20 rounded-full px-2.5 py-1">
-                <Zap className="w-3 h-3 text-[#D69E25]" />
-                Livraison 24h
-              </span>
-              <span className="flex items-center gap-1.5 bg-white/5 backdrop-blur-xl border border-sky-400/20 rounded-full px-2.5 py-1">
-                <ShieldCheck className="w-3 h-3 text-sky-400" />
-                Paiements sûrs
-              </span>
-            </motion.div>
-          </div>
-
           {/* Section Tabs */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.45, ease: "easeOut" }}
-            className="relative flex items-center justify-center gap-2 mt-10 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 max-w-md mx-auto"
+            className="relative flex items-center justify-center gap-2 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 max-w-md mx-auto"
           >
             <div className="absolute inset-0 bg-[#D69E25]/5 blur-xl rounded-2xl opacity-0" />
             {tabs.map((tab) => {
@@ -194,7 +153,7 @@ export function MarketplacePage() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveSection(tab.id)}
+                  onClick={() => handleSectionChange(tab.id)}
                   className={`relative flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 ${
                     isActive
                       ? "bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] shadow-lg shadow-[#D69E25]/20"
@@ -204,11 +163,6 @@ export function MarketplacePage() {
                   <Icon className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">{tab.label}</span>
                   <span className={`sm:hidden ${isActive ? "text-[#021231]" : "text-slate-400"}`}>{tab.label}</span>
-                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${
-                    isActive ? "bg-[#021231]/20 text-[#021231]" : "bg-white/10 text-slate-400"
-                  }`}>
-                    {tab.count}
-                  </span>
                 </button>
               );
             })}
@@ -233,6 +187,8 @@ export function MarketplacePage() {
             onOpenVendorApplication={handleOpenVendorApplication}
             onClearSearch={() => setSearchQuery("")}
             onSearchChange={setSearchQuery}
+            initialFilter={typeParam}
+            onFilterChange={handleTypeFilterChange}
           />
         )}
 

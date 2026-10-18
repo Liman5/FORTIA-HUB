@@ -6,9 +6,46 @@
 //   active le nouveau worker et recharge l'application.
 // - Après installation de l'app : demande la permission des
 //   notifications système et notifie le reste de l'app.
+// - ⚠️ EN DÉVELOPPEMENT : le service worker est DÉSACTIVÉ et les
+//   caches existants sont purgés (voir §1 ci-dessous).
 // ============================================================
 
 let swRegistrationStarted = false;
+
+/**
+ * §1. DÉVELOPPEMENT UNIQUEMENT — « kill switch » anti-cache.
+ *
+ * Pourquoi : le service worker sert les fichiers statiques en
+ * « stale-while-revalidate ». En développement, il continuait donc de servir
+ * d'ANCIENS chunks JavaScript : les modifications du code ne s'affichaient plus
+ * dans le navigateur, même après un rechargement de la page.
+ *
+ * On désinscrit donc tout worker et on purge les caches de l'application, puis
+ * on recharge la page UNE seule fois (garde `sessionStorage` : aucune boucle
+ * de rechargement possible).
+ */
+async function purgeServiceWorkersAndCaches(): Promise<void> {
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.filter((key) => key.includes("fortia")).map((key) => caches.delete(key))
+      );
+    }
+
+    // Au moins un worker était enregistré : on repart d'un état propre.
+    const alreadyPurged = sessionStorage.getItem("fortia_sw_purged") === "1";
+    if (registrations.length > 0 && !alreadyPurged) {
+      sessionStorage.setItem("fortia_sw_purged", "1");
+      window.location.reload();
+    }
+  } catch (error) {
+    console.warn("[PWA] Purge des caches impossible :", error);
+  }
+}
 
 export function registerServiceWorker() {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
@@ -16,6 +53,12 @@ export function registerServiceWorker() {
   }
   if (swRegistrationStarted) return;
   swRegistrationStarted = true;
+
+  // §1. Développement : aucun cache, jamais de version périmée.
+  if (process.env.NODE_ENV !== "production") {
+    void purgeServiceWorkersAndCaches();
+    return;
+  }
 
   // Enregistrement immédiat (ne pas attendre "load" : l'événement peut être
   // déjà passé lors de certaines navigations, ce qui bloquerait l'installation PWA).

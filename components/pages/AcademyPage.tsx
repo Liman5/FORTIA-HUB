@@ -1,18 +1,16 @@
 "use client";
 
 import React from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { useAppStore } from "@/lib/store/AppStore";
+import { useCatalog, useCommerce, useUi } from "@/lib/store/domains/contexts";
 import { CourseCatalog } from "@/components/CourseCatalog";
+import type { CourseCatalogFilters } from "@/components/CourseCatalog";
 import {
-  GraduationCap,
   Award,
-  Users,
-  BookOpen,
   ArrowRight,
   Sparkles,
-  Search,
-  Star,
   ShieldCheck,
   MonitorPlay,
   FileCheck2,
@@ -23,16 +21,33 @@ import {
 } from "lucide-react";
 
 export function AcademyPage() {
-  const { courses, addToCart, setSelectedCourseForPlayer, rateCourse, platformLoaded, searchQuery, setSearchQuery } = useAppStore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+    const { setSelectedCourseForPlayer, searchQuery, setSearchQuery } = useUi();
+  const { courses, trainingCenters, courseCategories, rateCourse, catalogTotal, catalogHasMore, loadMoreCourses } = useCatalog();
+  const { addToCart } = useCommerce();
+  const { platformLoaded } = useAppStore();
 
-  const totalStudents = courses.reduce((sum, c) => sum + (c.studentsCount || 0), 0);
-  const totalLessons = courses.reduce((sum, c) => sum + (c.lessonsCount || 0), 0);
-  const avgRating = courses.length > 0
-    ? (courses.reduce((sum, c) => sum + (c.rating || 0), 0) / courses.length).toFixed(1)
-    : "5.0";
+  /* Filtres issus de l'URL : liens directs + boutons Retour/Avancer */
+  const categoryParam = searchParams?.get("categorie") || null;
+  const viewParam = searchParams?.get("vue") || null;
+  const centerParam = searchParams?.get("centre") || null;
+  const centerName = centerParam
+    ? (trainingCenters || []).find((center) => center.id === centerParam)?.centerName || null
+    : null;
 
-  // Cartes de statistiques masquées (Formations Certifiantes, Étudiants, Leçons, Note)
-  const stats: { icon: React.ElementType; value: string; label: string; color: string }[] = [];
+  /** Synchronise l'URL (sans empiler l'historique) lorsqu'un filtre change. */
+  const handleFiltersChange = (next: CourseCatalogFilters) => {
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    (["categorie", "vue", "centre"] as const).forEach((key) => {
+      const value = next[key];
+      if (value === undefined) return;
+      if (value === null) params.delete(key);
+      else params.set(key, value);
+    });
+    const query = params.toString();
+    router.replace(query ? `/academy?${query}` : "/academy", { scroll: false });
+  };
 
   const highlights = [
     {
@@ -80,109 +95,24 @@ export function AcademyPage() {
 
   return (
     <div className="min-h-screen bg-[#021231] text-white selection:bg-[#D69E25]/30">
-      {/* ==================== HERO SECTION ==================== */}
-      <section className="relative overflow-hidden pt-10 pb-6">
-        {/* Background decorations */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(214,158,37,0.1)_0%,transparent_50%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(14,165,233,0.06)_0%,transparent_50%)]" />
-        <div className="absolute inset-0 bg-grid-pattern opacity-15" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/40 to-transparent" />
-
-        {/* Floating shapes */}
-        <motion.div
-          className="absolute top-16 right-8 w-20 h-20 rounded-2xl border border-[#D69E25]/20 bg-[#D69E25]/5 rotate-12 pointer-events-none"
-          animate={{ y: [0, -15, 0], rotate: [12, 24, 12] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute bottom-12 left-8 w-14 h-14 rounded-full border border-emerald-400/20 bg-emerald-400/5 pointer-events-none"
-          animate={{ y: [0, 12, 0], x: [0, -8, 0] }}
-          transition={{ duration: 9, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        />
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center space-y-4">
-            {/* Badge */}
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-              className="inline-flex items-center gap-2 bg-white/5 backdrop-blur-xl border border-[#D69E25]/40 px-5 py-2 rounded-full text-xs font-bold text-[#D69E25] shadow-[0_0_20px_rgba(214,158,37,0.15)]"
-            >
-              <motion.span
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="w-2 h-2 rounded-full bg-[#D69E25]"
-              />
-              <GraduationCap className="w-4 h-4" />
-              <span>Académie Certifiante FORTIA HUB</span>
-            </motion.div>
-
-            {/* Title */}
-            <motion.h1
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
-              className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.1]"
-            >
-              Catalogue des{" "}
-              <span className="animated-gradient-text inline-block">
-                Formations
-              </span>
-            </motion.h1>
-
-            {/* Subtitle */}
-            <motion.p
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}
-              className="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto font-medium leading-relaxed"
-            >
-              Des formations pratiques et certifiantes pour maîtriser les métiers du futur.
-              Certificats officiels avec QR Code de vérification unique.
-            </motion.p>
-
-            {/* Search Bar */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.3, ease: "easeOut" }}
-              className="max-w-xl mx-auto"
-            >
-              <div className="relative group">
-                <div className="absolute inset-0 bg-[#D69E25]/20 blur-xl rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500" />
-                <div className="relative flex items-center bg-white/5 backdrop-blur-xl border border-white/15 rounded-2xl overflow-hidden focus-within:border-[#D69E25]/60 focus-within:shadow-[0_0_30px_rgba(214,158,37,0.15)] transition-all duration-300">
-                  <Search className="w-5 h-5 text-slate-400 ml-4 shrink-0" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Rechercher une formation (IA, Crypto, Canva...)"
-                    className="w-full bg-transparent text-sm text-white placeholder-slate-500 px-3 py-4 focus:outline-none"
-                  />
-                  <button
-                    onClick={() => {}}
-                    className="mr-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-bold text-xs hover:brightness-110 active:scale-95 transition-all shrink-0"
-                  >
-                    Rechercher
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Stats Strip - Cartes de statistiques supprimées */}
-        </div>
-      </section>
-
       {/* ==================== COURSE CATALOG ==================== */}
-      <div id="academy-courses">
+      <div id="academy-courses" className="pt-6">
         <CourseCatalog
           courses={courses}
           onSelectCourse={(course) => setSelectedCourseForPlayer(course)}
           onAddToCart={addToCart}
           onRateCourse={(courseId, rating) => rateCourse(courseId, rating)}
           searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          dbCategories={courseCategories}
+          categoryParam={categoryParam}
+          viewParam={viewParam}
+          centerParam={centerParam}
+          centerName={centerName}
+          onFiltersChange={handleFiltersChange}
+          catalogTotal={catalogTotal}
+          hasMoreCourses={catalogHasMore}
+          onLoadMoreCourses={loadMoreCourses}
         />
       </div>
 

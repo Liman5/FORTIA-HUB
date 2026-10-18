@@ -80,7 +80,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   );
 
   // Financial Calculations
-  const grossRevenueUsd = storeOrders.reduce((sum, o) => sum + (o.amountUsd || 0), store?.totalRevenueUsd || 0);
+  const grossRevenueUsd = storeOrders.reduce((sum, o) => sum + (Number(o.amountUsd) || 0), Number(store?.totalRevenueUsd) || 0);
   const platformFeeUsd = Math.round(grossRevenueUsd * 0.10);
   const netEarningsUsd = grossRevenueUsd - platformFeeUsd;
   const netEarningsFcfa = Math.round(netEarningsUsd * 600);
@@ -299,7 +299,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   };
 
   return (
-    <div className="bg-[#021231] text-white min-h-screen pb-16 space-y-8">
+    <div className="bg-[#021231] text-white min-h-screen pb-16 space-y-8 fortia-flat">
       {/* Top Banner & Header */}
       <div className="vendor-header-banner relative bg-[#011D46] border-b border-[#D69E25]/30 overflow-hidden shadow-2xl" style={{ backgroundColor: "#011D46" }}>
         {/* Glow effects */}

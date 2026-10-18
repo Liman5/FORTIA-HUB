@@ -15,6 +15,8 @@ import {
   DollarSign,
   GraduationCap,
   X,
+  Images,
+  ShieldCheck,
 } from "lucide-react";
 
 export type AdminModuleKey =
@@ -22,13 +24,15 @@ export type AdminModuleKey =
   | "formations"
   | "produits"
   | "services"
+  | "bannieres"
   | "marketplace"
   | "support"
   | "formateurs"
   | "kyc"
   | "devis"
   | "frais"
-  | "cms";
+  | "cms"
+  | "admins";
 
 interface AdminSidebarProps {
   activeModule: AdminModuleKey;
@@ -36,6 +40,10 @@ interface AdminSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   badges?: Partial<Record<AdminModuleKey, number>>;
+  /** Affiche le module « Administrateurs » (réservé au superadministrateur). */
+  allowAdmins?: boolean;
+  /** Modules visibles pour ce profil (undefined = tous). */
+  allowedModules?: AdminModuleKey[];
 }
 
 const MODULES: {
@@ -72,6 +80,15 @@ const MODULES: {
     icon: Briefcase,
     color: "text-purple-400",
     activeBg: "bg-purple-500 text-white",
+  },
+  {
+    // MODULE INDÉPENDANT : bandeau animé du site (images R2, animation,
+    // bouton + lien interne/externe, durée d'affichage).
+    key: "bannieres",
+    label: "Bannières du Site",
+    icon: Images,
+    color: "text-[#D69E25]",
+    activeBg: "bg-[#D69E25] text-[#021231]",
   },
   {
     key: "marketplace",
@@ -122,9 +139,18 @@ const MODULES: {
     color: "text-cyan-400",
     activeBg: "bg-cyan-500 text-white",
   },
+  {
+    // Comptes administrateurs : visible UNIQUEMENT pour un superadministrateur
+    // (c'est lui qui crée les admins et définit leur mot de passe unique).
+    key: "admins",
+    label: "Administrateurs",
+    icon: ShieldCheck,
+    color: "text-[#D69E25]",
+    activeBg: "bg-[#D69E25] text-[#021231]",
+  },
 ];
 
-export function AdminSidebar({ activeModule, onModuleChange, isOpen, onClose, badges = {} }: AdminSidebarProps) {
+export function AdminSidebar({ activeModule, onModuleChange, isOpen, onClose, badges = {}, allowAdmins = false, allowedModules }: AdminSidebarProps) {
   return (
     <>
       {/* Backdrop mobile */}
@@ -157,7 +183,11 @@ export function AdminSidebar({ activeModule, onModuleChange, isOpen, onClose, ba
           </p>
 
           <nav className="space-y-1">
-            {MODULES.map((mod) => {
+            {MODULES.filter(
+              (mod) =>
+                (mod.key !== "admins" || allowAdmins) &&
+                (!allowedModules || allowedModules.includes(mod.key))
+            ).map((mod) => {
               const Icon = mod.icon;
               const isActive = activeModule === mod.key;
               const badge = badges[mod.key] || 0;

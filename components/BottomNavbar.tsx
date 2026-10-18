@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Home, GraduationCap, ShoppingBag, Briefcase, User } from "lucide-react";
+import { Home, Library, ShoppingCart, Briefcase, User } from "lucide-react";
 
 interface BottomNavbarProps {
   activeTab: string;
@@ -9,12 +9,17 @@ interface BottomNavbarProps {
   isUserLoggedIn?: boolean;
   onOpenAuthModal?: (mode: "signup" | "login") => void;
   isLandingPage?: boolean;
+  /** Nombre d'articles du panier (badge sur l'onglet Panier). */
+  cartCount?: number;
 }
 
 /**
- * BottomNavbar - Main navigation bar at the bottom
- * Contains the 5 primary navigation links:
- * Accueil, Académie, Marketplace, Services, Mon Compte
+ * Barre de navigation basse — les 5 raccourcis du quotidien :
+ * Accueil · Bibliothèque · Panier · Services · Compte.
+ *
+ * Académie et Marketplace sont volontairement ABSENTS : ces deux entrées
+ * font doublon avec l'en-tête et surtout avec l'accueil, qui présente déjà
+ * les formations et les produits de la boutique.
  */
 export const BottomNavbar: React.FC<BottomNavbarProps> = ({
   activeTab,
@@ -22,12 +27,20 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
   isUserLoggedIn,
   onOpenAuthModal,
   isLandingPage,
+  cartCount = 0,
 }) => {
   // Sur la landing page, le bouton Accueil est masqué
-  const navItems = [
+  const navItems: {
+    id: string;
+    label: string;
+    icon: React.ElementType;
+    targetTab: string;
+    requiresAuth?: boolean;
+    badge?: number;
+  }[] = [
     { id: "landing", label: "Accueil", icon: Home, targetTab: "landing" },
-    { id: "academy", label: "Académie", icon: GraduationCap, targetTab: "academy" },
-    { id: "marketplace", label: "Marketplace", icon: ShoppingBag, targetTab: "marketplace" },
+    { id: "library", label: "Bibliothèque", icon: Library, targetTab: "library", requiresAuth: true },
+    { id: "cart", label: "Panier", icon: ShoppingCart, targetTab: "cart", badge: cartCount },
     { id: "services", label: "Services", icon: Briefcase, targetTab: "services" },
     { id: "member", label: "Compte", icon: User, targetTab: "member", requiresAuth: true },
   ];
@@ -60,7 +73,14 @@ export const BottomNavbar: React.FC<BottomNavbarProps> = ({
               }`}
               title={item.label}
             >
-              <Icon className={`w-5 h-5 ${isActive ? "text-[#021231]" : "text-[#D69E25]"}`} />
+              <span className="relative">
+                <Icon className={`w-5 h-5 ${isActive ? "text-[#021231]" : "text-[#D69E25]"}`} />
+                {typeof item.badge === "number" && item.badge > 0 && (
+                  <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">
+                    {item.badge > 9 ? "9+" : item.badge}
+                  </span>
+                )}
+              </span>
               <span className={`text-[10px] font-bold ${isActive ? "text-[#021231]" : ""}`}>
                 {item.label}
               </span>

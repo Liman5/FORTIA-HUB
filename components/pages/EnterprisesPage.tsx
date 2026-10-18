@@ -1,23 +1,20 @@
 "use client";
 
 import React from "react";
-import { useAppStore } from "@/lib/store/AppStore";
+import { useRouter } from "next/navigation";
+import { useMarketplace, useAuth, useUi } from "@/lib/store/domains/contexts";
 import { EnterpriseDirectory } from "@/components/EnterpriseDirectory";
 
 export function EnterprisesPage() {
-  const {
-    enterprises,
-    feeConfig,
-    setKycModalOpen,
-    setOpenAuthModal,
-    isUserLoggedIn,
-    setAuthMode,
-  } = useAppStore();
+  const router = useRouter();
+    const { setKycModalOpen } = useUi();
+  const { feeConfig, isUserLoggedIn } = useAuth();
+  const { enterprises } = useMarketplace();
 
   const handleOpenKyc = () => {
     if (!isUserLoggedIn) {
-      setAuthMode("login");
-      setOpenAuthModal(true);
+      // La connexion est une PAGE dédiée : on y navigue, plus de pop-up.
+      router.push("/login");
     } else {
       setKycModalOpen(true);
     }

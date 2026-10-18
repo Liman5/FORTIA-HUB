@@ -22,56 +22,67 @@
 }
 
 /* ===== MODE CLAIR GLOBAL =====
-   En mode clair (html.light), on remplace les fonds sombres
-   par un gris très léger pour les sections et un blanc pur
-   pour les cartes, avec des bordures et ombres visibles.
+   En mode clair (html.light) : AUCUN fond gris. Fond de page et
+   surfaces = blanc pur (#ffffff). La séparation se fait par des
+   bordures très douces et l'espacement — jamais par une ombre.
 */
 html.light {
-  background-color: #f8fafc;
+  background-color: #ffffff;
 }
 
 html.light body,
 html.light .min-h-screen {
-  background-color: #f8fafc !important;
-  color: #0f172a;
+  background-color: #ffffff !important;
+  color: #1e293b;
 }
 
-/* --- Fonds sombres des sections -> gris très léger pour contraster --- */
+/* --- Tous les fonds sombres deviennent BLANC (plus aucun aplat gris) --- */
 html.light [class*="bg-[#021231]"] {
-  background-color: #f8fafc !important;
+  background-color: #ffffff !important;
 }
 html.light [class*="bg-[#011D46]"]:not(.vendor-header-banner) {
-  background-color: #f8fafc !important;
+  background-color: #ffffff !important;
 }
 html.light [class*="bg-[#010d24]"] {
   background-color: #ffffff !important;
 }
 html.light [class*="bg-slate-900"] {
-  background-color: #f8fafc !important;
+  background-color: #ffffff !important;
+}
+html.light [class*="bg-[#F4F6FA]"],
+html.light [class*="bg-slate-50"],
+html.light [class*="bg-slate-100"] {
+  background-color: #ffffff !important;
+}
+/* Rails / pistes (barres de progression, séparateurs minces) : neutre
+   très clair, nécessaire pour rester lisible sur fond blanc. */
+html.light [class*="bg-slate-700"],
+html.light [class*="bg-slate-800"] {
+  background-color: #eef2f7 !important;
 }
 html.light [class*="bg-gradient-to-b from-[#021231]"] {
-  background-color: #f8fafc !important;
+  background-color: #ffffff !important;
   background-image: none !important;
 }
 
-/* --- Textes clairs -> sombres --- */
+/* --- Textes clairs -> sombres, LISIBLES (sans noir pur écrasant) --- */
 html.light [class*="text-white"] {
-  color: #0f172a !important;
-}
-html.light [class*="text-slate-100"] {
-  color: #0f172a !important;
-}
-html.light [class*="text-slate-200"] {
   color: #1e293b !important;
 }
+html.light [class*="text-slate-100"] {
+  color: #22303f !important;
+}
+html.light [class*="text-slate-200"] {
+  color: #2b3a4d !important;
+}
 html.light [class*="text-slate-300"] {
-  color: #334155 !important;
+  color: #3d4d60 !important;
 }
 html.light [class*="text-slate-400"] {
-  color: #64748b !important;
+  color: #5a6a7d !important;
 }
 html.light [class*="text-slate-500"] {
-  color: #64748b !important;
+  color: #5f6d80 !important;
 }
 
 /* --- Bordures sombres -> bordure visible --- */
@@ -82,7 +93,7 @@ html.light [class*="border-slate-700"] {
   border-color: #cbd5e1 !important;
 }
 
-/* --- Cartes glassmorphism -> blanc pur avec bordure grise + ombre --- */
+/* --- Cartes glassmorphism -> blanc pur, SANS ombre (rendu plat) --- */
 html.light [class*="bg-white/[0.02]"],
 html.light [class*="bg-white/[0.03]"],
 html.light [class*="bg-white/[0.04]"],
@@ -92,7 +103,6 @@ html.light [class*="bg-white/[0.08]"],
 html.light [class*="bg-white/5"],
 html.light [class*="bg-white/10"] {
   background-color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
 }
 
 /* --- Bordures blanches des cartes -> gris bien visible --- */
@@ -103,10 +113,13 @@ html.light [class*="border-white/20"] {
   border-color: #cbd5e1 !important;
 }
 
-/* --- Overlays sombres sur images -> légers en mode clair --- */
+/* --- Survols : voile quasi invisible (plus de bandeau gris) ;
+       les voiles d'image (60→90) restent lisibles --- */
 html.light [class*="bg-[#021231]/30"],
 html.light [class*="bg-[#021231]/40"],
-html.light [class*="bg-[#021231]/50"],
+html.light [class*="bg-[#021231]/50"] {
+  background-color: rgba(2, 18, 49, 0.035) !important;
+}
 html.light [class*="bg-[#021231]/60"],
 html.light [class*="bg-[#021231]/70"],
 html.light [class*="bg-[#021231]/80"],
@@ -115,10 +128,7 @@ html.light [class*="bg-[#021231]/90"] {
   background-color: rgba(15, 23, 42, 0.15) !important;
 }
 
-/* --- Cartes hover shadow plus prononcée --- */
-html.light [class*="hover:shadow-["] {
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1) !important;
-}
+/* --- Cartes hover : plus d'ombre portée (rendu plat) --- */
 
 /* --- Inputs et selects en mode clair --- */
 html.light [class*="bg-white/5"] input,
@@ -185,18 +195,131 @@ html.light .navbar-header button {
   color: #e2e8f0 !important;
 }
 
+/* ============================================================
+   HARMONISATION DES COULEURS (mode clair)
+   ------------------------------------------------------------
+   La plateforme multipliait les teintes (bleu, ciel, turquoise,
+   indigo, violet, rose, pourpre…). On les ramène à TROIS familles
+   seulement, plus des neutres :
+     · OR    — marque et information/action   #8a6410 sur #fdf6e7
+     · VERT  — positif, actif, validé         #177a49 sur #eef7f1
+     · ROUGE — négatif, suppression, alerte   #b3261e sur #fdeeed
+   Les boutons dorés de marque (bg-[#D69E25]) ne sont pas touchés.
+   ============================================================ */
+
+/* --- Textes (zones protégées exclues : en-tête admin, bannière vendeur) --- */
+html.light [class*="text-blue-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-sky-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-cyan-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-teal-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-indigo-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-violet-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-purple-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-fuchsia-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-pink-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-amber-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-yellow-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-orange-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-[#D69E25]"]:not(.vendor-header-banner *):not(.admin-header-protected *) {
+  color: #8a6410 !important;
+}
+html.light [class*="text-emerald-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-green-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-lime-"]:not(.vendor-header-banner *):not(.admin-header-protected *) {
+  color: #177a49 !important;
+}
+html.light [class*="text-red-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="text-rose-"]:not(.vendor-header-banner *):not(.admin-header-protected *) {
+  color: #b3261e !important;
+}
+
+/* --- Fonds de pastilles et de boutons (jamais de teinte saturée) --- */
+html.light [class*="bg-blue-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-sky-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-cyan-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-teal-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-indigo-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-violet-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-purple-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-fuchsia-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-pink-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-amber-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-yellow-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-orange-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *) {
+  background-color: #fdf6e7 !important;
+}
+html.light [class*="bg-emerald-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-green-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-lime-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *) {
+  background-color: #eef7f1 !important;
+}
+html.light [class*="bg-red-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-rose-"]:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *) {
+  background-color: #fdeeed !important;
+}
+
+/* Survol des pastilles harmonisées : retour visuel léger */
+html.light [class*="bg-blue-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-sky-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-cyan-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-indigo-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-violet-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-purple-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-pink-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-amber-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *) {
+  background-color: #f6eccf !important;
+}
+html.light [class*="bg-emerald-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-green-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *) {
+  background-color: #e2f1e8 !important;
+}
+html.light [class*="bg-red-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="bg-rose-"]:hover:not([class*="bg-[#D69E25]"]):not(.vendor-header-banner *):not(.admin-header-protected *) {
+  background-color: #fbe0de !important;
+}
+
+/* --- Bordures assorties --- */
+html.light [class*="border-blue-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-sky-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-cyan-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-teal-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-indigo-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-violet-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-purple-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-fuchsia-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-pink-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-amber-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-yellow-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-orange-"]:not(.vendor-header-banner *):not(.admin-header-protected *) {
+  border-color: #f0dcb6 !important;
+}
+html.light [class*="border-emerald-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-green-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-lime-"]:not(.vendor-header-banner *):not(.admin-header-protected *) {
+  border-color: #cbe6d9 !important;
+}
+html.light [class*="border-red-"]:not(.vendor-header-banner *):not(.admin-header-protected *),
+html.light [class*="border-rose-"]:not(.vendor-header-banner *):not(.admin-header-protected *) {
+  border-color: #f6cfcf !important;
+}
+
+/* --- Contrôles désactivés : lisibles (au lieu d'un voile à 30-50 %) --- */
+html.light [class~="disabled:opacity-30"]:disabled,
+html.light [class~="disabled:opacity-40"]:disabled,
+html.light [class~="disabled:opacity-50"]:disabled {
+  opacity: 0.62 !important;
+}
+
 /* ===== Header Vendor Boutique protégé (fond épais) ===== */
 .vendor-header-banner {
   background-color: #011d46 !important;
   border-color: rgba(214, 158, 37, 0.4) !important;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4) !important;
   color: #ffffff !important;
 }
 html.light .vendor-header-banner,
 html.light .vendor-header-banner[class*="bg-[#011D46]"] {
   background-color: #011d46 !important;
   border-color: rgba(214, 158, 37, 0.4) !important;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3) !important;
   color: #ffffff !important;
 }
 html.light .vendor-header-banner .text-white,
@@ -265,16 +388,13 @@ html.light .sidebar-menu-btn:hover svg line {
   stroke: #021231 !important;
 }
 
-/* ===== Protection logo FORTIA HUB du mode clair ===== */
+/* ===== Logo FORTIA HUB : AUCUN fond, dans les deux thèmes =====
+   Le mode clair ajoutait auparavant un pavé bleu (#011d46) + une ombre
+   derrière le logo : supprimé — le logo doit rester posé sur le fond
+   de l'en-tête, sans cadre. */
 .fortia-logo-container {
-  background-color: transparent;
-}
-html.light .fortia-logo-container {
-  background-color: #011d46 !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
-}
-html.light .fortia-logo-container:hover {
-  background-color: #0f2d5e !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
 }
 .fortia-logo-text {
   color: #ffffff !important;
@@ -452,6 +572,82 @@ html.light .admin-page-shell textarea::placeholder {
   color: #94a3b8 !important;
 }
 
+/* ============================================================
+   RENDU PLAT — AUCUNE OMBRE PORTÉE (toute l'application)
+   ------------------------------------------------------------
+   Le relief est donné par les fonds, les bordures douces et les
+   espacements — plus aucun halo sombre (admin, cartes, boutons,
+   modales, pages publiques), en mode clair comme en mode sombre.
+   ============================================================ */
+.shadow,
+.shadow-sm,
+.shadow-md,
+.shadow-lg,
+.shadow-xl,
+.shadow-2xl,
+.shadow-inner,
+[class~="hover:shadow"],
+[class~="hover:shadow-sm"],
+[class~="hover:shadow-md"],
+[class~="hover:shadow-lg"],
+[class~="hover:shadow-xl"],
+[class~="hover:shadow-2xl"],
+[class~="focus:shadow-lg"],
+[class*="shadow-["] {
+  box-shadow: none !important;
+}
+
+/* ============================================================
+   ESPACES DE TRAVAIL (classe .fortia-flat) — SOBRE & PLAT
+   ------------------------------------------------------------
+   Posée sur la racine des espaces : admin, vendeur, formateur,
+   membre. Elle supprime les traits de séparation internes
+   (en-têtes de cartes, lignes de tableaux) et adoucit les
+   contrastes — sans toucher aux accents dorés voulus.
+   ============================================================ */
+
+/* Aucun trait intérieur : la structure vient de l'espace, pas de filets.
+   S'applique aux espaces de travail : admin, vendeur, formateur, membre.
+   (Le header admin protégé et ses accents dorés sont exclus.) */
+.fortia-flat [class~="divide-y"] > * {
+  border-top-color: transparent !important;
+  border-bottom-color: transparent !important;
+}
+.fortia-flat [class~="border-b"]:not(.admin-header-protected *):not(.vendor-header-banner *):not([class*="border-[#D69E25]"]),
+.fortia-flat [class~="border-t"]:not(.admin-header-protected *):not(.vendor-header-banner *):not([class*="border-[#D69E25]"]),
+.fortia-flat [class~="border-y"]:not(.admin-header-protected *):not(.vendor-header-banner *):not([class*="border-[#D69E25]"]) {
+  border-top-color: transparent !important;
+  border-bottom-color: transparent !important;
+}
+
+/* Contours d'encadré adoucis (champs de saisie et header protégé exclus) */
+.fortia-flat [class~="border-slate-800"]:not(input):not(select):not(textarea):not(.admin-header-protected *),
+.fortia-flat [class*="border-white/"]:not(input):not(select):not(textarea):not(.admin-header-protected *) {
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+html.light .fortia-flat [class~="border-slate-800"]:not(input):not(select):not(textarea):not(.admin-header-protected *),
+html.light .fortia-flat [class*="border-white/"]:not(input):not(select):not(textarea):not(.admin-header-protected *) {
+  border-color: #e8edf4 !important;
+}
+
+/* Textes adoucis en mode clair (fini le noir sur blanc pur) */
+html.light .fortia-flat [class*="text-white"] {
+  color: #26313f !important;
+}
+html.light .fortia-flat [class*="text-slate-100"] {
+  color: #313d4d !important;
+}
+html.light .fortia-flat [class*="text-slate-300"] {
+  color: #47586b !important;
+}
+html.light .fortia-flat [class*="text-slate-400"] {
+  color: #68788c !important;
+}
+
+/* Les pastilles et accents colorés (vert / rouge / bleu / or) ne sont
+   plus traités ici : l'harmonisation globale du mode clair s'en charge,
+   avec la palette de marque (3 teintes seulement). */
+
 /* ===== Header Admin PROTÉGÉ du mode clair =====
    Le header admin garde son fond sombre et ses boutons sombres
    pour rester élégant et lisible en mode clair comme en mode nuit. */
@@ -464,7 +660,6 @@ html.light .admin-header-protected,
 html.light .admin-header-protected[class*="bg-[#021231]"] {
   background-color: #021231 !important;
   border-color: rgba(214, 158, 37, 0.3) !important;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4) !important;
   color: #ffffff !important;
 }
 
@@ -665,20 +860,61 @@ img {
 .glass-card:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(214, 158, 37, 0.4);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 40px rgba(214, 158, 37, 0.1);
   transform: translateY(-8px);
 }
 
-/* ===== Light mode : cartes glass-card ===== */
+/* ===== Light mode : cartes glass-card (sans ombre) ===== */
 html.light .glass-card {
   background: #ffffff !important;
   border: 1px solid #cbd5e1 !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+
+/* ==========================================================================
+   ANIMATIONS DES CARTES DE SERVICES
+   Choisies dans ADMIN → Services Agence (« Animation de la carte »).
+   Elles jouent à l'entrée de la carte ; le survol reste géré séparément
+   (fill-mode `backwards` : après l'animation, le survol reprend la main).
+   ========================================================================== */
+@keyframes svcFadeUp {
+  from { opacity: 0; transform: translateY(26px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes svcZoomIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes svcFlip {
+  from { opacity: 0; transform: perspective(1000px) rotateY(-75deg); }
+  to   { opacity: 1; transform: perspective(1000px) rotateY(0deg); }
+}
+@keyframes svcSlideIn {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes svcPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.02); }
+}
+
+.svc-anim-fade-up  { animation: svcFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.svc-anim-zoom-in  { animation: svcZoomIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.svc-anim-flip     { animation: svcFlip 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.svc-anim-slide-in { animation: svcSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.svc-anim-pulse    { animation: svcPulse 2.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .svc-anim-fade-up,
+  .svc-anim-zoom-in,
+  .svc-anim-flip,
+  .svc-anim-slide-in,
+  .svc-anim-pulse {
+    animation: none;
+  }
+}
+
 }
 
 html.light .glass-card:hover {
   border-color: #d69e25 !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1), 0 0 20px rgba(214, 158, 37, 0.15) !important;
 }
 
 /* ===== Animation formulaire prestataire ===== */
@@ -737,4 +973,11 @@ html.light .glass-card:hover {
 
 .animate-pulse-glow {
   animation: pulse-glow 3s ease-in-out infinite;
+}
+
+/* ===== Navigation basse de la page d'accueil =====
+   Elle reste navy dans les deux thèmes (comme l'en-tête), sinon le mode
+   clair la rendrait blanche et ses libellés clairs seraient illisibles. */
+html.light .home-bottom-nav {
+  background-color: #021231 !important;
 }

@@ -32,7 +32,7 @@ export const AdminInstructorsPanel: React.FC<AdminInstructorsPanelProps> = ({
   const totalCourses = (courses || []).length;
   const totalPlatformEarnings = (commissions || []).reduce((s, c) => s + c.platformFeeUsd, 0);
   const totalInstructorEarnings = (commissions || []).reduce((s, c) => s + c.instructorEarningsUsd, 0);
-  const totalStoragePurchases = (storagePurchases || []).reduce((s, p) => s + p.amountUsd, 0);
+  const totalStoragePurchases = (storagePurchases || []).reduce((s, p) => s + (Number(p.amountUsd) || 0), 0);
 
   return (
     <div className="space-y-6">

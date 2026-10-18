@@ -16,6 +16,8 @@ const ActiveSectionContext = createContext<ActiveSectionContextValue>({
 // Map route path -> tab identifier
 const PATH_TO_TAB: Record<string, string> = {
   "/": "landing",
+  "/home": "home",
+  "/landing": "landing",
   "/academy": "academy",
   "/marketplace": "marketplace",
   "/vendor": "vendor",
@@ -27,6 +29,8 @@ const PATH_TO_TAB: Record<string, string> = {
   "/verifier": "verifier",
   "/ai-assistant": "ai-assistant",
   "/member": "member",
+  "/library": "library",
+  "/cart": "cart",
   "/settings": "settings",
   "/notifications": "notifications",
   "/admin": "admin",
@@ -38,6 +42,7 @@ const PATH_TO_TAB: Record<string, string> = {
 // Map tab identifier -> route path
 const TAB_TO_PATH: Record<string, string> = {
   landing: "/",
+  home: "/home",
   academy: "/academy",
   marketplace: "/marketplace",
   vendor: "/vendor",
@@ -49,6 +54,8 @@ const TAB_TO_PATH: Record<string, string> = {
   verifier: "/verifier",
   "ai-assistant": "/ai-assistant",
   member: "/member",
+  library: "/library",
+  cart: "/cart",
   settings: "/settings",
   notifications: "/notifications",
   admin: "/admin",

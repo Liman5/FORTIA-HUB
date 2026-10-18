@@ -1,3 +1,4 @@
+import { AppShell } from "@/components/layout/AppShell";
 import { InstructorPage } from "@/components/pages/InstructorPage";
 
 export const metadata = {
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function Page() {
-  return <InstructorPage />;
+  return (
+    <AppShell>
+      <InstructorPage />
+    </AppShell>
+  );
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store/AppStore";
+import { useAuth, useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
 import { InstructorDashboard } from "@/components/InstructorDashboard";
-import { PaymentGatewayModal } from "@/components/PaymentGatewayModal";
+import { CheckoutStep } from "@/components/CheckoutStep";
 import type { TrainingCenter } from "@/lib/types";
 
 interface PendingStorage {
@@ -13,32 +15,19 @@ interface PendingStorage {
 }
 
 export function InstructorPage() {
-  const {
-    isUserLoggedIn,
-    userProfile,
-    courses,
-    trainingCenters,
-    instructorCommissions,
-    instructorStoragePurchases,
-    instructorCenter,
-    createTrainingCenter,
-    addInstructorCourse,
-    updateInstructorCourse,
-    suspendInstructorCourse,
-    deleteInstructorCourse,
-    buyInstructorStorage,
-    marketplaceProducts,
-    stores,
-    isPaymentGatewayOpen,
-    setPaymentGatewayOpen,
-    paymentItems,
-    setPaymentItems,
-    addSupportSubmission,
-    platformLoaded,
-    sessionChecking,
-    setOpenAuthModal,
-    setAuthMode,
-  } = useAppStore();
+  const router = useRouter();
+  const { isUserLoggedIn, userProfile, sessionChecking } = useAuth();
+  const { marketplaceProducts, stores, addSupportSubmission } = useMarketplace();
+  const { courses, trainingCenters, instructorCommissions, instructorStoragePurchases, instructorCenter, createTrainingCenter, addInstructorCourse, updateInstructorCourse, suspendInstructorCourse, deleteInstructorCourse, buyInstructorStorage, loadAllCourses } = useCatalog();
+  const { platformLoaded } = useAppStore();
+
+  // Espace formateur : le catalogue public ne contient que la première page et
+  // exclut les brouillons. On charge donc l'intégralité des formations
+  // (brouillons inclus) dès que la session est connue.
+  React.useEffect(() => {
+    if (isUserLoggedIn) loadAllCourses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isUserLoggedIn]);
 
   const [pendingStorage, setPendingStorage] = React.useState<PendingStorage | null>(null);
 
@@ -62,66 +51,60 @@ export function InstructorPage() {
       ? trainingCenters.find((c) => c.ownerId === userProfile.id) || null
       : null);
 
-  // Ouvre le VRAI modal de paiement pour acheter de l'espace de stockage
+  // Achat d'espace de stockage : mémorisé ici, l'étape PAIEMENT (page, sans
+  // fenêtre superposée) prend alors la place du tableau de bord.
   const handleBuyStorage = (center: TrainingCenter, gb: number, usd: number) => {
     setPendingStorage({ center, gb, usd });
-    setPaymentItems([
-      {
-        id: `storage-${Date.now()}`,
-        type: "service",
-        title: `Stockage vidéo ${gb} Go (Espace Formateur)`,
-        price: usd,
-        image: "",
-        categoryLabel: "Stockage Formateur",
-      },
-    ]);
-    setPaymentGatewayOpen(true);
   };
 
-  return (
-    <>
-      <InstructorDashboard
-        center={myCenter}
-        courses={courses}
-        commissions={instructorCommissions}
-        storagePurchases={instructorStoragePurchases}
-        isUserLoggedIn={isUserLoggedIn}
-        userEmail={userProfile?.email}
-        onCreateCenter={(data) => createTrainingCenter(data)}
-        onAddCourse={addInstructorCourse}
-        onUpdateCourse={updateInstructorCourse}
-        onSuspendCourse={suspendInstructorCourse}
-        onDeleteCourse={deleteInstructorCourse}
-        onBuyStorage={handleBuyStorage}
-        onOpenAuthModal={() => {
-          setAuthMode("login");
-          setOpenAuthModal(true);
-        }}
-      />
+  if (pendingStorage) {
+    const { center, gb, usd } = pendingStorage;
+    return (
+      <div className="py-8 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto">
+        <CheckoutStep
+          cartItems={[
+            {
+              id: `storage-${gb}`,
+              type: "service",
+              title: `Stockage vidéo ${gb} Go (Espace Formateur)`,
+              price: usd,
+              image: "",
+              categoryLabel: "Stockage Formateur",
+            },
+          ]}
+          totalAmountUsd={usd}
+          onPaymentSuccess={() => {
+            // Paiement confirmé → on active le stockage acheté puis on revient au tableau de bord.
+            buyInstructorStorage(center, gb, usd);
+            setPendingStorage(null);
+          }}
+          onAddSupportSubmission={addSupportSubmission}
+          vendorEmail="stockage@fortiahub.com"
+          buyerUserId={userProfile?.id}
+          marketplaceProducts={marketplaceProducts as any}
+          stores={stores as any}
+          onBack={() => setPendingStorage(null)}
+        />
+      </div>
+    );
+  }
 
-      {/* Modal de paiement réel (Wave / Orange Money / Carte / Crypto…) */}
-      <PaymentGatewayModal
-        isOpen={isPaymentGatewayOpen}
-        onClose={() => {
-          setPaymentGatewayOpen(false);
-          setPendingStorage(null);
-        }}
-        cartItems={paymentItems}
-        totalAmountUsd={paymentItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0)}
-        onPaymentSuccess={(order) => {
-          // Paiement confirmé → on active le stockage acheté
-          if (pendingStorage) {
-            buyInstructorStorage(pendingStorage.center, pendingStorage.gb, pendingStorage.usd);
-          }
-          setPaymentGatewayOpen(false);
-          setPendingStorage(null);
-        }}
-        onAddSupportSubmission={addSupportSubmission}
-        vendorEmail="stockage@fortiahub.com"
-        buyerUserId={userProfile?.id}
-        marketplaceProducts={marketplaceProducts as any}
-        stores={stores as any}
-      />
-    </>
+  return (
+    <InstructorDashboard
+      center={myCenter}
+      userId={userProfile?.id}
+      courses={courses}
+      commissions={instructorCommissions}
+      storagePurchases={instructorStoragePurchases}
+      isUserLoggedIn={isUserLoggedIn}
+      userEmail={userProfile?.email}
+      onCreateCenter={(data) => createTrainingCenter(data)}
+      onAddCourse={addInstructorCourse}
+      onUpdateCourse={updateInstructorCourse}
+      onSuspendCourse={suspendInstructorCourse}
+      onDeleteCourse={deleteInstructorCourse}
+      onBuyStorage={handleBuyStorage}
+      onOpenAuthModal={() => router.push("/login")}
+    />
   );
 }

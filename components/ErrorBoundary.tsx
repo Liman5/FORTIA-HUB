@@ -4,6 +4,14 @@ import { AlertTriangle, RefreshCw, Home, ShieldCheck } from 'lucide-react';
 interface Props {
   children: ReactNode;
   fallbackTitle?: string;
+  /**
+   * `page`    → écran complet (protège toute une page)
+   * `section` → carte compacte (protège une SECTION : le reste de la page et
+   *             la navigation restent utilisables)
+   */
+  variant?: "page" | "section";
+  /** Étiquette de journalisation, pour identifier la zone qui a échoué. */
+  label?: string;
 }
 
 interface State {
@@ -31,7 +39,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('FORTIA HUB ErrorBoundary caught an error:', error, errorInfo);
+    console.error(
+      `FORTIA HUB ErrorBoundary (${this.props.label || "page"}) a intercepté une erreur:`,
+      error,
+      errorInfo
+    );
     this.setState({
       error,
       errorInfo
@@ -52,8 +64,17 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
+      const isSection = this.props.variant === "section";
+
       return (
-        <div className="min-h-screen bg-[#021231] text-white flex items-center justify-center p-4 sm:p-6 font-sans">
+        <div
+          role="alert"
+          className={
+            isSection
+              ? "w-full py-10 px-4 flex items-center justify-center font-sans"
+              : "min-h-screen bg-[#021231] text-white flex items-center justify-center p-4 sm:p-6 font-sans"
+          }
+        >
           <div className="max-w-lg w-full bg-[#011D46] border-2 border-[#D69E25]/50 rounded-3xl p-6 sm:p-8 text-center space-y-6 shadow-2xl relative overflow-hidden gpu-layer">
             <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-[#D69E25] text-[#D69E25] flex items-center justify-center mx-auto shadow-lg">
               <AlertTriangle className="w-8 h-8" />
@@ -62,13 +83,15 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#D69E25]/20 text-[#D69E25] border border-[#D69E25]/40 text-xs font-bold uppercase tracking-wider">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Protection & Stabilité Fortia</span>
+                <span>Protection &amp; Stabilité Fortia</span>
               </div>
               <h2 className="text-2xl font-black text-white">
                 {this.props.fallbackTitle || 'Une interruption temporaire est survenue'}
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-md mx-auto font-medium">
-                Un problème mineur d'affichage s'est produit. Pas d'inquiétude : vos données et vos accès restent parfaitement sécurisés.
+                {isSection
+                  ? "Cette section n'a pas pu s'afficher. Le reste de la page reste utilisable — vous pouvez réessayer sans quitter la page."
+                  : "Un problème mineur d'affichage s'est produit. Pas d'inquiétude : vos données et vos accès restent parfaitement sécurisés."}
               </p>
             </div>
 

@@ -19,13 +19,16 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
-import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2 } from "@/lib/services/clientUpload";
+import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2, resolveStorageUrl } from "@/lib/services/clientUpload";
 import { hashSecret } from "@/lib/services/offlineVideo";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 
 interface InstructorDashboardProps {
   center: TrainingCenter | null;
+  /** Identifiant du compte connecté : permet de retrouver ses formations même
+   *  si aucun centre de formation n'a encore été enregistré. */
+  userId?: string;
   courses: Course[];
   commissions: InstructorCommission[];
   storagePurchases: InstructorStoragePurchase[];
@@ -41,7 +44,8 @@ interface InstructorDashboardProps {
 }
 
 export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
-  center,
+  center: providedCenter,
+  userId,
   courses,
   commissions,
   storagePurchases,
@@ -125,8 +129,10 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     if (!lesson) return;
     if (!window.confirm(`Supprimer la leçon « ${lesson.title} » ?\nLa vidéo sera supprimée de Cloudflare et de la base.`)) return;
     // Libère l'espace du quota plateforme selon la taille réelle du fichier
-    fetch(lesson.videoUrl, { method: "HEAD" })
+    resolveStorageUrl(lesson.videoUrl)
+      .then((url) => (url ? fetch(url, { method: "HEAD" }) : null))
       .then((r) => {
+        if (!r) return;
         const len = r.headers.get("content-length");
         if (len) {
           const n = Number(len);
@@ -147,16 +153,55 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     (c?.chapters || []).forEach((ch) => (ch.lessons || []).forEach((l) => deleteVideoFromR2(l.videoUrl)));
     onDeleteCourse(id);
   };
+  // Formations rattachées au compte connecté (même sans centre enregistré)
+  const ownedCourses = (courses || []).filter((c) => !!userId && c.instructorId === userId);
+
+  /**
+   * Espace de travail : le centre enregistré du formateur, ou — s'il a déjà
+   * publié des formations — un espace provisoire qui lui permet de les voir et
+   * de les gérer. Aucun champ n'est inventé (valeurs vides / neutres).
+   * ⚠️ Ce calcul doit précéder tout `useState`/`useEffect` qui lit `center`.
+   */
+  const center: TrainingCenter | null =
+    providedCenter && providedCenter.id
+      ? providedCenter
+      : ownedCourses.length > 0
+        ? {
+            id: "",
+            ownerId: userId || "",
+            centerName: "Mon Espace Formateur",
+            slug: "",
+            description: "",
+            logo: "",
+            banner: "",
+            status: "pending",
+            isVerified: false,
+            feePaid: false,
+            feeAmountUsd: 0,
+            storageQuotaGb: 4,
+            storageUsedBytes: 0,
+            createdAt: "",
+          }
+        : providedCenter;
+
   // Image de couverture : upload fichier (pas seulement URL)
   const coverFileRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
   // Quota de stockage réellement utilisé (quota plateforme du formateur)
-  const [usedBytes, setUsedBytes] = useState<number>(() => Number((center as any)?.storageUsedBytes || 0));
+  const [usedBytes, setUsedBytes] = useState<number>(() => Number(center?.storageUsedBytes || 0));
   useEffect(() => {
-    setUsedBytes(Number((center as any)?.storageUsedBytes || 0));
-  }, [center?.id, (center as any)?.storageUsedBytes]);
+    setUsedBytes(Number(center?.storageUsedBytes || 0));
+  }, [center?.id, center?.storageUsedBytes]);
 
-  const myCourses = (courses || []).filter((c) => c.instructorId === center?.ownerId || c.centerId === center?.id);
+  const myCourses = (courses || []).filter(
+    (c) =>
+      // Formation rattachée à MOI (cas d'un cours publié avant la création du
+      // centre) : sans ce test, un formateur dont le centre n'est pas encore
+      // enregistré ne voyait AUCUNE de ses formations.
+      (!!userId && c.instructorId === userId) ||
+      c.instructorId === center?.ownerId ||
+      c.centerId === center?.id
+  );
   const totalStudents = myCourses.reduce((s, c) => s + (c.studentsCount || 0), 0);
   const totalEarnings = (commissions || [])
     .filter((c) => c.instructorId === center?.ownerId)
@@ -190,7 +235,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     );
   }
 
-  if (!center || !center.id) {
+  // Sans centre ET sans formation : on propose la création du centre.
+  if (!center) {
     return (
       <div className="py-12 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto space-y-8">
         {/* Bouton retour */}
@@ -271,7 +317,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   }
 
   return (
-    <div className="bg-[#021231] text-white min-h-screen pb-16 space-y-8">
+    <div className="bg-[#021231] text-white min-h-screen pb-16 space-y-8 fortia-flat">
       {/* Header */}
       <div className="bg-[#011D46] border-b border-[#D69E25]/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-4">

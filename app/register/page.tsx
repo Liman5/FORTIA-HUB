@@ -15,11 +15,11 @@ import {
   apiVerifyOtp,
   SENDER_EMAIL_OFFICIAL,
 } from "@/services/api";
-import { useAppStore } from "@/lib/store/AppStore";
+import { useAuth } from "@/lib/store/domains/contexts";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { loginUser } = useAppStore();
+    const { loginUser } = useAuth();
 
   // Form fields
   const [name, setName] = useState("");

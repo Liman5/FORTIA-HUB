@@ -3,10 +3,12 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
 import { useAppStore } from "@/lib/store/AppStore";
+import { useMarketplace } from "@/lib/store/domains/contexts";
 import { BlogSystem } from "@/components/BlogSystem";
 
 export function BlogPage() {
-  const { blogPosts, platformLoaded } = useAppStore();
+    const { blogPosts } = useMarketplace();
+  const { platformLoaded } = useAppStore();
 
   if (!platformLoaded) {
     return (

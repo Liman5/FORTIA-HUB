@@ -1,142 +1,158 @@
 // ============================================================
-// FORTIA HUB — API CLIENT PLATEFORME (liaison Supabase)
-// Description : Récupère les données réelles depuis Supabase
-// (via Prisma) pour remplacer les données mock du frontend.
+// FORTIA HUB — AGRÉGATEUR DE DONNÉES PLATEFORME
+// ------------------------------------------------------------
+// ⚠️ Depuis la Phase 1, les données ne viennent PLUS d'un endpoint
+// monolithique : chaque domaine possède sa route et son cache.
+//   • Académie    → /api/catalog   (liste allégée, paginée)
+//   • Boutique    → /api/marketplace
+//   • Services    → /api/services
+//   • Site        → /api/site
+//   • Admin       → /api/platform/admin-sync (session admin obligatoire)
+//
+// Ce module conserve la MÊME forme de retour qu'avant : le store et les
+// pages ne changent pas. Il borne simplement la charge initiale
+// (`CATALOG_PAGE_SIZE`) : les pages qui ont besoin de davantage appellent
+// `loadMoreCourses()` / `loadAllCourses()` du store.
 // ============================================================
+
+import { fetchCatalog, CATALOG_DEFAULT_LIMIT } from "./api/catalog";
+import { fetchMarketplace } from "./api/marketplace";
+import { fetchServices } from "./api/services";
+import { fetchSite } from "./api/site";
+import { fetchBanners } from "./api/banners";
+import { clearCache } from "./api/http";
+
+export const CATALOG_PAGE_SIZE = CATALOG_DEFAULT_LIMIT;
 
 export interface PlatformData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   courses: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   courseCategories: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   trainingCenters: any[];
-  instructorCommissions: any[];
-  instructorStoragePurchases: any[];
+  /** Nombre TOTAL de formations (pagination serveur). */
+  catalogTotal: number;
+  /** Reste-t-il des formations à charger ? */
+  catalogHasMore: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   stores: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   products: any[];
-  marketplaceOrders: any[];
-  payoutRequests: any[];
-  vendorApplications: any[];
-  freelances: any[];
-  enterprises: any[];
-  blogPosts: any[];
-  blogCategories: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   servicePackages: any[];
-  serviceQuotes: any[];
-  postPurchaseSupport: any[];
-  kycSubmissions: any[];
+  /** Bannières du site — module indépendant (/api/banners). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  siteBanners?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  freelances: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  enterprises: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  blogPosts: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  blogCategories: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   notifications: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   siteContent: any[];
-  feeConfig: any;
-  platformConfig: any[];
-  platformStats: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  feeConfig: any | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  platformStats: any | null;
+
+  // ===== Collections RÉSERVÉES À L'ADMINISTRATION =====
+  // Elles ne sont JAMAIS servies par les endpoints publics : elles arrivent
+  // par /api/platform/admin-sync (session admin) et sont donc `undefined` ici.
+  // Les consommateurs du store les testent avec `?.length > 0` : aucune
+  // donnée existante n'est écrasée par une valeur vide.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  marketplaceOrders?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payoutRequests?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  kycSubmissions?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  postPurchaseSupport?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  vendorApplications?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  serviceQuotes?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  instructorCommissions?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  instructorStoragePurchases?: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  platformConfig?: any[];
 }
 
-// ============================================================
-// CACHE LOCAL « stale-while-revalidate »
-// Permet d'afficher immédiatement les données déjà chargées lors
-// d'un rechargement de page (pas de re-téléchargement complet),
-// et de n'aller sur le réseau que si le cache est périmé.
-// ============================================================
-const PLATFORM_CACHE_KEY = "fortia_platform_cache_v1";
-const CACHE_MAX_AGE_MS = 60_000; // 60 secondes
+/**
+ * Charge les données publiques (4 requêtes en parallèle, chacune servie par
+ * son cache). Un domaine en échec ne bloque pas les autres.
+ */
+export async function apiFetchPlatformData(force = false): Promise<PlatformData | null> {
+  const [catalog, marketplace, services, site, banners] = await Promise.all([
+    fetchCatalog({ limit: CATALOG_PAGE_SIZE }, force),
+    fetchMarketplace({ limit: 60 }, force),
+    fetchServices({}, force),
+    fetchSite(force),
+    fetchBanners(force),
+  ]);
 
-export function readPlatformCache(): { data: PlatformData; savedAt: number } | null {
-  try {
-    if (typeof window === "undefined") return null;
-    const raw = localStorage.getItem(PLATFORM_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.data && parsed.savedAt) return parsed;
-    return null;
-  } catch {
-    return null;
-  }
+  if (!catalog && !marketplace && !services && !site && !banners) return null;
+
+  return {
+    courses: catalog?.courses || [],
+    courseCategories: catalog?.courseCategories || [],
+    trainingCenters: catalog?.trainingCenters || [],
+    catalogTotal: catalog?.total || 0,
+    catalogHasMore: catalog?.hasMore || false,
+    stores: marketplace?.stores || [],
+    products: marketplace?.products || [],
+    servicePackages: services?.servicePackages || [],
+    siteBanners: banners?.siteBanners || [],
+    freelances: services?.freelances || [],
+    enterprises: services?.enterprises || [],
+    blogPosts: services?.blogPosts || [],
+    blogCategories: services?.blogCategories || [],
+    notifications: site?.notifications || [],
+    siteContent: site?.siteContent || [],
+    feeConfig: site?.feeConfig ?? null,
+    platformStats: site?.platformStats ?? null,
+  };
 }
 
-export function writePlatformCache(data: PlatformData): void {
-  try {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(
-      PLATFORM_CACHE_KEY,
-      JSON.stringify({ data, savedAt: Date.now() })
-    );
-  } catch {
-    // Quota dépassé ou stockage indisponible → on ignore silencieusement
-  }
-}
-
-/** Supprime le cache (à appeler après toute écriture importante). */
+/** Vide tous les caches de domaine (après une écriture importante). */
 export function clearPlatformCache(): void {
-  try {
-    if (typeof window === "undefined") return;
-    localStorage.removeItem(PLATFORM_CACHE_KEY);
-  } catch {
-    // ignore
-  }
+  clearCache();
 }
 
-export function isPlatformCacheFresh(savedAt: number): boolean {
-  return Date.now() - savedAt < CACHE_MAX_AGE_MS;
+/** Compat : lecture de l'ancien cache monolithique (plus alimenté). */
+export function readPlatformCache(): null {
+  return null;
 }
 
-/**
- * Charge toutes les données de la plateforme depuis Supabase (via Prisma).
- * Stratégie : cache local d'abord (si frais) → réseau sinon → repli sur le cache
- * périmé si le réseau échoue (offline).
- * Retourne null uniquement si aucun cache ET le réseau échoue.
- */
-export async function apiFetchPlatformData(): Promise<PlatformData | null> {
-  const cached = readPlatformCache();
-
-  // 1) Cache frais : pas besoin de re-télécharger tout
-  if (cached && isPlatformCacheFresh(cached.savedAt)) {
-    return cached.data;
-  }
-
-  try {
-    const response = await fetch("/api/platform/sync", {
-      method: "GET",
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      // Repli sur le cache périmé (offline / erreur serveur)
-      return cached ? cached.data : null;
-    }
-
-    const json = await response.json();
-    if (!json.success || !json.data) {
-      return cached ? cached.data : null;
-    }
-
-    const data = json.data as PlatformData;
-    writePlatformCache(data); // mémorise la dernière version chargée
-    return data;
-  } catch (error) {
-    console.warn("[Platform API] Échec de chargement des données:", error);
-    return cached ? cached.data : null;
-  }
+/** Compat : écriture de l'ancien cache monolithique (sans effet). */
+export function writePlatformCache(): void {
+  // Les caches sont gérés domaine par domaine (lib/services/api/http.ts)
 }
 
-/**
- * Charge uniquement les formations depuis Supabase.
- */
-export async function apiFetchCourses() {
-  const data = await apiFetchPlatformData();
+/** Compat : l'ancien cache monolithique n'est plus utilisé. */
+export function isPlatformCacheFresh(): boolean {
+  return false;
+}
+
+export async function apiFetchCourses(force = false) {
+  const data = await apiFetchPlatformData(force);
   return data?.courses || [];
 }
 
-/**
- * Charge uniquement les produits marketplace depuis Supabase.
- */
-export async function apiFetchProducts() {
-  const data = await apiFetchPlatformData();
+export async function apiFetchProducts(force = false) {
+  const data = await apiFetchPlatformData(force);
   return data?.products || [];
 }
 
-/**
- * Charge uniquement les boutiques depuis Supabase.
- */
-export async function apiFetchStores() {
-  const data = await apiFetchPlatformData();
+export async function apiFetchStores(force = false) {
+  const data = await apiFetchPlatformData(force);
   return data?.stores || [];
 }

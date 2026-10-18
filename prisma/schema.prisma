@@ -20,6 +20,10 @@ enum UserRole {
   freelance
   enterprise
   admin
+  // Rôles d'administration étendus : la base peut contenir `superadmin`
+  // (ou `super_admin`) sans que la lecture Prisma échoue.
+  superadmin
+  super_admin
 
   @@map("user_role")
 }
@@ -334,7 +338,7 @@ model Course {
   durationHours    Int          @default(0) @map("duration_hours")
   lessonsCount     Int          @default(0) @map("lessons_count")
   price            Decimal      @default(0) @db.Decimal(10, 2)
-  rating           Decimal      @default(5.0) @db.Decimal(3, 2)
+  rating           Decimal      @default(0) @db.Decimal(3, 2)
   reviewsCount     Int          @default(0) @map("reviews_count")
   studentsCount    Int          @default(0) @map("students_count")
   image            String       @default("")
@@ -558,7 +562,7 @@ model Store {
   isVerified      Boolean      @default(false) @map("is_verified")
   salesCount      Int          @default(0) @map("sales_count")
   totalRevenueUsd Decimal      @default(0) @db.Decimal(12, 2) @map("total_revenue_usd")
-  rating          Decimal      @default(5.0) @db.Decimal(3, 2)
+  rating          Decimal      @default(0) @db.Decimal(3, 2)
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
@@ -609,7 +613,7 @@ model Product {
   isPublished     Boolean      @default(false) @map("is_published")
   isApproved      Boolean      @default(false) @map("is_approved")
   isPopular       Boolean      @default(false) @map("is_popular")
-  rating          Decimal      @default(5.0) @db.Decimal(3, 2)
+  rating          Decimal      @default(0) @db.Decimal(3, 2)
   reviewsCount    Int          @default(0) @map("reviews_count")
   salesCount      Int          @default(0) @map("sales_count")
   createdAt       DateTime     @default(now()) @map("created_at")
@@ -675,6 +679,23 @@ model VendorApplication {
 
   @@index([status])
   @@map("vendor_applications")
+}
+
+/// Taux de commission de la plateforme (Frais FORTIA).
+/// Un taux par portée de vente ; `general` sert de repli.
+model CommissionRule {
+  id        String   @id @default(uuid())
+  /// general | digital_product | course | service | storage
+  scope     String   @unique
+  /// percent (% du montant) | fixed (montant fixe en USD par vente)
+  mode      String   @default("percent")
+  value     Decimal  @default(0) @db.Decimal(12, 2)
+  isActive  Boolean  @default(true) @map("is_active")
+  label     String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("commission_rules")
 }
 
 model MarketplaceOrder {
@@ -757,7 +778,7 @@ model FreelanceProfile {
   badge              BadgeType      @default(none)
   badgeLabel         String         @default("") @map("badge_label")
   category           String         @default("")
-  rating             Decimal        @default(5.0) @db.Decimal(3, 2)
+  rating             Decimal        @default(0) @db.Decimal(3, 2)
   completedJobs      Int            @default(0) @map("completed_jobs")
   hourlyRate         Decimal        @default(0) @db.Decimal(10, 2) @map("hourly_rate")
   skills             String[]       @default([])
@@ -789,7 +810,7 @@ model FreelanceService {
   deliveryDays    Int             @default(3) @map("delivery_days")
   image           String          @default("")
   ordersCompleted Int             @default(0) @map("orders_completed")
-  rating          Decimal         @default(5.0) @db.Decimal(3, 2)
+  rating          Decimal         @default(0) @db.Decimal(3, 2)
   isActive        Boolean         @default(true) @map("is_active")
   createdAt       DateTime        @default(now()) @map("created_at")
 
@@ -939,6 +960,10 @@ model ServicePackage {
   estimatedDays String           @default("3 à 5 jours") @map("estimated_days")
   iconName      String           @default("Palette") @map("icon_name")
   deliverables  String[]         @default([])
+  /** Visuel de la carte de service (image publique R2, dossier `site-media`). */
+  image         String           @default("")
+  /** Point focal du recadrage (« 50% 50% ») → object-position de la carte. */
+  imagePosition String           @default("50% 50%") @map("image_position")
   borderStyle   String           @default("gold") @map("border_style")
   cardAnimation String           @default("fade-up") @map("card_animation")
   accentColor   String           @default("#D69E25") @map("accent_color")
@@ -986,6 +1011,33 @@ model ServiceQuote {
 
   @@index([status])
   @@map("service_quotes")
+}
+
+// ============================================================
+// BANNIÈRES DU SITE (bandeau animé en haut du site)
+// ============================================================
+model SiteBanner {
+  id           String   @id @default(uuid())
+  title        String   @default("")
+  subtitle     String   @default("")
+  /** Image importée sur Cloudflare R2 (dossier public `site-media`). */
+  imageUrl     String   @default("") @map("image_url")
+  /** none | fade | slide | zoom | flip */
+  animation    String   @default("fade")
+  /** Durée d'affichage avant passage à la bannière suivante (ms). */
+  intervalMs   Int      @default(5000) @map("interval_ms")
+  buttonLabel  String   @default("") @map("button_label")
+  buttonLink   String   @default("") @map("button_link")
+  /** internal (route du site) | external (site tiers) */
+  linkTarget   String   @default("internal") @map("link_target")
+  isActive     Boolean  @default(true) @map("is_active")
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@index([displayOrder])
+  @@map("site_banners")
 }
 
 // ============================================================

@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { uploadToR2, R2_BUCKETS, type R2BucketName } from "@/lib/services/r2Storage";
+import {
+  uploadToR2,
+  isPublicFolder,
+  R2_BUCKETS,
+  type R2BucketName,
+} from "@/lib/services/r2Storage";
+import { getStorageActor, parseStorageKey, canWriteKey } from "@/lib/server/storageAccess";
+import { requireAdmin } from "@/lib/server/requireAdmin";
+import { isReadOnlyAdmin } from "@/lib/server/adminRoles";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +68,13 @@ const BUCKET_MIME_TYPES: Record<string, string[]> = {
     "video/mp4",
     "video/webm",
   ],
+  [R2_BUCKETS.PRODUCT_IMAGES]: [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/svg+xml",
+    "image/gif",
+  ],
   [R2_BUCKETS.BLOG_IMAGES]: [
     "image/jpeg",
     "image/png",
@@ -86,17 +101,34 @@ function sanitizeFileName(fileName: string): string {
  */
 export async function POST(req: NextRequest) {
   try {
-    // ====== AUTORISATION ======
-    // La clé service-role est SECRÈTE et ne doit pas être exposée au navigateur
-    // (le client envoie le fichier via FormData sans bearer local).
-    // En production, cette route peut être protégée par un middleware Next.js.
-    // La sécurité des données est assurée par les politiques RLS Supabase.
+    // ====== AUTHENTIFICATION ======
+    // Aucun téléversement anonyme : la session serveur est obligatoire.
+    const actor = await getStorageActor(req);
+    if (!actor) {
+      return NextResponse.json(
+        { error: "Authentification requise pour téléverser un fichier." },
+        { status: 401 }
+      );
+    }
+
+    // Superviseur = LECTURE SEULE : aucun téléversement autorisé.
+    const adminContext = await requireAdmin(req).catch(() => null);
+    if (adminContext && isReadOnlyAdmin(adminContext.role)) {
+      return NextResponse.json(
+        {
+          error:
+            "Votre profil est en lecture seule (superviseur) : le téléversement de fichiers est interdit.",
+        },
+        { status: 403 }
+      );
+    }
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const bucket = (formData.get("bucket") as string) || "";
     const entityId = (formData.get("entityId") as string) || "";
-    const isPublic = (formData.get("isPublic") as string) === "true";
+    // Le caractère public est déterminé par le DOSSIER, jamais par le client.
+    const requestedPublic = (formData.get("isPublic") as string) === "true";
 
     // Validations
     if (!file) {
@@ -141,6 +173,26 @@ export async function POST(req: NextRequest) {
     const timestamp = Date.now();
     const fileName = `${timestamp}-${safeName}`;
 
+    // ====== AUTORISATION (droits sur la ressource ciblée) ======
+    const parsed = parseStorageKey(`${validatedBucket}/${entityId}/${fileName}`);
+    if (!parsed) {
+      return NextResponse.json({ error: "Chemin de stockage invalide" }, { status: 400 });
+    }
+    const allowed = await canWriteKey(actor, parsed);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Vous n'êtes pas autorisé à téléverser dans cet espace." },
+        { status: 403 }
+      );
+    }
+
+    // Le DOSSIER est la seule source de vérité : les dossiers publics
+    // (store-images, product-images, blog-images, site-media) renvoient une URL
+    // permanente, les dossiers privés n'en renvoient JAMAIS. Le drapeau envoyé
+    // par le navigateur est donc ignoré (il ne peut pas élargir un droit).
+    const isPublic = isPublicFolder(validatedBucket);
+    void requestedPublic;
+
     // Upload vers R2
     const result = await uploadToR2(
       validatedBucket,
@@ -158,6 +210,7 @@ export async function POST(req: NextRequest) {
       fileName,
       size: file.size,
       contentType: fileType,
+      private: !isPublicFolder(validatedBucket),
     });
   } catch (error: any) {
     console.error("[R2 Upload] Erreur:", error);

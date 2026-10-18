@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, Course, DigitalProduct, MarketplaceOrder } from '../types';
-import { generatePDFCertificate, downloadProductDeliverable } from '../utils/pdfGenerator';
+import { downloadProductDeliverable } from '../utils/pdfGenerator';
 import { apiDeleteAccount, apiToggleTwoFactor, apiGetTwoFactorStatus, apiTwoFactorSetup } from '../services/api';
 import { uploadFileToR2 } from '../lib/services/clientUpload';
 import { apiWritePlatform } from '../lib/services/platformWrite';
@@ -46,6 +47,7 @@ import {
   KeyRound,
   Smartphone,
   Check,
+  Library,
 } from 'lucide-react';
 import { useTheme } from '../lib/store/ThemeProvider';
 
@@ -55,7 +57,7 @@ interface MemberDashboardProps {
   digitalProducts: DigitalProduct[];
   onOpenCourse: (course: Course) => void;
   onLogout?: () => void;
-  initialTab?: 'progress' | 'certificates' | 'products' | 'payments' | 'settings';
+  initialTab?: 'payments' | 'settings';
   orders?: MarketplaceOrder[];
   marketplaceProducts?: DigitalProduct[];
   onOpenVendor?: () => void;
@@ -78,7 +80,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   digitalProducts,
   onOpenCourse,
   onLogout,
-  initialTab = 'progress',
+  initialTab = 'settings',
   orders = [],
   marketplaceProducts = [],
   onOpenVendor,
@@ -93,7 +95,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   onUpdateProfile
 }) => {
   const { isDarkMode } = useTheme();
-  const [activeTab, setActiveTab] = useState<'progress' | 'certificates' | 'products' | 'payments' | 'settings'>(initialTab);
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'payments' | 'settings'>(initialTab || 'settings');
   const [isProviderFormOpen, setIsProviderFormOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [confirmCheckbox, setConfirmCheckbox] = useState(false);
@@ -345,13 +348,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     ])
   );
 
-  const enrolledCourses = (courses || []).filter(c => enrolledIds.includes(c.id));
+  // Normalisation défensive : une formation remontée de la base peut ne pas
+  // contenir d'objet « instructor » (ni d'image), ce qui ferait planter le rendu.
+  const enrolledCourses = (courses || [])
+    .filter((c) => c && enrolledIds.includes(c.id))
+    .map((c) => ({
+      ...c,
+      title: c.title || 'Formation',
+      categoryLabel: c.categoryLabel || 'Formation',
+      image: c.image || '',
+      instructor: c.instructor || { name: 'FORTIA HUB', role: 'Formateur', avatar: '' },
+    }));
   const purchasedProducts = (digitalProducts?.length ? digitalProducts : marketplaceProducts?.length ? marketplaceProducts : []).filter(p => mergedProductIds.includes(p.id));
 
   const tabs = [
-    { id: 'progress' as const, label: 'Mes Formations', icon: BookOpen, count: enrolledCourses.length, color: 'text-[#D69E25]' },
-    { id: 'certificates' as const, label: 'Attestations', icon: Award, count: earnedCertificates.length, color: 'text-emerald-400' },
-    { id: 'products' as const, label: 'Mes Achats', icon: Download, count: purchasedProducts.length, color: 'text-amber-400' },
     { id: 'payments' as const, label: 'Paiements', icon: CreditCard, count: paymentHistory.length, color: 'text-sky-400' },
     { id: 'settings' as const, label: 'Paramètres', icon: Settings, count: 0, color: 'text-slate-400' },
   ];
@@ -367,8 +377,21 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const actionLockedClass =
     'bg-slate-500/10 border border-slate-400/40 text-slate-400 hover:bg-slate-500/20 cursor-pointer';
 
+  // Garde-fou global : tant que le profil membre n'est pas disponible, on
+  // n'affiche pas le tableau de bord (évite tout accès à « undefined.name »).
+  if (!user) {
+    return (
+      <section className="py-10 bg-[#021231] min-h-[600px] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <Loader2 className="w-7 h-7 animate-spin text-[#D69E25]" />
+          <p className="text-xs text-slate-400 font-semibold">Chargement de votre espace membre...</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="py-10 bg-[#021231] min-h-[600px] relative overflow-hidden">
+    <section className="py-10 bg-[#021231] min-h-[600px] relative overflow-hidden fortia-flat">
       {/* Background decorations */}
       <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/20 to-transparent" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(214,158,37,0.04)_0%,transparent_50%)]" />
@@ -391,11 +414,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
             <div className="flex items-center gap-5">
               <div className="relative shrink-0">
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-20 h-20 rounded-2xl object-cover border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20"
-                />
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user?.name || 'Membre'}
+                    className="w-20 h-20 rounded-2xl object-cover border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-2xl border-2 border-[#D69E25] bg-[#011D46] flex items-center justify-center shadow-lg shadow-[#D69E25]/20">
+                    <User className="w-8 h-8 text-[#D69E25]" />
+                  </div>
+                )}
                 {badgeType === 'gold' && (
                   <motion.div
                     animate={{ scale: [1, 1.2, 1] }}
@@ -419,7 +448,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               </div>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-xl sm:text-2xl font-black text-white">{user.name}</h2>
+                  <h2 className="text-xl sm:text-2xl font-black text-white">{user?.name || 'Membre'}</h2>
                   <span className="bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow">
                     Membre VIP
                   </span>
@@ -444,7 +473,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   <motion.div
                     key={stat.label}
                     whileHover={{ y: -3 }}
-                    className="bg-white/[0.04] border border-white/10 rounded-2xl p-3.5 text-center min-w-[90px]"
+                    onClick={() => router.push('/library')}
+                    role="button"
+                    title="Ouvrir ma bibliothèque"
+                    className="bg-white/[0.04] border border-white/10 rounded-2xl p-3.5 text-center min-w-[90px] cursor-pointer hover:border-[#D69E25]/40 transition"
                   >
                     <Icon className="w-4 h-4 mx-auto mb-1.5" style={{ color: stat.color }} />
                     <p className="text-lg font-black text-white">{stat.value}</p>
@@ -615,6 +647,25 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             <ChevronDown className="w-3.5 h-3.5 rotate-90" />
           </div>
 
+          {/* Ma Bibliothèque : les formations suivies, les achats et les attestations
+              y sont regroupés (plus de doublon avec cette page « Compte »). */}
+          <button
+            type="button"
+            onClick={() => router.push('/library')}
+            className="mx-4 mb-3 w-[calc(100%-2rem)] flex items-center justify-between gap-3 rounded-2xl border border-[#D69E25]/40 bg-[#D69E25]/10 px-4 py-3 text-left hover:bg-[#D69E25]/20 transition"
+          >
+            <span className="flex items-center gap-2.5">
+              <Library className="w-4 h-4 text-[#D69E25]" />
+              <span className="text-xs font-black text-white">
+                Ma Bibliothèque
+                <span className="block text-[10px] font-bold text-slate-400 mt-0.5">
+                  Formations suivies · produits achetés · attestations
+                </span>
+              </span>
+            </span>
+            <ChevronDown className="w-4 h-4 text-[#D69E25] -rotate-90" />
+          </button>
+
           <div className="flex items-center gap-2 overflow-x-auto px-4 pb-2 scrollbar-none border-b border-white/10">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -651,182 +702,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.3 }}
           >
-        {/* Tab 1: Formations */}
-        {activeTab === 'progress' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {enrolledCourses.length === 0 ? (
-              <div className="col-span-full text-center py-16 bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto">
-                  <BookOpen className="w-8 h-8 text-slate-500" />
-                </div>
-                <h3 className="text-lg font-bold text-white">Aucune formation en cours</h3>
-                <p className="text-xs text-slate-400 max-w-md mx-auto">
-                  Explorez le catalogue et commencez votre première formation certifiante.
-                </p>
-              </div>
-            ) : (
-              enrolledCourses.map((c, idx) => {
-                const progress = (user?.courseProgress && user.courseProgress[c.id]) || 0;
-                return (
-                  <motion.div
-                    key={c.id}
-                    whileHover={{ y: -4 }}
-                    className="group relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl hover:border-[#D69E25]/40 transition-all duration-300 overflow-hidden"
-                  >
-                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <div className="p-6 space-y-4">
-                      <div className="flex items-start gap-4">
-                        <img src={c.image} alt={c.title} className="w-24 h-20 rounded-xl object-cover border border-white/10" />
-                        <div className="space-y-1 flex-1 min-w-0">
-                          <span className="text-[10px] font-bold text-[#D69E25] uppercase">{c.categoryLabel}</span>
-                          <h3 className="font-bold text-sm text-white line-clamp-2">{c.title}</h3>
-                          <p className="text-xs text-slate-400 truncate">Instructeur: {c.instructor.name}</p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold">
-                          <span className="text-slate-400">Progression</span>
-                          <span className="text-[#D69E25]">{progress}%</span>
-                        </div>
-                        <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progress}%` }}
-                            transition={{ duration: 0.8, delay: idx * 0.1 }}
-                            className="bg-gradient-to-r from-[#D69E25] to-[#AB6F10] h-2 rounded-full"
-                          />
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => onOpenCourse(c)}
-                        className="w-full py-2.5 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-extrabold text-xs rounded-xl hover:brightness-110 transition flex items-center justify-center gap-1.5 shadow-lg shadow-[#D69E25]/20"
-                      >
-                        <span>{progress === 100 ? 'Revoir la Formation' : 'Continuer les Leçons'}</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </motion.div>
-                );
-              })
-            )}
-          </div>
-        )}
-
-        {/* Tab 2: Certificats */}
-        {activeTab === 'certificates' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {earnedCertificates.length === 0 ? (
-              <div className="col-span-full text-center py-16 bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto">
-                  <Award className="w-8 h-8 text-slate-500" />
-                </div>
-                <h3 className="text-lg font-bold text-white">Aucun certificat obtenu</h3>
-                <p className="text-xs text-slate-400 max-w-md mx-auto">
-                  Terminez vos formations pour recevoir vos attestations officielles avec QR Code.
-                </p>
-              </div>
-            ) : (
-              earnedCertificates.map((cert) => (
-                <motion.div
-                  key={cert.id}
-                  whileHover={{ y: -4 }}
-                  className="group relative bg-white/[0.04] backdrop-blur-xl border-2 border-[#D69E25]/40 rounded-3xl p-6 shadow-xl overflow-hidden"
-                >
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/60 to-transparent" />
-                  <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-10 h-10 rounded-xl bg-[#D69E25]/15 border border-[#D69E25]/40 flex items-center justify-center">
-                        <Award className="w-5 h-5 text-[#D69E25]" />
-                      </div>
-                      <span className="font-extrabold text-xs text-white">Attestation Officielle</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-slate-500">{cert.id}</span>
-                  </div>
-
-                  <div className="py-4 flex items-center justify-between gap-4">
-                    <div className="space-y-1 min-w-0">
-                      <h4 className="font-bold text-sm text-white">{cert.courseTitle}</h4>
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                        <span>Délivré le {cert.issueDate}</span>
-                        <span className="flex items-center gap-1">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          {cert.grade}
-                        </span>
-                      </div>
-                      {cert.qrCodeUrl && (
-                        <p className="text-[10px] text-slate-500">
-                          Attestation authentique vérifiable par QR Code unique.
-                        </p>
-                      )}
-                    </div>
-                    {cert.qrCodeUrl && (
-                      <div className="shrink-0 bg-white rounded-lg p-1 shadow">
-                        <img
-                          src={cert.qrCodeUrl}
-                          alt={`QR Code attestation ${cert.id}`}
-                          className="w-16 h-16 object-contain"
-                          loading="lazy"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => generatePDFCertificate(cert)}
-                    className="w-full py-2.5 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-bold text-xs rounded-xl hover:brightness-110 transition flex items-center justify-center gap-2 shadow-lg shadow-[#D69E25]/20"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Télécharger en PDF</span>
-                  </button>
-                </motion.div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Tab 3: Produits */}
-        {activeTab === 'products' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {purchasedProducts.length === 0 ? (
-              <div className="col-span-full text-center py-16 bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto">
-                  <Download className="w-8 h-8 text-slate-500" />
-                </div>
-                <h3 className="text-lg font-bold text-white">Aucun produit acheté</h3>
-                <p className="text-xs text-slate-400 max-w-md mx-auto">
-                  Découvrez nos ebooks, templates et packs premium dans la Marketplace.
-                </p>
-              </div>
-            ) : (
-              purchasedProducts.map((p) => (
-                <motion.div
-                  key={p.id}
-                  whileHover={{ y: -4 }}
-                  className="group relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden hover:border-[#D69E25]/40 transition-all duration-300"
-                >
-                  <img src={p.image} alt={p.title} className="w-full h-32 object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#021231]/90 to-transparent" />
-                  <div className="p-4 space-y-3 relative">
-                    <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
-                      {p.typeLabel}
-                    </span>
-                    <h4 className="font-bold text-xs text-white line-clamp-2">{p.title}</h4>
-                    <button
-                      onClick={() => downloadProductDeliverable(p.title, p.typeLabel, p.downloadUrl)}
-                      className="w-full py-2 bg-emerald-600 text-white font-bold text-xs rounded-lg hover:bg-emerald-500 transition flex items-center justify-center gap-1.5 shadow"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Télécharger ({p.fileSize || 'PDF/ZIP'})</span>
-                    </button>
-                  </div>
-                </motion.div>
-              ))
-            )}
-          </div>
-        )}
-
+        {/* Les formations suivies, les achats et les attestations sont désormais
+            regroupés dans la page Bibliothèque (/library) : plus de doublon ici. */}
         {/* Tab 4: Paiements */}
         {activeTab === 'payments' && (
           <div className="space-y-4">
@@ -896,7 +773,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   {user.avatar ? (
                     <img
                       src={user.avatar}
-                      alt={user.name}
+                      alt={user?.name || 'Membre'}
                       className="w-24 h-24 rounded-2xl object-cover border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20"
                     />
                   ) : (
@@ -959,10 +836,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 {[
-                  { label: 'Nom complet', value: user.name },
-                  { label: 'Adresse e-mail', value: user.email },
-                  { label: 'Téléphone', value: user.phone || 'Non renseigné' },
-                  { label: 'Type de compte', value: (user.accountType || 'buyer').toUpperCase() },
+                  { label: 'Nom complet', value: user?.name || 'Membre' },
+                  { label: 'Adresse e-mail', value: user?.email || 'Non renseigné' },
+                  { label: 'Téléphone', value: user?.phone || 'Non renseigné' },
+                  { label: 'Type de compte', value: (user?.accountType || 'buyer').toUpperCase() },
                 ].map((field) => (
                   <div key={field.label} className="bg-white/[0.03] p-3.5 rounded-xl border border-white/10">
                     <span className="text-slate-500 text-[11px] block font-medium">{field.label}</span>

@@ -1,23 +1,16 @@
 "use client";
 
 import React from "react";
-import { useAppStore } from "@/lib/store/AppStore";
+import { useRouter } from "next/navigation";
+import { useAuth, useUi } from "@/lib/store/domains/contexts";
 import { useActiveSection } from "@/lib/store/useActiveSection";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { Lock } from "lucide-react";
 
 export function NotificationsPage() {
-  const {
-    isUserLoggedIn,
-    notifications,
-    myNotifications,
-    markNotificationAsRead,
-    markAllNotificationsAsRead,
-    deleteNotification,
-    clearNotifications,
-    setOpenAuthModal,
-    setAuthMode,
-  } = useAppStore();
+  const { notifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, clearNotifications } = useUi();
+  const { isUserLoggedIn, myNotifications } = useAuth();
+  const router = useRouter();
 
   // Affichage strictement personnel : ses notifications + annonces globales (jamais celles d'un autre)
   const visibleNotifications = (myNotifications && myNotifications.length > 0 ? myNotifications : notifications) || [];
@@ -38,10 +31,7 @@ export function NotificationsPage() {
             </p>
           </div>
           <button
-            onClick={() => {
-              setAuthMode("login");
-              setOpenAuthModal(true);
-            }}
+            onClick={() => router.push("/login")}
             className="px-6 py-3 bg-[#D69E25] text-[#021231] font-black rounded-xl text-xs shadow-lg hover:bg-amber-400 transition cursor-pointer"
           >
             Se Connecter

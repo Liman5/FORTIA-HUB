@@ -65,14 +65,17 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
     }
   };
 
+  /** Animation d'entrée de la carte — réglée dans ADMIN → Services Agence.
+   *  Classes CSS `svc-anim-*` (app/globals.css). Le survol est géré à part
+   *  par `whileHover`, donc l'animation ne le bloque pas. */
   const getAnimationClasses = (a?: string) => {
     switch (a) {
-      case "fade-up": return "hover:-translate-y-2 transition-all duration-300 hover:shadow-2xl";
-      case "zoom-in": return "hover:scale-105 transition-transform duration-300 hover:shadow-2xl";
-      case "flip": return "hover:rotate-1 hover:scale-[1.02] transition-all duration-300 hover:shadow-2xl";
-      case "slide-in": return "hover:translate-x-2 transition-all duration-300 hover:shadow-2xl";
-      case "pulse": return "hover:animate-pulse transition-all duration-300 hover:shadow-2xl";
-      default: return "transition-all duration-300 hover:shadow-2xl";
+      case "zoom-in": return "svc-anim-zoom-in";
+      case "flip": return "svc-anim-flip";
+      case "slide-in": return "svc-anim-slide-in";
+      case "pulse": return "svc-anim-pulse";
+      case "none": return "";
+      default: return "svc-anim-fade-up";
     }
   };
 
@@ -191,32 +194,58 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
             return (
               <motion.div
                 key={serv.id}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ duration: 0.5, delay: index * 0.08, ease: "easeOut" }}
                 whileHover={{ y: -8, scale: 1.01 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
                 onClick={() => {
                   setSelectedService(serv);
                   setSelectedOptions([]);
                   setSubmittedSuccess(false);
                 }}
-                className={`group relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl ${borderHover} ${getAnimationClasses(serv.cardAnimation)} cursor-pointer flex flex-col justify-between space-y-5 overflow-hidden transition-all duration-500`}
-                style={{ boxShadow: isSelected ? `0 0 40px ${glowColor}` : undefined }}
+                className={`group relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl ${borderHover} ${getAnimationClasses(serv.cardAnimation)} cursor-pointer flex flex-col justify-between overflow-hidden transition-colors duration-500`}
+                style={{
+                  boxShadow: isSelected ? `0 0 40px ${glowColor}` : undefined,
+                  animationDelay: `${index * 90}ms`,
+                }}
               >
                 {/* Top border gradient on hover */}
                 <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-20" />
                 <div className="absolute -top-20 -right-20 w-40 h-40 rounded-full bg-white/5 blur-3xl group-hover:bg-[#D69E25]/10 transition-colors duration-500" />
 
-                <div className="p-6 space-y-3 relative">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
+                {/* ===== HAUT DE CARTE =====
+                    WEB  : visuel À GAUCHE (colonne pleine hauteur) + infos à droite.
+                    MOBILE : visuel EN HAUT, pleine largeur (hauteur fixe) + infos dessous.
+                    `imagePosition` (point focal défini dans l'admin) est appliqué
+                    en object-position : le recadrage reste correct dans les 2 formats. */}
+                <div className="relative flex flex-col sm:flex-row sm:items-stretch">
+                  {/* --- Visuel importé sur Cloudflare R2 --- */}
+                  <div className="relative w-full h-36 sm:h-auto sm:w-32 lg:w-36 shrink-0 sm:self-stretch overflow-hidden bg-[#021231]">
+                    {serv.image ? (
+                      <img
+                        src={serv.image}
+                        alt={serv.title}
+                        style={{ objectPosition: serv.imagePosition || "50% 50%" }}
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    ) : (
                       <div
-                        className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300"
-                        style={{ backgroundColor: `${accent}20`, border: `1px solid ${accent}40`, color: accent }}
+                        className="absolute inset-0 flex items-center justify-center"
+                        style={{
+                          background: `linear-gradient(135deg, ${accent}25, transparent 70%)`,
+                        }}
                       >
-                        <IconComp className="w-6 h-6" />
+                        <IconComp className="w-8 h-8" style={{ color: accent }} />
                       </div>
+                    )}
+                    {/* Filet doré de séparation visuel / informations */}
+                    <div className="absolute inset-x-0 bottom-0 h-px sm:inset-y-0 sm:left-auto sm:right-0 sm:h-auto sm:w-px bg-gradient-to-r sm:bg-gradient-to-b from-transparent via-[#D69E25]/40 to-transparent" />
+                  </div>
+
+                  {/* --- Colonne DROITE : informations du service --- */}
+                  <div className="flex-1 min-w-0 p-4 sm:p-5 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full">
+                        {serv.category}
+                      </span>
                       {serv.badgeText && (
                         <span
                           className="text-[10px] font-bold px-2.5 py-1 rounded-full border"
@@ -226,19 +255,15 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
                             backgroundColor: `${accent}15`,
                           }}
                         >
-                          {serv.featured ? "⭐ " : ""}{serv.badgeText}
+                          {serv.featured ? "★ " : ""}{serv.badgeText}
                         </span>
                       )}
                       {serv.featured && !serv.badgeText && (
                         <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full">
-                          ⭐ En avant
+                          ★ En avant
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full">
-                      {serv.category}
-                    </span>
-                  </div>
 
                   <h3 className="font-extrabold text-white text-base group-hover:text-[#D69E25] transition-colors">
                     {serv.title}
@@ -256,6 +281,7 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
                         <span className="text-[11px] leading-tight text-slate-300">{del}</span>
                       </div>
                     ))}
+                  </div>
                   </div>
                 </div>
 

@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/lib/store/AppStore";
+import { useMarketplace, useAuth, useCommerce } from "@/lib/store/domains/contexts";
 import { VendorStoreView } from "@/components/VendorStoreView";
 import { Store, ArrowLeft } from "lucide-react";
 
@@ -14,17 +15,10 @@ export function VendorStorePage({ slug }: VendorStorePageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const storeIdParam = searchParams?.get("storeId");
-  const {
-    stores,
-    activeVendorStore,
-    selectedStore,
-    userProfile,
-    marketplaceProducts,
-    addToCart,
-    setPaymentItems,
-    setPaymentGatewayOpen,
-    platformLoaded,
-  } = useAppStore();
+    const { userProfile } = useAuth();
+  const { stores, activeVendorStore, selectedStore, marketplaceProducts } = useMarketplace();
+  const { addToCart } = useCommerce();
+  const { platformLoaded } = useAppStore();
 
   // Normalisation identique à VendorStoreView/getStoreSlug
   const normalizeSlug = (value: string): string => {
@@ -83,8 +77,9 @@ export function VendorStorePage({ slug }: VendorStorePageProps) {
     image: string;
     categoryLabel?: string;
   }) => {
-    setPaymentItems([item]);
-    setPaymentGatewayOpen(true);
+    // Un seul chemin d'achat : ajout au panier puis étape paiement de la page /cart.
+    addToCart(item);
+    router.push("/cart?payer=1");
   };
 
   // Pendant le chargement des données Supabase, on affiche un état de chargement

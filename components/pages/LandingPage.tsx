@@ -34,6 +34,8 @@ import {
   Moon,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store/AppStore";
+import { useRouter } from "next/navigation";
+import { useAuth, useUi, useMarketplace, useCatalog } from "@/lib/store/domains/contexts";
 import { useActiveSection } from "@/lib/store/useActiveSection";
 import { useTheme } from "@/lib/store/ThemeProvider";
 import { Logo } from "@/components/Logo";
@@ -152,7 +154,6 @@ function TechMarquee() {
 }
 
 export function LandingPage() {
-  const store = useAppStore();
   const { setActiveTab } = useActiveSection();
   const { isDarkMode, toggleTheme } = useTheme();
   const heroRef = useRef<HTMLDivElement>(null);
@@ -179,14 +180,11 @@ export function LandingPage() {
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
 
-  const {
-    isUserLoggedIn,
-    setOpenAuthModal,
-    setAuthMode,
-    setVendorApplicationModalOpen,
-    siteContent,
-    courses,
-  } = store;
+  const router = useRouter();
+  const { setVendorApplicationModalOpen } = useUi();
+  const { isUserLoggedIn } = useAuth();
+  const { siteContent } = useMarketplace();
+  const { courses } = useCatalog();
 
   const handleExploreAcademy = () => setActiveTab("academy");
   const handleExploreMarketplace = () => setActiveTab("marketplace");
@@ -197,8 +195,8 @@ export function LandingPage() {
       setActiveTab("marketplace");
       setVendorApplicationModalOpen(true);
     } else {
-      setAuthMode("login");
-      setOpenAuthModal(true);
+      // Connexion = PAGE dédiée (/login) : plus aucune fenêtre superposée.
+      router.push("/login");
     }
   };
 

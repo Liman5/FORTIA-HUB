@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
 import { notifyUser } from "@/lib/services/notifyUser";
+import { requireAdmin, normalizeRole } from "@/lib/server/requireAdmin";
+import { actionDomain, canWriteDomain, isReadOnlyAdmin } from "@/lib/server/adminRoles";
+import {
+  computeCommissionUsd,
+  isSaleScope,
+  resolveCommissionRule,
+  saveCommissionRule,
+  type SaleScope,
+} from "@/lib/server/commissions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +22,10 @@ const FROM_EMAIL = process.env.SENDER_EMAIL || "Fortia Hub <onboarding@resend.de
  * POST /api/platform/write
  * Persiste une action d'écriture dans Supabase (via Prisma).
  * Body : { action: string, data: object }
+ *
+ * DROITS : si l'appelant est un ADMINISTRATEUR authentifié, son rôle limite
+ * l'écriture — superviseur = lecture seule, financier = finance uniquement,
+ * KYC = KYC uniquement. Les parcours publics (visiteur/membre) restent inchangés.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -21,6 +34,32 @@ export async function POST(req: NextRequest) {
 
     if (!action || !data) {
       return NextResponse.json({ error: "action et data requis" }, { status: 400 });
+    }
+
+    // ===== Contrôle des droits de l'administrateur (si session admin) =====
+    const adminActor = await requireAdmin(req).catch(() => null);
+    if (adminActor) {
+      const role = normalizeRole(adminActor.role);
+      if (isReadOnlyAdmin(role)) {
+        return NextResponse.json(
+          { error: "Votre profil est en lecture seule (superviseur) : aucune modification autorisée." },
+          { status: 403 }
+        );
+      }
+      const domain = actionDomain(String(action));
+      if (!canWriteDomain(role, domain)) {
+        return NextResponse.json(
+          {
+            error:
+              domain === "finance"
+                ? "Vos droits ne couvrent pas le domaine finance."
+                : domain === "kyc"
+                  ? "Vos droits ne couvrent pas le domaine KYC."
+                  : "Vos droits ne couvrent pas ce domaine.",
+          },
+          { status: 403 }
+        );
+      }
     }
 
     switch (action) {
@@ -681,6 +720,16 @@ export async function POST(req: NextRequest) {
 
       // ============ COMMANDE PAYEE ============
       case "submit-order": {
+        // La commission est CALCULÉE ICI (jamais celle du navigateur) à partir
+        // du taux actif du type de vente — voir ADMIN → Marketplace → Taux.
+        const saleScope: SaleScope =
+          data.saleScope === "course" || data.saleScope === "service" || data.saleScope === "storage"
+            ? data.saleScope
+            : "digital_product";
+        const amountUsd = Math.max(0, Number(data.amountUsd) || 0);
+        const commissionRule = await resolveCommissionRule(saleScope);
+        const { commissionUsd, vendorUsd } = computeCommissionUsd(amountUsd, commissionRule);
+
         const created = await prisma.marketplaceOrder.create({
           data: {
             orderNumber: data.orderNumber || "ORD-" + Date.now(),
@@ -692,9 +741,9 @@ export async function POST(req: NextRequest) {
             storeName: data.storeName || "",
             productId: data.productId || undefined,
             productTitle: data.productTitle || "",
-            amountUsd: data.amountUsd || 0,
-            platformCommissionUsd: data.platformCommissionUsd || 0,
-            vendorEarningsUsd: data.vendorEarningsUsd || 0,
+            amountUsd,
+            platformCommissionUsd: commissionUsd,
+            vendorEarningsUsd: vendorUsd,
             paymentGateway: data.paymentGateway || "Wave API",
             transactionRef: data.transactionRef || "",
             status: "Paye",
@@ -721,8 +770,9 @@ export async function POST(req: NextRequest) {
             }
           }
           // Notifier UNIQUEMENT les administrateurs (jamais diffusé à tous)
+          const adminRoles = ["admin", "superadmin", "super_admin"] as const;
           const admins = await prisma.user.findMany({
-            where: { accountType: "admin", isActive: true },
+            where: { accountType: { in: adminRoles as unknown as any[] }, isActive: true },
             select: { id: true },
           });
           for (const admin of admins) {
@@ -737,7 +787,40 @@ export async function POST(req: NextRequest) {
           console.warn("[NOTIFY] Notification de vente impossible:", e);
         }
 
-        return NextResponse.json({ success: true, id: created.id });
+        return NextResponse.json({
+          success: true,
+          id: created.id,
+          amountUsd,
+          commissionUsd,
+          vendorUsd,
+          commissionRule,
+        });
+      }
+
+      // ============ TAUX DE COMMISSION (ADMIN → MARKETPLACE) ============
+      case "save-commission-rule": {
+        // Action réservée aux administrateurs (aucun accès public).
+        if (!adminActor) {
+          return NextResponse.json(
+            { error: "Session administrateur requise pour modifier un taux de commission." },
+            { status: 401 }
+          );
+        }
+
+        const scope: SaleScope = isSaleScope(data.scope) ? data.scope : "general";
+        const mode = data.mode === "fixed" ? "fixed" : "percent";
+        const value = Math.max(0, Number(data.value) || 0);
+        const isActive = data.isActive !== false;
+
+        if (mode === "percent" && value > 100) {
+          return NextResponse.json(
+            { success: false, error: "Un pourcentage ne peut pas dépasser 100 %." },
+            { status: 400 }
+          );
+        }
+
+        const rule = await saveCommissionRule({ scope, mode, value, isActive });
+        return NextResponse.json({ success: true, rule });
       }
 
       // ============ SUPPORT POST-ACHAT ============
@@ -795,6 +878,7 @@ export async function POST(req: NextRequest) {
             instructorAvatar: data.instructorAvatar || "",
             learningOutcomes: data.learningOutcomes || [],
             isPublished: data.isPublished ?? true,
+            isFeatured: data.isFeatured ?? false,
           } as any,
         });
 
@@ -858,6 +942,7 @@ export async function POST(req: NextRequest) {
             rating: data.rating ?? undefined,
             reviewsCount: data.reviewsCount ?? undefined,
             isPublished: data.isPublished ?? undefined,
+            isFeatured: data.isFeatured ?? undefined,
           } as any,
         });
 
@@ -921,6 +1006,108 @@ export async function POST(req: NextRequest) {
       }
 
       // ============ CRÉATION PRODUIT ============
+      // ============ CATÉGORIES DE FORMATIONS (table course_categories) ============
+      case "create-course-category": {
+        const rawCode = String(data.code || data.label || "categorie");
+        const code =
+          rawCode
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "categorie-" + Date.now().toString(36);
+
+        const existingCategory = await prisma.courseCategory.findUnique({ where: { code } });
+        if (existingCategory) {
+          return NextResponse.json(
+            { error: "Une catégorie avec ce code existe déjà." },
+            { status: 409 }
+          );
+        }
+
+        const lastCategory = await prisma.courseCategory.findFirst({
+          orderBy: { displayOrder: "desc" },
+        });
+
+        const createdCategory = await prisma.courseCategory.create({
+          data: {
+            code,
+            label: String(data.label || rawCode),
+            description: String(data.description || ""),
+            iconName: String(data.iconName || ""),
+            displayOrder: Number(data.displayOrder ?? (lastCategory?.displayOrder || 0) + 1),
+            isActive: data.isActive ?? true,
+          } as any,
+        });
+
+        return NextResponse.json({ success: true, id: createdCategory.id, code });
+      }
+
+      case "update-course-category": {
+        if (!data.id) {
+          return NextResponse.json({ error: "id requis" }, { status: 400 });
+        }
+
+        const updatedCategory = await prisma.courseCategory.update({
+          where: { id: data.id },
+          data: {
+            label: data.label ?? undefined,
+            description: data.description ?? undefined,
+            iconName: data.iconName ?? undefined,
+            displayOrder: data.displayOrder ?? undefined,
+            isActive: data.isActive ?? undefined,
+          } as any,
+        });
+
+        // Cohérence d'affichage : les formations rattachées suivent le libellé
+        if (data.label) {
+          await prisma.course.updateMany({
+            where: { categoryId: updatedCategory.id },
+            data: { categoryLabel: updatedCategory.label } as any,
+          });
+        }
+
+        return NextResponse.json({ success: true, id: updatedCategory.id });
+      }
+
+      // ============ SUPPRESSION D'UNE CATÉGORIE DE FORMATION ============
+      case "delete-course-category": {
+        if (!data.id) {
+          return NextResponse.json({ error: "id requis" }, { status: 400 });
+        }
+
+        const attachedCourses = await prisma.course.count({ where: { categoryId: data.id } });
+        if (attachedCourses > 0) {
+          return NextResponse.json(
+            {
+              error: `Suppression refusée : ${attachedCourses} formation(s) utilisent encore cette catégorie.`,
+            },
+            { status: 409 }
+          );
+        }
+
+        await prisma.courseCategory.delete({ where: { id: data.id } });
+        return NextResponse.json({ success: true });
+      }
+
+      // ============ MISE EN AVANT ÉDITORIALE D'UNE FORMATION ============
+      case "set-course-featured": {
+        if (!data.courseId) {
+          return NextResponse.json({ error: "courseId requis" }, { status: 400 });
+        }
+
+        const updatedFeatured = await prisma.course.update({
+          where: { id: data.courseId },
+          data: { isFeatured: !!data.isFeatured } as any,
+        });
+
+        return NextResponse.json({
+          success: true,
+          id: updatedFeatured.id,
+          isFeatured: updatedFeatured.isFeatured,
+        });
+      }
+
       case "create-product": {
         const store = data.storeId
           ? await prisma.store.findUnique({ where: { id: data.storeId } })
@@ -1035,6 +1222,51 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      // ============ BANNIÈRES DU SITE (module indépendant) ============
+      case "create-banner": {
+        const created = await prisma.siteBanner.create({
+          data: {
+            title: data.title || "",
+            subtitle: data.subtitle || "",
+            imageUrl: data.imageUrl || "",
+            animation: data.animation || "fade",
+            intervalMs: Number(data.intervalMs) || 5000,
+            buttonLabel: data.buttonLabel || "",
+            buttonLink: data.buttonLink || "",
+            linkTarget: data.linkTarget === "external" ? "external" : "internal",
+            isActive: data.isActive ?? true,
+            displayOrder: Number(data.displayOrder) || 0,
+          } as any,
+        });
+        return NextResponse.json({ success: true, id: created.id });
+      }
+
+      case "update-banner": {
+        if (!data.id) return NextResponse.json({ error: "id requis" }, { status: 400 });
+        const updated = await prisma.siteBanner.update({
+          where: { id: data.id },
+          data: {
+            title: data.title ?? undefined,
+            subtitle: data.subtitle ?? undefined,
+            imageUrl: data.imageUrl ?? undefined,
+            animation: data.animation ?? undefined,
+            intervalMs: data.intervalMs !== undefined ? Number(data.intervalMs) || 5000 : undefined,
+            buttonLabel: data.buttonLabel ?? undefined,
+            buttonLink: data.buttonLink ?? undefined,
+            linkTarget: data.linkTarget ?? undefined,
+            isActive: data.isActive ?? undefined,
+            displayOrder: data.displayOrder !== undefined ? Number(data.displayOrder) || 0 : undefined,
+          } as any,
+        });
+        return NextResponse.json({ success: true, id: updated.id });
+      }
+
+      case "delete-banner": {
+        if (!data.id) return NextResponse.json({ error: "id requis" }, { status: 400 });
+        await prisma.siteBanner.delete({ where: { id: data.id } });
+        return NextResponse.json({ success: true });
+      }
+
       // ============ MISE À JOUR PRODUIT ============
       case "update-product": {
         const updated = await prisma.product.update({
@@ -1070,6 +1302,8 @@ export async function POST(req: NextRequest) {
             estimatedDays: data.estimatedDays || "3 a 5 jours",
             iconName: data.iconName || "Briefcase",
             deliverables: data.deliverables || [],
+            image: data.image || "",
+            imagePosition: data.imagePosition || "50% 50%",
             borderStyle: data.borderStyle || "gold",
             cardAnimation: data.cardAnimation || "fade-up",
             accentColor: data.accentColor || "#D69E25",
@@ -1109,6 +1343,8 @@ export async function POST(req: NextRequest) {
             estimatedDays: data.estimatedDays ?? undefined,
             iconName: data.iconName ?? undefined,
             deliverables: data.deliverables ?? undefined,
+            image: data.image ?? undefined,
+            imagePosition: data.imagePosition ?? undefined,
             borderStyle: data.borderStyle ?? undefined,
             cardAnimation: data.cardAnimation ?? undefined,
             accentColor: data.accentColor ?? undefined,

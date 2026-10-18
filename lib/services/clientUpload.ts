@@ -44,9 +44,19 @@ export async function uploadFileToR2(
   formData.append("isPublic", String(isPublic));
 
   try {
+    // Jeton de session admin (s'il existe) : indispensable pour téléverser
+    // dans les dossiers ÉDITORIAUX réservés à l'administration (`site-media`).
+    let adminToken = "";
+    try {
+      adminToken = localStorage.getItem("fortia_admin_token") || "";
+    } catch {
+      adminToken = "";
+    }
+
     const res = await fetch("/api/storage/upload", {
       method: "POST",
       body: formData,
+      headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined,
     });
 
     // Réponse serveur pas toujours JSON (413 / HTML / texte) → parsing sûr
@@ -59,7 +69,14 @@ export async function uploadFileToR2(
     }
 
     if (!res.ok || !data) {
+      // 401 / 403 : l'écriture éditoriale exige une session ADMINISTRATEUR
+      // valide (le serveur ne fait jamais confiance au drapeau du navigateur).
+      const authIssue =
+        res.status === 401 || res.status === 403
+          ? "Session administrateur requise ou expirée : reconnectez-vous à l'espace d'administration, puis relancez l'importation."
+          : "";
       const detail =
+        authIssue ||
         data?.error ||
         (rawText && rawText.length < 300 ? rawText : "Erreur lors de l'upload");
       return {
@@ -95,14 +112,63 @@ export async function uploadFileToR2(
 }
 
 /**
+ * Extrait la clé R2 d'une valeur pouvant être :
+ *   • une clé directe           → « course-media/xxx/video.mp4 »
+ *   • une URL publique/ancienne → « https://pub-xxxx.r2.dev/course-media/xxx/video.mp4 »
+ *   • une URL signée            → on retire la query string
+ */
+export function storageUrlToKey(value: string): string {
+  if (!value) return "";
+  if (!/^https?:\/\//i.test(value)) return value.split("?")[0];
+  try {
+    const url = new URL(value);
+    return decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * Résout une référence de fichier en URL réellement utilisable :
+ *   • URL http(s) → renvoyée telle quelle ;
+ *   • clé R2 privée → **URL signée temporaire** demandée au serveur, qui
+ *     vérifie les droits de l'utilisateur (401/403 possibles).
+ */
+export async function resolveStorageUrl(value: string): Promise<string> {
+  const key = storageUrlToKey(value);
+  if (!key) return "";
+  if (/^https?:\/\//i.test(value) && !value.includes("X-Amz-Signature")) {
+    // URL publique/ancienne déjà exploitable
+    return value;
+  }
+
+  try {
+    const res = await fetch("/api/storage/signed-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key }),
+    });
+    const json = await res.json().catch(() => ({}));
+    return res.ok && json?.url ? json.url : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Supprime un fichier de Cloudflare R2 via l'API Next.js.
+ * Accepte une clé **ou** une URL (publique/signée) : la clé est extraite
+ * automatiquement, ce qui rend l'opération compatible avec les anciennes
+ * valeurs stockées en base.
  */
 export async function deleteFileFromR2(key: string): Promise<{ success: boolean; error?: string }> {
+  const normalizedKey = storageUrlToKey(key);
+
   try {
     const res = await fetch("/api/storage/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key }),
+      body: JSON.stringify({ key: normalizedKey }),
     });
 
     const data = await res.json();
@@ -211,6 +277,8 @@ export async function uploadCourseVideoDirect(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        // Dossier explicite : les vidéos de formation vont dans le bucket PRIVÉ
+        folder: "course-media",
         fileName: file.name,
         contentType,
         entityId,
@@ -246,7 +314,15 @@ export async function uploadCourseVideoDirect(
       onProgress
     );
     if (uploaded) {
-      return { success: true, url: presignData.publicUrl, key: presignData.key, mode: "direct" };
+      // Le bucket est PRIVÉ : le serveur ne renvoie aucune URL publique.
+      // On conserve donc la CLÉ du fichier (elle sera résolue en URL signée
+      // au moment de la lecture) ; repli sur l'URL publique si elle existe.
+      return {
+        success: true,
+        url: presignData.publicUrl || presignData.key || "",
+        key: presignData.key,
+        mode: "direct",
+      };
     }
   } catch {
     // CORS / réseau R2 direct → repli classique pour les petits fichiers

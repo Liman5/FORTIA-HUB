@@ -92,7 +92,7 @@ export interface AuthRegisterPayload {
   password: string;
   name: string;
   phone?: string;
-  accountType?: "buyer" | "freelance" | "enterprise";
+  accountType?: "buyer" | "freelance" | "enterprise" | "admin" | "superadmin" | "super_admin";
 }
 
 export interface AuthLoginPayload {

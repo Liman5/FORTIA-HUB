@@ -2,52 +2,14 @@
 
 import React from "react";
 import { useAppStore } from "@/lib/store/AppStore";
+import { useAuth, useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
 import { AdminDashboard } from "@/components/AdminDashboard";
 
 export function AdminPage() {
-  const {
-    isAdmin,
-    courses,
-    marketplaceProducts,
-    services,
-    serviceQuotes,
-    addService,
-    updateService,
-    deleteService,
-    toggleServiceActive,
-    feeConfig,
-    setFeeConfig,
-    kycSubmissions,
-    approveKyc,
-    addCourse,
-    updateCourse,
-    deleteCourse,
-    addProduct,
-    updateProduct,
-    deleteProduct,
-    siteContent,
-    updateSiteContent,
-    stores,
-    deleteStore,
-    vendorApplications,
-    marketplaceOrders,
-    payoutRequests,
-    marketplaceConfig,
-    postPurchaseSubmissions,
-    deleteSupportSubmission,
-    approveStore,
-    suspendStore,
-    approveVendorApplication,
-    rejectVendorApplication,
-    approvePayout,
-    updateMarketplaceConfig,
-    trainingCenters,
-    instructorCommissions,
-    instructorStoragePurchases,
-    adminAddInstructor,
-    suspendInstructorCourse,
-    deleteInstructorCourse,
-  } = useAppStore();
+    const { isAdmin, feeConfig, setFeeConfig, kycSubmissions, approveKyc } = useAuth();
+  const { marketplaceProducts, services, serviceQuotes, addService, updateService, deleteService, toggleServiceActive, addProduct, updateProduct, deleteProduct, siteContent, updateSiteContent, stores, deleteStore, vendorApplications, marketplaceOrders, payoutRequests, marketplaceConfig, postPurchaseSubmissions, deleteSupportSubmission, approveStore, suspendStore, approveVendorApplication, rejectVendorApplication, approvePayout } = useMarketplace();
+  const { courses, addCourse, updateCourse, deleteCourse, trainingCenters, instructorCommissions, instructorStoragePurchases, adminAddInstructor, suspendInstructorCourse, deleteInstructorCourse } = useCatalog();
+  const { updateMarketplaceConfig } = useAppStore();
 
   if (!isAdmin) {
     return (

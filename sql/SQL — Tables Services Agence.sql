@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS service_packages (
   estimated_days TEXT NOT NULL DEFAULT '3 a 5 jours',
   icon_name TEXT NOT NULL DEFAULT 'Palette',
   deliverables TEXT[] NOT NULL DEFAULT '{}',
+  image TEXT NOT NULL DEFAULT '',
+  image_position TEXT NOT NULL DEFAULT '50% 50%',
   border_style TEXT NOT NULL DEFAULT 'gold',
   card_animation TEXT NOT NULL DEFAULT 'fade-up',
   accent_color TEXT NOT NULL DEFAULT '#D69E25',
@@ -26,6 +28,8 @@ CREATE TABLE IF NOT EXISTS service_packages (
 );
 
 -- Colonnes ajoutees si la table existait deja sans elles (script idempotent)
+ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS image TEXT NOT NULL DEFAULT '';
+ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS image_position TEXT NOT NULL DEFAULT '50% 50%';
 ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS border_style TEXT NOT NULL DEFAULT 'gold';
 ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS card_animation TEXT NOT NULL DEFAULT 'fade-up';
 ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS accent_color TEXT NOT NULL DEFAULT '#D69E25';

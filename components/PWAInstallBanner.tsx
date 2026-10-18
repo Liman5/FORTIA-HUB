@@ -20,6 +20,16 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ inlineOnly =
   const { canInstall, isInstalled, isStandalone, isIOS } = usePwaInstall();
   const [isDismissed, setIsDismissed] = useState(false);
   const [showIOSPrompt, setShowIOSPrompt] = useState(false);
+  // ⚠️ Anti-divergence serveur/client : la possibilité d'installer dépend du
+  // navigateur (beforeinstallprompt, mode standalone, iOS). Tant que le
+  // composant n'est pas monté, on ne rend RIEN — sinon le serveur (qui ne sait
+  // rien de tout cela) et le client produisent deux HTML différents
+  // (« Hydration failed »).
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     try {
@@ -34,6 +44,9 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ inlineOnly =
       window.localStorage.setItem("fortia_pwa_banner_dismissed", "true");
     } catch (e) {}
   };
+
+  // Avant le montage : aucune décision dépendante du navigateur
+  if (!mounted) return null;
 
   // Déjà installé → on ne propose plus le téléchargement
   if (isInstalled || isStandalone) {

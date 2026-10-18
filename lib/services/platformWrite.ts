@@ -12,6 +12,7 @@ type WriteAction =
   | "approve-vendor-app"
   | "reject-vendor-app"
   | "submit-order"
+  | "save-commission-rule"
   | "submit-support"
   | "mark-notification-read"
   | "create-course"
@@ -41,7 +42,15 @@ type WriteAction =
   | "update-profile"
   | "sync-user-learning"
   | "issue-certificate"
-  | "register-course-media-storage";
+  | "register-course-media-storage"
+  | "create-course-category"
+  | "update-course-category"
+  | "delete-course-category"
+  | "set-course-featured"
+  // Bannières du site (module indépendant)
+  | "create-banner"
+  | "update-banner"
+  | "delete-banner";
 
 export interface WriteResult {
   success: boolean;

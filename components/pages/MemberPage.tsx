@@ -1,37 +1,30 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store/AppStore";
+import { useAuth, useCatalog, useMarketplace, useUi } from "@/lib/store/domains/contexts";
 import { useActiveSection } from "@/lib/store/useActiveSection";
 import { MemberDashboard } from "@/components/MemberDashboard";
 import { ProviderProfileManager } from "@/components/ProviderProfileManager";
 import { Lock, Building2 } from "lucide-react";
 
-export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress" }) {
-  const {
-    isUserLoggedIn,
-    userProfile,
-    sessionChecking,
-    courses,
-    marketplaceProducts,
-    stores,
-    marketplaceOrders,
-    trainingCenters,
-    freelances,
-    enterprises,
-    kycSubmissions,
-    myKycSubmissions,
-    myOrders,
-    isKycModalOpen,
-    setKycModalOpen,
-    logoutUser,
-    setSelectedCourseForPlayer,
-    setOpenAuthModal,
-    setAuthMode,
-    loginUser,
-    refreshPlatformData,
-  } = useAppStore();
+export function MemberPage({ initialTab }: { initialTab?: "settings" | "payments" }) {
+  const { isKycModalOpen, setKycModalOpen, setSelectedCourseForPlayer } = useUi();
+  const { isUserLoggedIn, userProfile, sessionChecking, kycSubmissions, myKycSubmissions, myOrders, logoutUser, loginUser } = useAuth();
+  const { marketplaceProducts, stores, marketplaceOrders, freelances, enterprises } = useMarketplace();
+  const { courses, trainingCenters, ensureCoursesByIds } = useCatalog();
+  const { refreshPlatformData } = useAppStore();
   const { setActiveTab } = useActiveSection();
+  const router = useRouter();
+
+  // Les formations suivies par le membre peuvent se trouver au-delà de la
+  // première page du catalogue : on complète la liste par identifiant.
+  React.useEffect(() => {
+    const ids = (userProfile?.enrolledCourseIds || []) as string[];
+    if (ids.length > 0) ensureCoursesByIds(ids);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile?.id, (userProfile?.enrolledCourseIds || []).length]);
 
   // Profil Freelance / Entreprise du membre connecté (après approbation KYC)
   // userId est renvoyé par la base même si absent du type TS → cast via any
@@ -98,19 +91,13 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
           </div>
           <div className="flex flex-col sm:flex-row gap-3 pt-2 justify-center">
             <button
-              onClick={() => {
-                setAuthMode("login");
-                setOpenAuthModal(true);
-              }}
+              onClick={() => router.push("/login")}
               className="px-6 py-3 bg-[#D69E25] text-[#021231] font-black rounded-xl text-xs shadow-lg hover:bg-amber-400 transition cursor-pointer"
             >
               Se Connecter à Mon Compte
             </button>
             <button
-              onClick={() => {
-                setAuthMode("signup");
-                setOpenAuthModal(true);
-              }}
+              onClick={() => router.push("/register")}
               className="px-6 py-3 border-2 border-[#D69E25] text-[#D69E25] font-black rounded-xl text-xs hover:bg-[#D69E25]/10 transition cursor-pointer"
             >
               Créer un Compte Gratuit
@@ -179,7 +166,7 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "progress
         onOpenCourse={(course) => setSelectedCourseForPlayer((course as any) || null)}
         onLogout={logoutUser}
         onUpdateProfile={(updates) => loginUser(updates as any)}
-        initialTab={initialTab || "progress"}
+        initialTab={initialTab || "settings"}
       />
     </>
   );

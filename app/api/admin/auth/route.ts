@@ -30,10 +30,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Vérification du mot de passe (hash SHA-256 pour compatibilité simple)
-    // NOTE : En production, utilisez bcrypt (voir SQL 16 pour le hash bcrypt)
-    const passwordHash = createHash("sha256").update(password).digest("hex");
-    if (admin.passwordHash !== passwordHash) {
+    // Vérification du mot de passe.
+    // Deux formats acceptés :
+    //   • bcrypt ($2a$/$2b$…) → recommandé
+    //   • SHA-256 hexadécimal (64 caractères) → compatibilité avec les
+    //     comptes créés avec l'ancien seed SQL.
+    const storedHash = String(admin.passwordHash || "");
+    let passwordOk = false;
+
+    if (storedHash.startsWith("$2a$") || storedHash.startsWith("$2b$") || storedHash.startsWith("$2y$")) {
+      const bcrypt = (await import("bcryptjs")).default;
+      passwordOk = await bcrypt.compare(password, storedHash);
+    } else {
+      const legacyHash = createHash("sha256").update(password).digest("hex");
+      passwordOk = storedHash === legacyHash;
+    }
+
+    if (!passwordOk) {
       return NextResponse.json(
         { error: "Identifiants invalides" },
         { status: 401 }

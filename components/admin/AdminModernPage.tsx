@@ -6,9 +6,13 @@ import { useAppStore } from "@/lib/store/AppStore";
 import { AdminHeader } from "./AdminHeader";
 import { AdminSidebar, AdminModuleKey } from "./AdminSidebar";
 import { AdminStatsModule } from "./AdminStatsModule";
+import { AdminCourseCategoriesPanel } from "./AdminCourseCategoriesPanel";
+import { AdminBannersPanel } from "./AdminBannersPanel";
+import { AdminAdminsPanel } from "./AdminAdminsPanel";
+import { normalizeAdminRole } from "@/lib/server/adminRoles";
 import { AdminDashboard } from "@/components/AdminDashboard";
 import { FloatingAiAssistant } from "@/components/FloatingAiAssistant";
-import { Menu } from "lucide-react";
+import { Menu, Lock, ShieldCheck } from "lucide-react";
 
 /**
  * AdminModernPage - Nouveau panneau d'administration moderne
@@ -22,6 +26,21 @@ export function AdminModernPage() {
   const store = useAppStore();
   const [activeModule, setActiveModule] = useState<AdminModuleKey>("stats");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Connexion administrateur affichée directement sur la page /admin
+  // (cette page n'est pas enveloppée dans AppShell : la fenêtre globale n'y existe pas).
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  // Charge les données sensibles (commandes, KYC, retraits, support…) via
+  // l'endpoint protégé : elles ne sont plus incluses dans le sync public.
+  // Charge aussi le catalogue COMPLET (brouillons inclus) : l'administration
+  // doit voir toutes les formations, pas seulement la première page.
+  React.useEffect(() => {
+    store.loadAdminData();
+    store.loadAllCourses();
+  }, [store.loadAdminData, store.loadAllCourses]);
 
   const {
     isAdmin,
@@ -59,6 +78,11 @@ export function AdminModernPage() {
     approvePayout,
     updateMarketplaceConfig,
     trainingCenters,
+    courseCategories,
+    addCourseCategory,
+    updateCourseCategory,
+    deleteCourseCategory,
+    toggleCourseFeatured,
     instructorCommissions,
     instructorStoragePurchases,
     adminAddInstructor,
@@ -68,7 +92,50 @@ export function AdminModernPage() {
     updateService,
     deleteService,
     toggleServiceActive,
+    siteBanners,
+    addBanner,
+    updateBanner,
+    deleteBanner,
+    toggleBannerActive,
   } = store;
+
+  // Session administrateur confirmée → (re)charge les collections réservées
+  // et récupère le RÔLE (seul un superadmin gère les comptes administrateurs).
+  const [adminRole, setAdminRole] = React.useState("");
+
+  React.useEffect(() => {
+    if (!isAdmin) return;
+    let token = "";
+    try {
+      token = localStorage.getItem("fortia_admin_token") || "";
+    } catch {}
+    fetch("/api/admin/session", {
+      cache: "no-store",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json?.isAdmin) setAdminRole(String(json.admin?.role || ""));
+      })
+      .catch(() => {});
+    store.loadAdminData();
+  }, [isAdmin, store.loadAdminData]);
+
+  // Superadministrateur ? (comparaison normalisée : superadmin, super_admin…)
+  const roleKey = normalizeAdminRole(adminRole);
+  const canManageAdmins = roleKey === "superadmin";
+
+  // Modules visibles selon le profil :
+  //   superviseur / général / superadmin → tous (le serveur refuse les écritures
+  //   du superviseur) ; financier → finance ; vérificateur KYC → KYC.
+  const allowedModules: AdminModuleKey[] | undefined =
+    roleKey === "financier"
+      ? ["stats", "marketplace", "devis", "frais"]
+      : roleKey === "kyc"
+        ? ["stats", "kyc"]
+        : undefined;
+
+  const isReadOnlyRole = roleKey === "superviseur";
 
   if (!isAdmin) {
     return (
@@ -85,9 +152,97 @@ export function AdminModernPage() {
         </div>
         <h2 className="text-2xl font-black">Espace Administration Sécurisé</h2>
         <p className="text-xs text-slate-400 max-w-md">
-          L'accès à cette section est strictement réservé aux administrateurs autorisés
+          L&apos;accès à cette section est strictement réservé aux administrateurs autorisés
           de FORTIA HUB. Veuillez vous authentifier pour continuer.
         </p>
+
+        {/* ===== CONNEXION ADMINISTRATEUR (directement sur la page) =====
+            La page /admin n'est pas enveloppée dans AppShell : la fenêtre de
+            connexion globale n'y est pas montée. Le formulaire est donc ici,
+            visible sans aucun clic. */}
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setLoginError("");
+            setLoginLoading(true);
+            try {
+              const res = await fetch("/api/admin/auth", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  email: loginEmail.trim().toLowerCase(),
+                  password: loginPassword,
+                }),
+              });
+              const json = await res.json().catch(() => null);
+              if (!res.ok || !json?.token) {
+                setLoginError(json?.error || "Identifiants administrateur invalides.");
+                return;
+              }
+              try {
+                localStorage.setItem("fortia_admin_token", json.token);
+              } catch {}
+              setLoginPassword("");
+              store.setAdmin(true);
+              store.setAdminAuthModalOpen(false);
+            } catch {
+              setLoginError("Connexion au serveur impossible. Vérifiez le réseau puis réessayez.");
+            } finally {
+              setLoginLoading(false);
+            }
+          }}
+          className="w-full max-w-sm bg-[#011D46] border border-[#D69E25]/40 rounded-2xl p-5 space-y-3 text-left"
+        >
+          <div className="flex items-center gap-2 pb-1">
+            <ShieldCheck className="w-4 h-4 text-[#D69E25]" />
+            <span className="text-[11px] font-black text-[#D69E25] uppercase tracking-wider">
+              Connexion administrateur
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-300 mb-1">
+              Adresse e-mail administrateur
+            </label>
+            <input
+              type="email"
+              required
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              placeholder="admin@fortia-hub.com"
+              autoComplete="username"
+              className="w-full bg-[#021231] border border-slate-700 text-sm rounded-xl p-3 text-white focus:outline-none focus:border-[#D69E25]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-300 mb-1">Mot de passe</label>
+            <input
+              type="password"
+              required
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              className="w-full bg-[#021231] border border-slate-700 text-sm rounded-xl p-3 text-white focus:outline-none focus:border-[#D69E25]"
+            />
+          </div>
+
+          {loginError && (
+            <p className="text-[11px] font-bold text-red-400 bg-red-500/10 border border-red-500/30 rounded-xl p-2.5">
+              {loginError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loginLoading}
+            className="w-full py-3 bg-[#D69E25] text-[#021231] font-black text-xs rounded-xl hover:bg-amber-400 transition flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            <Lock className="w-4 h-4" />
+            <span>{loginLoading ? "Connexion…" : "Se connecter"}</span>
+          </button>
+        </form>
       </div>
     );
   }
@@ -125,6 +280,10 @@ export function AdminModernPage() {
     formations: "courses",
     produits: "products",
     services: "services",
+    // Le module « Bannières du Site » rend SON PROPRE panneau : la valeur de
+    // repli ci-dessous n'est jamais utilisée (AdminDashboard n'est pas monté
+    // pour ce module) — aucune intégration au CMS.
+    bannieres: "site_content",
     marketplace: "marketplace",
     support: "support",
     formateurs: "instructors",
@@ -132,6 +291,8 @@ export function AdminModernPage() {
     devis: "quotes",
     frais: "fees",
     cms: "site_content",
+    // Le module « Administrateurs » rend son propre panneau (aucun onglet CMS).
+    admins: "site_content",
   };
 
   const MODULE_TITLES: Record<AdminModuleKey, { title: string; subtitle: string }> = {
@@ -139,6 +300,10 @@ export function AdminModernPage() {
     formations: { title: "Gestion des Formations", subtitle: "Catalogue des formations certifiantes de l'académie" },
     produits: { title: "Gestion des Produits Numériques", subtitle: "Produits digitaux disponibles sur la marketplace" },
     services: { title: "Services Agence", subtitle: "Packages de services proposés par l'agence FORTIA" },
+    bannieres: {
+      title: "Bannières du Site",
+      subtitle: "Bandeau animé du haut de site : image R2, animation, bouton (lien interne/externe) et durée d'affichage",
+    },
     marketplace: { title: "Marketplace & Vendeurs", subtitle: "Boutiques, candidatures, retraits et commissions" },
     support: { title: "Support Post-Achat", subtitle: "Demandes de support des clients après achat" },
     formateurs: { title: "Gestion des Formateurs", subtitle: "Centres de formation autonomes et commissions" },
@@ -146,6 +311,10 @@ export function AdminModernPage() {
     devis: { title: "Demandes de Devis", subtitle: "Devis reçus pour les services de l'agence" },
     frais: { title: "Paramétrage des Frais", subtitle: "Configuration des frais d'inscription KYC" },
     cms: { title: "Contenu du Site (CMS)", subtitle: "Éditeur de contenu temps réel pour le site" },
+    admins: {
+      title: "Comptes administrateurs",
+      subtitle: "Création des admins par le superadministrateur · mot de passe unique par compte · superadmin insupprimable",
+    },
   };
 
   const currentMeta = MODULE_TITLES[activeModule];
@@ -177,10 +346,23 @@ export function AdminModernPage() {
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
           badges={badges}
+          allowAdmins={canManageAdmins}
+          allowedModules={allowedModules}
         />
 
         {/* Contenu principal */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-6">
+          {/* Profil SUPERviseur : lecture seule (le serveur refuse toute écriture) */}
+          {isReadOnlyRole && (
+            <div className="flex items-center gap-3 bg-[#D69E25]/10 border border-[#D69E25]/40 rounded-2xl px-4 py-3">
+              <ShieldCheck className="w-4 h-4 text-[#D69E25] shrink-0" />
+              <p className="text-[11px] font-bold text-[#D69E25]">
+                Profil superviseur : consultation uniquement. Aucune modification, suppression ni
+                téléversement n&apos;est autorisé.
+              </p>
+            </div>
+          )}
+
           {/* En-tête de module */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
             <div>
@@ -227,8 +409,33 @@ export function AdminModernPage() {
               trainingCenters={trainingCenters}
               instructorCommissions={instructorCommissions}
             />
+          ) : activeModule === "bannieres" ? (
+            /* ===== MODULE INDÉPENDANT : BANNIÈRES DU SITE =====
+               Panneau dédié — aucun passage par le tableau de bord CMS. */
+            <AdminBannersPanel
+              banners={siteBanners}
+              onAdd={addBanner}
+              onUpdate={updateBanner}
+              onDelete={deleteBanner}
+              onToggleActive={toggleBannerActive}
+            />
+          ) : activeModule === "admins" ? (
+            /* ===== COMPTES ADMINISTRATEURS (superadmin uniquement) ===== */
+            <AdminAdminsPanel />
           ) : (
-            <div className="bg-[#011D46] rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+            <>
+              {/* Catégories de formations : créées/modifiées en base */}
+              {activeModule === "formations" && (
+                <AdminCourseCategoriesPanel
+                  categories={courseCategories}
+                  courses={courses as any}
+                  onAdd={addCourseCategory}
+                  onUpdate={updateCourseCategory}
+                  onDelete={deleteCourseCategory}
+                />
+              )}
+
+              <div className="bg-[#011D46] rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
               <AdminDashboard
                 key={activeModule}
                 hideShell
@@ -272,8 +479,10 @@ export function AdminModernPage() {
                 onAddInstructor={adminAddInstructor}
                 onSuspendCourse={suspendInstructorCourse}
                 onDeleteCourse={deleteInstructorCourse}
+                onToggleFeatured={toggleCourseFeatured}
               />
-            </div>
+              </div>
+            </>
           )}
         </main>
       </div>

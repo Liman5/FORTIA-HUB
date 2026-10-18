@@ -13,19 +13,23 @@ const ThemeContext = createContext<ThemeContextValue>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    try {
-      const saved = localStorage.getItem("fortia_theme_dark");
-      if (saved !== null) return saved === "true";
-    } catch (e) {}
-    return true;
-  });
+  // Toujours démarrer sur le thème par défaut (sombre, comme le HTML serveur)
+  // puis restaurer la préférence APRÈS le montage : évite une divergence
+  // serveur/client (erreur d'hydratation) sur les icônes Soleil/Lune.
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const [themeRestored, setThemeRestored] = useState(false);
 
   useEffect(() => {
     try {
-      localStorage.setItem("fortia_theme_dark", String(isDarkMode));
-    } catch (e) {}
+      const saved = localStorage.getItem("fortia_theme_dark");
+      if (saved !== null) setIsDarkMode(saved === "true");
+    } catch (e) {
+      // localStorage indisponible : on garde le thème par défaut
+    }
+    setThemeRestored(true);
+  }, []);
+
+  useEffect(() => {
     const root = document.documentElement;
     if (isDarkMode) {
       root.classList.add("dark");
@@ -36,7 +40,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.classList.remove("dark");
       root.style.colorScheme = "light";
     }
-  }, [isDarkMode]);
+
+    // N'écrase la préférence stockée qu'une fois celle-ci restaurée
+    if (!themeRestored) return;
+    try {
+      localStorage.setItem("fortia_theme_dark", String(isDarkMode));
+    } catch (e) {}
+  }, [isDarkMode, themeRestored]);
 
   const value = useMemo(() => ({ isDarkMode, toggleTheme: () => setIsDarkMode((prev) => !prev) }), [isDarkMode]);
 

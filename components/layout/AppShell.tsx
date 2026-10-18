@@ -1,20 +1,18 @@
 "use client";
 
 import React from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store/AppStore";
 import { useActiveSection } from "@/lib/store/useActiveSection";
 import type { Certificate } from "@/lib/types";
 import { Navbar } from "@/components/Navbar";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNavbar } from "@/components/BottomNavbar";
 import { PWAInstallBanner } from "@/components/PWAInstallBanner";
 import { AdminAuthModal } from "@/components/AdminAuthModal";
 import { CoursePlayerModal } from "@/components/CoursePlayerModal";
 import { KycModal } from "@/components/KycModal";
 import { VendorApplicationModal } from "@/components/VendorApplicationModal";
-import { CheckoutModal } from "@/components/CheckoutModal";
-import { PaymentGatewayModal } from "@/components/PaymentGatewayModal";
-import { UserAuthModal } from "@/components/UserAuthModal";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { FloatingAiAssistant } from "@/components/FloatingAiAssistant";
 import { SearchResultsModal } from "@/components/SearchResultsModal";
@@ -26,7 +24,11 @@ import { showSystemNotification } from "@/lib/services/appNotifications";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAdminPage = pathname === "/admin";
-  const isLandingPage = pathname === "/";
+  // `/` et `/landing` : la landing marketing historique (sans navbar ni barre du bas)
+  const isLandingPage = pathname === "/landing";
+  // Pages où la barre de recherche de l'en-tête est MASQUÉE : parcours dédiés
+  // (espace membre, prestations de l'agence) — en-tête épuré, sans recherche.
+  const hideHeaderSearch = pathname === "/member" || pathname === "/services";
   const store = useAppStore();
   const { activeTab, setActiveTab } = useActiveSection();
 
@@ -45,37 +47,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     markAllNotificationsAsRead,
     deleteNotification,
     clearNotifications,
-    openAuthModal,
-    setOpenAuthModal,
-    authMode,
-    setAuthMode,
-    loginUser,
     selectedCourseForPlayer,
     setSelectedCourseForPlayer,
     isKycModalOpen,
     setKycModalOpen,
     isVendorApplicationModalOpen,
     setVendorApplicationModalOpen,
-    isCartOpen,
-    setCartOpen,
-    paymentItems,
-    setPaymentItems,
-    isPaymentGatewayOpen,
-    setPaymentGatewayOpen,
     feeConfig,
     submitKyc,
     submitVendorApplication,
-    handlePaymentSuccess,
-    addSupportSubmission,
     addToCart,
-    removeFromCart,
-    clearCart,
     rateCourse,
     recordCourseProgress,
     grantCertificate,
     ensureCourseEnrollment,
-    activeVendorStore,
-    selectedStore,
     isAdminAuthModalOpen,
     setAdminAuthModalOpen,
     searchQuery,
@@ -85,13 +70,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Derive cart count and vendor email
   const cartCount = cartItems.length;
-  const vendorEmail =
-    selectedStore?.ownerEmail || activeVendorStore?.ownerEmail || "vendeur@fortiahub.com";
 
+  const router = useRouter();
+
+  /**
+   * Connexion / inscription : on NAVIGUE vers les pages dédiées (/login et
+   * /register). Plus aucune fenêtre superposée : l'accès a sa propre URL, il
+   * est partageable et le bouton « Retour » du navigateur fonctionne.
+   */
   const handleOpenAuthModal = (mode: "login" | "signup" = "signup") => {
     if (isUserLoggedIn) return;
-    setAuthMode(mode);
-    setOpenAuthModal(true);
+    router.push(mode === "login" ? "/login" : "/register");
   };
 
   // ===== Accès à une formation : obligatoirement payée / achetée =====
@@ -141,12 +130,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Recherche globale : le modal s'ouvre dès que l'utilisateur tape,
   // mais reste fermé après une navigation vers la boutique (le filtre est conservé).
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
+  // Session locale : lue uniquement APRÈS montage (sinon divergence serveur/client)
+  const [hasStoredSession, setHasStoredSession] = React.useState(false);
 
   React.useEffect(() => {
-    if (searchQuery && searchQuery.trim().length > 0) {
-      setIsSearchOpen(true);
+    try {
+      setHasStoredSession(localStorage.getItem("fortia_user_logged_in") === "true");
+    } catch {
+      setHasStoredSession(false);
     }
-  }, [searchQuery]);
+  }, []);
+
+  // ===== Recherche globale : ouverture du modal (bouton d'en-tête ou ⌘K) =====
+  const openSearch = React.useCallback(() => setIsSearchOpen(true), []);
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      // Le raccourci ⌘K/Ctrl+K ne s'active pas là où la recherche est masquée.
+      if (hideHeaderSearch) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hideHeaderSearch]);
 
   const handleCloseSearch = () => {
     setIsSearchOpen(false);
@@ -211,36 +220,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className={`min-h-screen bg-[#021231] font-sans antialiased text-slate-100 flex flex-col ${isAdminPage || isLandingPage ? "" : "pb-24 sm:pb-28"}`}>
       {/* Écran de chargement anti-flash : tant que la session n'est pas vérifiée
           (n'affiche jamais « reconnectez-vous » par erreur au rechargement) */}
-      {sessionChecking &&
-        (() => {
-          try {
-            return (
-              typeof window !== "undefined" &&
-              localStorage.getItem("fortia_user_logged_in") === "true"
-            );
-          } catch {
-            return false;
-          }
-        })() && (
-          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-[#021231]">
-            <div className="w-14 h-14 rounded-2xl bg-[#D69E25]/20 border border-[#D69E25]/40 flex items-center justify-center">
-              <span className="block w-6 h-6 border-2 border-[#D69E25] border-t-transparent rounded-full animate-spin" style={{ animationDuration: "1s" }} />
-            </div>
-            <p className="text-xs font-bold text-slate-400 animate-pulse">Chargement de votre session…</p>
+      {sessionChecking && hasStoredSession && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-[#021231]">
+          <div className="w-14 h-14 rounded-2xl bg-[#D69E25]/20 border border-[#D69E25]/40 flex items-center justify-center">
+            <span className="block w-6 h-6 border-2 border-[#D69E25] border-t-transparent rounded-full animate-spin" style={{ animationDuration: "1s" }} />
           </div>
-        )}
+          <p className="text-xs font-bold text-slate-400 animate-pulse">Chargement de votre session…</p>
+        </div>
+      )}
       {/* Top Navbar - masqué sur la page admin et sur la landing page */}
       {!isAdminPage && !isLandingPage && (
         <Navbar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          cartCount={cartCount}
-          setIsCartOpen={() => setCartOpen(true)}
           isAdmin={isAdmin}
           setIsAdmin={setAdmin}
+          onOpenSearch={openSearch}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
-          onOpenAuthModal={handleOpenAuthModal}
           isUserLoggedIn={isUserLoggedIn}
           userEmail={userProfile.email}
           userName={userProfile.name}
@@ -252,6 +249,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           siteContent={siteContent}
           onOpenSidebar={() => setIsSidebarOpen(true)}
           isLandingPage={isLandingPage}
+          hideSearch={hideHeaderSearch}
         />
       )}
 
@@ -269,7 +267,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <PWAInstallBanner />
 
       {/* Main View Router */}
-      <main className="flex-1">{children}</main>
+      {/* Main View Router — isolé : une erreur de page n'emporte plus
+          l'en-tête, la navigation ni les modales. */}
+      <main className="flex-1">
+        <ErrorBoundary variant="page" label="page">
+          {children}
+        </ErrorBoundary>
+      </main>
 
       {/* Admin Auth Modal */}
       <AdminAuthModal
@@ -324,47 +328,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         userName={userProfile?.name}
       />
 
-      {/* Checkout Modal */}
-      <CheckoutModal
-        isOpen={isCartOpen}
-        onClose={() => setCartOpen(false)}
-        cartItems={cartItems}
-        onRemoveItem={removeFromCart}
-        onClearCart={clearCart}
-        onAddSupportSubmission={addSupportSubmission}
-        vendorEmail={vendorEmail}
-        onPaymentSuccess={handlePaymentSuccess}
-        buyerUserId={userProfile?.id}
-        marketplaceProducts={store.marketplaceProducts}
-        stores={store.stores}
-        onOpenPaymentGateway={(items) => {
-          setPaymentItems(items);
-          setCartOpen(false);
-          setPaymentGatewayOpen(true);
-        }}
-      />
+      {/* Le panier ET le paiement sont des PAGES dédiées (/cart, étape 2) :
+          plus aucune fenêtre de paiement dans le shell global. */}
 
-      {/* Multi-Method Payment Gateway Modal */}
-      <PaymentGatewayModal
-        isOpen={isPaymentGatewayOpen}
-        onClose={() => setPaymentGatewayOpen(false)}
-        cartItems={paymentItems.length > 0 ? paymentItems : cartItems}
-        totalAmountUsd={paymentItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0)}
-        onPaymentSuccess={handlePaymentSuccess}
-        onAddSupportSubmission={addSupportSubmission}
-        vendorEmail={vendorEmail}
-        buyerUserId={userProfile?.id}
-        marketplaceProducts={store.marketplaceProducts}
-        stores={store.stores}
-      />
-
-      {/* Mandatory User Registration & Login Auth Modal */}
-      <UserAuthModal
-        isOpen={openAuthModal}
-        onClose={() => setOpenAuthModal(false)}
-        initialMode={authMode}
-        onLoginSuccess={loginUser}
-      />
+      {/* La connexion / l'inscription sont des PAGES dédiées (/login,
+          /register) : plus aucune fenêtre superposée ici. */}
 
       {/* Persistent Bottom Navigation Bar - masqué sur la page admin et sur la landing page */}
       {!isAdminPage && !isLandingPage && (
@@ -374,13 +342,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           isUserLoggedIn={isUserLoggedIn}
           onOpenAuthModal={handleOpenAuthModal}
           isLandingPage={isLandingPage}
+          cartCount={cartCount}
         />
       )}
 
       {/* Modal de résultats de recherche globale (barre de recherche navbar → boutique) */}
-      {!isAdminPage && !isLandingPage && (
+      {!isAdminPage && !isLandingPage && !hideHeaderSearch && (
         <AnimatePresence>
-          {isSearchOpen && searchQuery && searchQuery.trim().length > 0 && (
+          {isSearchOpen && (
             <SearchResultsModal
               onClose={handleCloseSearch}
               onNavigate={handleNavigateFromSearch}

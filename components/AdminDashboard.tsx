@@ -23,6 +23,7 @@ import { ProductImageUploader } from './ProductImageUploader';
 import { ProductDeliverableUploader, DeliverableFile } from './ProductDeliverableUploader';
 import { AdminInstructorsPanel } from './AdminInstructorsPanel';
 import { AdminServicesPanel } from './AdminServicesPanel';
+import { CommissionRatesPanel } from './admin/CommissionRatesPanel';
 import { enhanceTitle, enhanceDescription, enhanceFeatures } from '../utils/aiEnhancer';
 import { getSignedUrl } from '../lib/services/clientUpload';
 import { SuccessConfirmationModal } from './SuccessConfirmationModal';
@@ -73,6 +74,8 @@ interface AdminDashboardProps {
   onAddCourse: (newCourse: Course) => void;
   onUpdateCourse?: (updatedCourse: Course) => void;
   onDeleteCourse?: (courseId: string) => void;
+  /** Active/désactive la mise en avant éditoriale (persistée dans courses.is_featured). */
+  onToggleFeatured?: (courseId: string, isFeatured: boolean) => void;
   onAddProduct: (newProduct: DigitalProduct) => void;
   onUpdateProduct: (updatedProduct: DigitalProduct) => void;
   onDeleteProduct: (productId: string) => void;
@@ -181,6 +184,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddCourse,
   onUpdateCourse,
   onDeleteCourse,
+  onToggleFeatured,
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
@@ -274,17 +278,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     alert('Formation mise à jour et synchronisée sur le site avec succès !');
   };
 
-  const [platformCommission, setPlatformCommission] = useState(marketplaceConfig.platformCommissionPercentage);
-
   // Calculate Marketplace metrics - Memoized for performance
   const totalMarketplaceVolumeUsd = useMemo(() => {
     // Volume réel : somme des commandes + revenu des boutiques (pas de valeur factice)
-    return (marketplaceOrders || []).reduce((sum, o) => sum + (o?.amountUsd || 0), 0);
+    // Les montants renvoyés par l'API sont des Decimal sérialisés en CHAÎNE :
+    // sans Number(), `sum + "25"` produisait « 02525… » (chiffres irréels).
+    return (marketplaceOrders || []).reduce(
+      (sum, o) => sum + (Number(o?.amountUsd) || 0),
+      0
+    );
   }, [marketplaceOrders]);
 
+  /** Commissions RÉELLEMENT prélevées (champ enregistré sur chaque commande). */
   const totalPlatformCommissionsUsd = useMemo(() => {
-    return Math.round(totalMarketplaceVolumeUsd * (platformCommission / 100));
-  }, [totalMarketplaceVolumeUsd, platformCommission]);
+    return (marketplaceOrders || []).reduce(
+      (sum, o) => sum + (Number(o?.platformCommissionUsd) || 0),
+      0
+    );
+  }, [marketplaceOrders]);
 
   // Helpers de statut — accepte les deux formes (espace/accents = client, underscore = Supabase/Prisma)
   const isPending = (s?: string) => s === 'En attente' || s === 'En_attente';
@@ -902,7 +913,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="bg-[#021231] p-4 rounded-2xl border border-[#D69E25]/40 space-y-1">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Commissions Plateforme ({platformCommission}%)</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Commissions encaissées</span>
                   <p className="text-2xl font-black text-[#D69E25]">${totalPlatformCommissionsUsd.toLocaleString('en-US')}</p>
                   <span className="text-[10px] text-[#D69E25] font-bold">Revenu Net FORTIA HUB</span>
                 </div>
@@ -920,41 +931,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Platform Commission Setting */}
-              <div className="bg-[#021231] border border-slate-800 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                    <Percent className="w-4 h-4 text-[#D69E25]" />
-                    <span>Taux de Commission de la Plateforme (Frais FORTIA)</span>
-                  </h4>
-                  <p className="text-xs text-slate-400">
-                    Définissez le pourcentage prélevé automatiquement sur chaque vente réalisée par une boutique.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <input 
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={platformCommission}
-                    onChange={(e) => setPlatformCommission(Number(e.target.value))}
-                    className="w-20 bg-[#011D46] border border-slate-700 text-center font-bold text-sm rounded-xl p-2 text-white"
-                  />
-                  <span className="text-sm font-black text-[#D69E25]">%</span>
-                  <button
-                    onClick={() => {
-                      if (onUpdateMarketplaceConfig) {
-                        onUpdateMarketplaceConfig({ ...marketplaceConfig, platformCommissionPercentage: platformCommission });
-                      }
-                      alert(`Taux de commission plateforme configuré à ${platformCommission}% !`);
-                    }}
-                    className="px-4 py-2 bg-[#D69E25] text-[#021231] font-bold text-xs rounded-xl hover:bg-amber-400 transition"
-                  >
-                    Enregistrer
-                  </button>
-                </div>
-              </div>
+              {/* ===== TAUX DE COMMISSION : registre complet + preuves =====
+                  Module autonome : un taux général + un taux par type de vente
+                  (% ou montant fixe), avec récapitulatif réel d'application. */}
+              <CommissionRatesPanel />
 
               {/* SECTION: Vendor Applications */}
               <div className="space-y-4">
@@ -1188,6 +1168,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <td className="p-4 font-bold text-white">${c.price}</td>
                       <td className="p-4">{c.studentsCount}</td>
                       <td className="p-4 flex items-center gap-2">
+                        <button
+                          onClick={() => onToggleFeatured && onToggleFeatured(c.id, !(c as any).isFeatured)}
+                          className={`px-2.5 py-1 rounded transition flex items-center gap-1 font-bold text-[11px] ${
+                            (c as any).isFeatured
+                              ? "bg-amber-500/40 text-amber-200 hover:bg-amber-500 hover:text-white"
+                              : "bg-slate-600/30 text-slate-300 hover:bg-amber-500/40 hover:text-amber-200"
+                          }`}
+                          title={
+                            (c as any).isFeatured
+                              ? "Retirer de la mise en avant"
+                              : "Mettre en avant (visible dans la vue « Mises en avant »)"
+                          }
+                        >
+                          <Award className="w-3.5 h-3.5" />
+                          <span>{(c as any).isFeatured ? "En avant" : "Mettre en avant"}</span>
+                        </button>
                         <button
                           onClick={() => handleStartEditCourse(c)}
                           className="px-2.5 py-1 rounded bg-blue-600/30 text-blue-300 hover:bg-blue-600 hover:text-white transition flex items-center gap-1 font-bold text-[11px]"

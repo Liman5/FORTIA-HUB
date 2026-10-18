@@ -96,28 +96,28 @@
       "name": "Académie",
       "short_name": "Académie",
       "description": "Accéder aux cours et formations",
-      "url": "/?tab=courses",
+      "url": "/academy",
       "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
     },
     {
       "name": "Marketplace",
       "short_name": "Boutique",
       "description": "Ressources et produits numériques",
-      "url": "/?tab=shop",
+      "url": "/marketplace",
       "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
     },
     {
       "name": "Services",
       "short_name": "Services",
       "description": "Commandez nos prestations sur mesure",
-      "url": "/?tab=services",
+      "url": "/services",
       "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
     },
     {
       "name": "Espace Membre",
       "short_name": "Compte",
       "description": "Accéder à mon espace personnel",
-      "url": "/?tab=member",
+      "url": "/member",
       "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
     }
   ]

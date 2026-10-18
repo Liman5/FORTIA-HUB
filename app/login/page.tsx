@@ -1,15 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, Loader2, LogIn, AlertCircle, CheckCircle2, KeyRound, ShieldCheck, RefreshCw, ArrowLeft } from "lucide-react";
 import { apiLoginUser, apiVerifyTwoFactor } from "@/services/api";
-import { useAppStore } from "@/lib/store/AppStore";
+import { useAuth } from "@/lib/store/domains/contexts";
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { loginUser } = useAppStore();
+    const { loginUser, isUserLoggedIn } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +20,36 @@ export default function LoginPage() {
   const [needsTwoFactor, setNeedsTwoFactor] = useState(false);
   const [twoFactorToken, setTwoFactorToken] = useState("");
   const [otpInput, setOtpInput] = useState("");
+
+  /**
+   * Redirection après connexion réussie.
+   * ⚠️ On utilise une navigation « dure » (`window.location.assign`) et non
+   * `router.push` : le cookie de session vient d'être posé par la réponse
+   * `POST /api/auth`, et une navigation serveur garantit qu'il est bien
+   * transmis au proxy de protection des pages privées — sans dépendre du
+   * cache du routeur client (cause d'un retour silencieux vers /login).
+   */
+  const redirectTarget = () => {
+    const raw =
+      (typeof window !== "undefined" &&
+        new URLSearchParams(window.location.search).get("next")) ||
+      "/member";
+    // Sécurité : on n'accepte qu'un chemin interne (protection open-redirect).
+    return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/member";
+  };
+
+  // Dès que la session est active (connexion ou restaurée depuis le stockage
+  // local), on quitte la page de connexion. Ce mécanisme couvre les deux cas :
+  // connecté à l'instant, ou déjà connecté et revenu sur /login.
+  useEffect(() => {
+    if (!isUserLoggedIn) return;
+    setSuccess("Connexion réussie ! Redirection...");
+    const timer = window.setTimeout(() => {
+      window.location.assign(redirectTarget());
+    }, 400);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isUserLoggedIn]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,9 +86,6 @@ export default function LoginPage() {
     // Sauvegarder la session dans le store (Supabase persisté en base)
     loginUser(res.data.user);
     setSuccess("Connexion réussie ! Redirection...");
-    // Retour à la page privée d'origine si le proxy a redirigé ici (?next=...)
-    const next = new URLSearchParams(window.location.search).get("next") || "/member";
-    setTimeout(() => router.push(next), 1200);
   };
 
   const handleVerifyTwoFactor = async (e: React.FormEvent) => {
@@ -84,8 +109,6 @@ export default function LoginPage() {
 
     loginUser(res.data.user);
     setSuccess("Authentification à deux facteurs validée ! Redirection...");
-    const next = new URLSearchParams(window.location.search).get("next") || "/member";
-    setTimeout(() => router.push(next), 1200);
   };
 
   const handleResendTwoFactorCode = async () => {

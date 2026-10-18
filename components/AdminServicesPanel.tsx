@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ServicePackage,
   ServiceCardBorderStyle,
   ServiceCardAnimation,
 } from "../lib/types";
+import { uploadFileToR2 } from "@/lib/services/clientUpload";
 import {
   Plus,
   Trash2,
@@ -17,7 +18,19 @@ import {
   Briefcase,
   Clock,
   DollarSign,
+  Upload,
+  Loader2,
+  Image as ImageIcon,
 } from "lucide-react";
+
+/** Points focaux proposés (recadrage) — appliqués en `object-position`. */
+const FOCUS_PRESETS: { label: string; value: string }[] = [
+  { label: "Centre", value: "50% 50%" },
+  { label: "Haut", value: "50% 0%" },
+  { label: "Bas", value: "50% 100%" },
+  { label: "Gauche", value: "0% 50%" },
+  { label: "Droite", value: "100% 50%" },
+];
 
 interface AdminServicesPanelProps {
   services: ServicePackage[];
@@ -79,6 +92,8 @@ export const AdminServicesPanel: React.FC<AdminServicesPanelProps> = ({
     iconName: "Briefcase",
     deliverables: [],
     options: [],
+    image: "",
+    imagePosition: "50% 50%",
     borderStyle: "gold",
     cardAnimation: "fade-up",
     accentColor: "#D69E25",
@@ -89,6 +104,64 @@ export const AdminServicesPanel: React.FC<AdminServicesPanelProps> = ({
 
   const [deliverableInput, setDeliverableInput] = useState("");
   const [optionInput, setOptionInput] = useState({ name: "", price: 0 });
+
+  const imageFileRef = useRef<HTMLInputElement>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  /** Dimensions réelles du visuel importé (px) — affichées dans l'éditeur. */
+  const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(null);
+
+  // Dimensions naturelles de l'image (relues à chaque changement de visuel).
+  useEffect(() => {
+    if (!form.image) {
+      setImageSize(null);
+      return;
+    }
+    let cancelled = false;
+    const probe = new window.Image();
+    probe.onload = () => {
+      if (!cancelled) setImageSize({ w: probe.naturalWidth, h: probe.naturalHeight });
+    };
+    probe.onerror = () => {
+      if (!cancelled) setImageSize(null);
+    };
+    probe.src = form.image;
+    return () => {
+      cancelled = true;
+    };
+  }, [form.image]);
+
+  /** Import du visuel dans Cloudflare R2 (dossier `site-media/services`). */
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const result = await uploadFileToR2(file, "site-media", "services", true);
+      if (result.success && result.url) {
+        setForm((prev) => ({ ...prev, image: result.url }));
+      } else {
+        alert(
+          `Import impossible : ${result.error || "vérifiez votre session administrateur puis réessayez."}`
+        );
+      }
+    } catch (error) {
+      console.error("Upload visuel service :", error);
+      alert("Erreur lors de l'import du visuel. Réessayez.");
+    } finally {
+      setUploadingImage(false);
+      if (imageFileRef.current) imageFileRef.current.value = "";
+    }
+  };
+
+  /** Clic sur l'image source : définit le point focal (recadrage) en %. */
+  const handleFocusClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!form.image) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.round(((event.clientX - rect.left) / rect.width) * 100);
+    const y = Math.round(((event.clientY - rect.top) / rect.height) * 100);
+    const clamp = (v: number) => Math.min(100, Math.max(0, v));
+    setForm({ ...form, imagePosition: `${clamp(x)}% ${clamp(y)}%` });
+  };
 
   const resetForm = () => {
     setForm({
@@ -101,6 +174,8 @@ export const AdminServicesPanel: React.FC<AdminServicesPanelProps> = ({
       iconName: "Briefcase",
       deliverables: [],
       options: [],
+      image: "",
+      imagePosition: "50% 50%",
       borderStyle: "gold",
       cardAnimation: "fade-up",
       accentColor: "#D69E25",
@@ -348,6 +423,173 @@ export const AdminServicesPanel: React.FC<AdminServicesPanelProps> = ({
                 placeholder="Décrivez ce que le client recevra comme prestation..."
                 className="w-full bg-[#021231] border border-slate-700 text-sm rounded-xl p-3 text-white focus:outline-none focus:border-[#D69E25]"
               />
+            </div>
+          </div>
+
+          {/* ===== VISUEL : import R2 · dimensions · recadrage · aperçus réels ===== */}
+          <div className="bg-[#021231] p-4 rounded-xl border border-slate-800 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-[#D69E25]" />
+                Visuel de la carte (Cloudflare R2)
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => imageFileRef.current?.click()}
+                  disabled={uploadingImage}
+                  className="px-3 py-2 rounded-xl bg-[#D69E25] text-[#021231] font-black text-xs hover:bg-amber-400 transition flex items-center gap-2 disabled:opacity-60"
+                >
+                  {uploadingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  <span>{form.image ? "Remplacer le visuel" : "Importer le visuel"}</span>
+                </button>
+                {form.image && (
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, image: "" })}
+                    className="px-3 py-2 rounded-xl bg-red-600/25 border border-red-500/40 text-red-400 hover:bg-red-600 hover:text-white transition text-xs font-black flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Retirer
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <input
+              ref={imageFileRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* ---------- SOURCE + POINT FOCAL ---------- */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  Source · cliquez pour choisir le point focal
+                </p>
+                <div
+                  className="relative w-full h-40 rounded-xl overflow-hidden border border-slate-700 bg-[#011D46] cursor-crosshair"
+                  onClick={handleFocusClick}
+                  title="Cliquez sur la zone à conserver au centre du cadrage"
+                >
+                  {form.image ? (
+                    <img src={form.image} alt="Source" className="w-full h-full object-contain" />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-500">
+                      <ImageIcon className="w-6 h-6" />
+                      <span className="text-[10px] font-bold">Aucun visuel importé</span>
+                    </div>
+                  )}
+                  {form.image && (
+                    <span
+                      className="absolute w-3 h-3 rounded-full border-2 border-[#D69E25] bg-[#D69E25]/50 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                      style={{
+                        left: (form.imagePosition || "50% 50%").split(" ")[0] || "50%",
+                        top: (form.imagePosition || "50% 50%").split(" ")[1] || "50%",
+                      }}
+                    />
+                  )}
+                </div>
+
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  {imageSize
+                    ? `Dimensions : ${imageSize.w} × ${imageSize.h} px · ratio ${(imageSize.w / imageSize.h).toFixed(2)}:1`
+                    : "Dimensions : —"}
+                  <br />
+                  Point focal :{" "}
+                  <span className="font-mono text-slate-300">{form.imagePosition || "50% 50%"}</span>
+                </p>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {FOCUS_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, imagePosition: preset.value })}
+                      className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black border transition ${
+                        (form.imagePosition || "50% 50%") === preset.value
+                          ? "bg-[#D69E25] text-[#021231] border-[#D69E25]"
+                          : "bg-[#011D46] text-slate-300 border-slate-700 hover:border-[#D69E25]"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ---------- APERÇUS RÉELS (web / mobile) ---------- */}
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                    Aperçu réel · Ordinateur — visuel à gauche
+                  </p>
+                  <div className="rounded-xl border border-slate-700 overflow-hidden bg-[#011D46]">
+                    <div className="flex items-stretch">
+                      <div className="relative w-24 shrink-0 self-stretch min-h-[96px] bg-[#021231] overflow-hidden">
+                        {form.image && (
+                          <img
+                            src={form.image}
+                            alt="Aperçu ordinateur"
+                            style={{ objectPosition: form.imagePosition || "50% 50%" }}
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                        )}
+                        <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-[#D69E25]/40 to-transparent" />
+                      </div>
+                      <div className="flex-1 p-3 space-y-2">
+                        <div className="h-2 w-16 rounded bg-white/20" />
+                        <div className="h-2 w-full rounded bg-white/10" />
+                        <div className="h-2 w-4/5 rounded bg-white/10" />
+                        <div className="h-2 w-2/3 rounded bg-white/10" />
+                      </div>
+                    </div>
+                    <div className="px-3 py-2 border-t border-slate-700/60 flex items-center justify-between">
+                      <div className="h-2 w-14 rounded bg-[#D69E25]/60" />
+                      <div className="h-4 w-16 rounded bg-[#D69E25]/25" />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                    Aperçu réel · Mobile — visuel en haut, pleine largeur
+                  </p>
+                  <div className="rounded-xl border border-slate-700 overflow-hidden bg-[#011D46] max-w-[240px]">
+                    <div className="relative w-full h-24 bg-[#021231] overflow-hidden">
+                      {form.image && (
+                        <img
+                          src={form.image}
+                          alt="Aperçu mobile"
+                          style={{ objectPosition: form.imagePosition || "50% 50%" }}
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/40 to-transparent" />
+                    </div>
+                    <div className="p-3 space-y-2">
+                      <div className="h-2 w-16 rounded bg-white/20" />
+                      <div className="h-2 w-full rounded bg-white/10" />
+                      <div className="h-2 w-3/4 rounded bg-white/10" />
+                    </div>
+                    <div className="px-3 py-2 border-t border-slate-700/60 flex items-center justify-between">
+                      <div className="h-2 w-14 rounded bg-[#D69E25]/60" />
+                      <div className="h-4 w-16 rounded bg-[#D69E25]/25" />
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Une seule image, deux cadrages : en{" "}
+                  <span className="text-slate-200 font-bold">web</span> elle occupe la colonne de gauche sur toute la
+                  hauteur de la carte ; en <span className="text-slate-200 font-bold">mobile</span> elle passe en haut
+                  sur toute la largeur. Le point focal garde le sujet visible dans les deux formats. Format conseillé :
+                  paysage ≥ 1200 × 900 px.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -629,15 +871,28 @@ export const AdminServicesPanel: React.FC<AdminServicesPanelProps> = ({
             )}
             {services.map((serv) => (
               <div key={serv.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
-                <div
-                  className={"w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-md " + (serv.isActive === false ? "opacity-40 grayscale" : "")}
-                  style={{
-                    backgroundColor: serv.accentColor || "#D69E25",
-                    color: "#021231",
-                  }}
-                >
-                  <Briefcase className="w-5 h-5" />
-                </div>
+                {serv.image ? (
+                  <div
+                    className={"relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-slate-700 " + (serv.isActive === false ? "opacity-40 grayscale" : "")}
+                  >
+                    <img
+                      src={serv.image}
+                      alt={serv.title}
+                      style={{ objectPosition: serv.imagePosition || "50% 50%" }}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className={"w-12 h-12 rounded-xl flex items-center justify-center shrink-0 " + (serv.isActive === false ? "opacity-40 grayscale" : "")}
+                    style={{
+                      backgroundColor: serv.accentColor || "#D69E25",
+                      color: "#021231",
+                    }}
+                  >
+                    <Briefcase className="w-5 h-5" />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h5 className="text-white font-bold text-sm truncate">{serv.title}</h5>

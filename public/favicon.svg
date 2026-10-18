@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Logo officiel FORTIA HUB (source raster public/official-logo.png) -->
-  <image href="/official-logo.png" x="0" y="0" width="512" height="512" preserveAspectRatio="xMidYMid meet"/>
+  <!-- Logo officiel FORTIA HUB — icône 128×128 (13,5 Ko) au lieu du PNG
+       source 1254×1254 (1 Mo) : un favicon s'affiche entre 16 et 64 px. -->
+  <image href="/pwa-128x128.png" x="0" y="0" width="512" height="512" preserveAspectRatio="xMidYMid meet"/>
 </svg>

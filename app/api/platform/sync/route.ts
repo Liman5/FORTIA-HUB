@@ -46,12 +46,8 @@ export async function GET() {
   const trainingCenters = await safeFind("training_centers", () =>
     prisma.trainingCenter.findMany({ orderBy: { createdAt: "desc" } })
   );
-  const instructorCommissions = await safeFind("instructor_commissions", () =>
-    prisma.instructorCommission.findMany({ orderBy: { createdAt: "desc" } })
-  );
-  const instructorStoragePurchases = await safeFind("instructor_storage_purchases", () =>
-    prisma.instructorStoragePurchase.findMany({ orderBy: { createdAt: "desc" } })
-  );
+  // ⚠️ Commissions et achats de stockage des formateurs = données financières :
+  // servies uniquement par /api/platform/admin-sync (admins).
   const courses = await safeFind("courses", () =>
     prisma.course.findMany({
       include: {
@@ -72,21 +68,15 @@ export async function GET() {
     prisma.courseCategory.findMany({ orderBy: { displayOrder: "asc" } })
   );
 
-  // ========== MARKETPLACE (boutiques, produits, vendeurs) ==========
+  // ========== MARKETPLACE (boutiques, produits) ==========
+  // ⚠️ Les commandes, demandes de retrait et candidatures vendeurs ne sont
+  // PLUS renvoyées ici : elles contiennent des données personnelles et sont
+  // servies uniquement par /api/platform/admin-sync (réservé aux admins).
   const stores = await safeFind("stores", () =>
     prisma.store.findMany({ orderBy: { createdAt: "desc" } })
   );
   const products = await safeFind("products", () =>
     prisma.product.findMany({ orderBy: { createdAt: "desc" } })
-  );
-  const marketplaceOrders = await safeFind("marketplace_orders", () =>
-    prisma.marketplaceOrder.findMany({ orderBy: { createdAt: "desc" } })
-  );
-  const payoutRequests = await safeFind("payout_requests", () =>
-    prisma.payoutRequest.findMany({ orderBy: { requestedAt: "desc" } })
-  );
-  const vendorApplications = await safeFind("vendor_applications", () =>
-    prisma.vendorApplication.findMany({ orderBy: { submittedAt: "desc" } })
   );
 
   // ========== FREELANCE & ENTREPRISES ==========
@@ -105,19 +95,13 @@ export async function GET() {
     prisma.blogCategory.findMany()
   );
 
-  // ========== SERVICES & SUPPORT ==========
+  // ========== SERVICES ==========
   const servicePackages = await safeFind("service_packages", () =>
     prisma.servicePackage.findMany({ include: { options: true } })
   );
-  const serviceQuotes = await safeFind("service_quotes", () =>
-    prisma.serviceQuote.findMany({ orderBy: { createdAt: "desc" } })
-  );
-  const postPurchaseSupport = await safeFind("post_purchase_support", () =>
-    prisma.postPurchaseSupport.findMany({ orderBy: { submittedAt: "desc" } })
-  );
-  const kycSubmissions = await safeFind("kyc_submissions", () =>
-    prisma.kycSubmission.findMany({ orderBy: { submittedAt: "desc" } })
-  );
+  // ⚠️ Les demandes de devis (`service_quotes`), le support post-achat et les
+  // dossiers KYC contiennent des données personnelles : ils ne sont plus servis
+  // ici mais par /api/platform/admin-sync.
 
   // ========== NOTIFICATIONS & CONTENU ==========
   const notifications = await safeFind("notifications", () =>
@@ -125,12 +109,22 @@ export async function GET() {
   );
   const siteContent = await safeFind("site_content", () => prisma.siteContent.findMany());
 
-  // ========== CONFIG ==========
+  // ========== CONFIG PUBLIQUE ==========
   const feeConfig = await safeFindFirst("registration_fee_config", () =>
     prisma.registrationFeeConfig.findFirst()
   );
-  const platformConfig = await safeFind("platform_config", () => prisma.platformConfig.findMany());
   const platformStats = await safeFindFirst("platform_stats", () => prisma.platformStats.findFirst());
+
+  // --- Retrait des coordonnées de paiement des boutiques (données privées) ---
+  const publicStores = (stores || []).map((store: any) => {
+    if (!store || typeof store !== "object") return store;
+    const { payoutInfo, ...rest } = store;
+    return {
+      ...rest,
+      // On conserve uniquement le mode de retrait, jamais le numéro de compte
+      payoutMethod: payoutInfo?.method || "",
+    };
+  });
 
   const body = JSON.stringify(
     {
@@ -140,25 +134,16 @@ export async function GET() {
         courses,
         courseCategories,
         trainingCenters,
-        instructorCommissions,
-        instructorStoragePurchases,
-        stores,
+        stores: publicStores,
         products,
-        marketplaceOrders,
-        payoutRequests,
-        vendorApplications,
         freelances,
         enterprises,
         blogPosts,
         blogCategories,
         servicePackages,
-        serviceQuotes,
-        postPurchaseSupport,
-        kycSubmissions,
         notifications,
         siteContent,
         feeConfig,
-        platformConfig,
         platformStats,
       },
     },

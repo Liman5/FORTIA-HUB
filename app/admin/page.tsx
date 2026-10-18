@@ -7,7 +7,7 @@ export const metadata = {
 
 export default function Page() {
   return (
-    <div className="admin-page-shell">
+    <div className="admin-page-shell fortia-flat">
       <AdminModernPage />
     </div>
   );

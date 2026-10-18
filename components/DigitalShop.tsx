@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import { motion } from "motion/react";
 import { CartItem, VendorStore, MarketplaceProduct } from "@/lib/types";
 import { OptimizedImage } from "./OptimizedImage";
@@ -14,6 +15,7 @@ import {
   Star,
   Search,
   X,
+  Eye,
 } from "lucide-react";
 
 interface DigitalShopProps {
@@ -29,6 +31,10 @@ interface DigitalShopProps {
   onOpenVendorApplication?: () => void;
   onClearSearch?: () => void;
   onSearchChange?: (query: string) => void;
+  /** Filtre de type de produit appliqué à l'ouverture (URL ?type=…). */
+  initialFilter?: string | null;
+  /** Notifie le parent lorsqu'un filtre de type change (synchronisation URL). */
+  onFilterChange?: (filterId: string) => void;
 }
 
 export const DigitalShop: React.FC<DigitalShopProps> = ({
@@ -44,10 +50,17 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
   onOpenVendorApplication,
   onClearSearch,
   onSearchChange,
+  initialFilter,
+  onFilterChange,
 }) => {
-  const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  const [selectedFilter, setSelectedFilter] = useState<string>(initialFilter || "all");
   const [selectedStoreId, setSelectedStoreId] = useState<string>("all");
   const [previewProduct, setPreviewProduct] = useState<MarketplaceProduct | null>(null);
+
+  /* Synchronise le filtre avec l'URL (liens directs ?type=… + Retour/Avancer) */
+  useEffect(() => {
+    setSelectedFilter(initialFilter || "all");
+  }, [initialFilter]);
 
   const filters = [
     { id: "all", label: "Tous" },
@@ -83,6 +96,7 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
     setSelectedFilter("all");
     setSelectedStoreId("all");
     onClearSearch?.();
+    onFilterChange?.("");
   };
 
   return (
@@ -172,7 +186,10 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
               return (
                 <button
                   key={f.id}
-                  onClick={() => setSelectedFilter(f.id)}
+                  onClick={() => {
+                  setSelectedFilter(f.id);
+                  onFilterChange?.(f.id === "all" ? "" : f.id);
+                }}
                   className={`px-4 py-2 rounded-xl text-[11px] font-bold whitespace-nowrap snap-start shrink-0 transition-all duration-300 ${
                     isActive
                       ? "bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black shadow-lg shadow-[#D69E25]/20"
@@ -205,12 +222,9 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
           )}
         </div>
 
-        {/* Results count */}
-        <div className="flex items-center justify-between text-xs text-slate-500">
-          <span className="font-medium">
-            {filteredProducts.length} produit{filteredProducts.length > 1 ? "s" : ""} trouvé{filteredProducts.length > 1 ? "s" : ""}
-          </span>
-          {hasActiveFilters && (
+        {/* Filtres actifs : le nombre de produits n'est pas affiché */}
+        {hasActiveFilters && (
+          <div className="flex items-center justify-end text-xs text-slate-500">
             <button
               onClick={handleReset}
               className="flex items-center gap-1.5 text-[#D69E25] hover:text-amber-300 font-semibold transition-colors"
@@ -218,8 +232,8 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
               <Search className="w-3 h-3" />
               Réinitialiser
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* PRODUCTS GRID */}
         {filteredProducts.length === 0 ? (
@@ -307,10 +321,21 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                         ) : (
                           <span className="text-[9px] text-slate-500 font-bold">FORTIA</span>
                         )}
-                        <span className="flex items-center gap-0.5 text-[10px] text-amber-400 font-bold shrink-0">
-                          <Star className="w-3 h-3 fill-amber-400" />
-                          {prod.rating || 5.0}
-                        </span>
+                        {/* Note affichée uniquement si des avis réels existent
+                            (sinon « Nouveau ») : aucune note inventée. */}
+                        {prod.reviewsCount > 0 ? (
+                          <span className="flex items-center gap-0.5 text-[10px] text-amber-400 font-bold shrink-0">
+                            <Star className="w-3 h-3 fill-amber-400" />
+                            {Number(prod.rating || 0).toFixed(1)}
+                            <span className="text-slate-500 font-semibold">
+                              ({prod.reviewsCount})
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-slate-400 font-bold shrink-0">
+                            Nouveau
+                          </span>
+                        )}
                       </div>
 
                       <h3
@@ -337,6 +362,14 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                         </span>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
+                        <Link
+                          href={`/product/${encodeURIComponent(prod.slug)}`}
+                          className="p-2 rounded-lg border border-white/20 text-slate-300 hover:text-[#D69E25] hover:border-[#D69E25]/60 transition"
+                          title="Voir la fiche produit"
+                          aria-label="Voir la fiche produit"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </Link>
                         <button
                           onClick={() =>
                             onAddToCart({ id: prod.id, type: "product", title: prod.title, price: prod.price, image: prod.image, categoryLabel: prod.typeLabel })

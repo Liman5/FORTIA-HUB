@@ -1,12 +1,30 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { useAppStore } from "@/lib/store/AppStore";
+import { useMarketplace } from "@/lib/store/domains/contexts";
 import { ServicesAgency } from "@/components/ServicesAgency";
+import { fetchServices } from "@/lib/services/api/services";
+import { clearCache } from "@/lib/services/api/http";
 
 export function ServicesPage() {
-  const { services, submitQuote, platformLoaded } = useAppStore();
+  const { services, setServices, submitQuote } = useMarketplace();
+  const { platformLoaded } = useAppStore();
+
+  // Lecture FRAÎCHE des services à l'ouverture de la page : une image de carte
+  // (ou un prix, une description) modifiée dans l'administration doit apparaître
+  // immédiatement, sans attendre l'expiration du cache du domaine « services ».
+  useEffect(() => {
+    clearCache(["services"]);
+    fetchServices({}, true)
+      .then((data) => {
+        if (data?.servicePackages?.length) {
+          setServices(data.servicePackages as any);
+        }
+      })
+      .catch(() => {});
+  }, [setServices]);
 
   if (!platformLoaded) {
     return (
