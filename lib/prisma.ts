@@ -8,7 +8,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 // Singleton pour éviter les connexions multiples en dev.
 // ============================================================
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_POOL_URL || process.env.DATABASE_URL;
 
 // Adapter requis par Prisma 7 (driver PostgreSQL)
 // En dev, Supabase utilise un certificat self-signed → on désactive
