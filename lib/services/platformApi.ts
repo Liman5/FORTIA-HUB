@@ -20,7 +20,7 @@ import { fetchMarketplace } from "./api/marketplace";
 import { fetchServices } from "./api/services";
 import { fetchSite } from "./api/site";
 import { fetchBanners } from "./api/banners";
-import { clearCache } from "./api/http";
+import { clearCache, fetchDomain } from "./api/http";
 
 export const CATALOG_PAGE_SIZE = CATALOG_DEFAULT_LIMIT;
 
@@ -91,34 +91,33 @@ export interface PlatformData {
  * son cache). Un domaine en échec ne bloque pas les autres.
  */
 export async function apiFetchPlatformData(force = false): Promise<PlatformData | null> {
-  const [catalog, marketplace, services, site, banners] = await Promise.all([
-    fetchCatalog({ limit: CATALOG_PAGE_SIZE }, force),
-    fetchMarketplace({ limit: 60 }, force),
-    fetchServices({}, force),
-    fetchSite(force),
-    fetchBanners(force),
-  ]);
+  // UNE SEULE requête pour tout le démarrage (catalogue, boutique, services,
+  // contenu, bannières). Avant : 5 requêtes parallèles → pool PostgreSQL saturé.
+  const data = await fetchDomain<any>("marketplace", "/api/bootstrap", {
+    suffix: "bootstrap",
+    force,
+  });
 
-  if (!catalog && !marketplace && !services && !site && !banners) return null;
+  if (!data) return null;
 
   return {
-    courses: catalog?.courses || [],
-    courseCategories: catalog?.courseCategories || [],
-    trainingCenters: catalog?.trainingCenters || [],
-    catalogTotal: catalog?.total || 0,
-    catalogHasMore: catalog?.hasMore || false,
-    stores: marketplace?.stores || [],
-    products: marketplace?.products || [],
-    servicePackages: services?.servicePackages || [],
-    siteBanners: banners?.siteBanners || [],
-    freelances: services?.freelances || [],
-    enterprises: services?.enterprises || [],
-    blogPosts: services?.blogPosts || [],
-    blogCategories: services?.blogCategories || [],
-    notifications: site?.notifications || [],
-    siteContent: site?.siteContent || [],
-    feeConfig: site?.feeConfig ?? null,
-    platformStats: site?.platformStats ?? null,
+    courses: data.courses || [],
+    courseCategories: data.courseCategories || [],
+    trainingCenters: data.trainingCenters || [],
+    catalogTotal: data.catalogTotal || 0,
+    catalogHasMore: data.catalogHasMore || false,
+    stores: data.stores || [],
+    products: data.products || [],
+    servicePackages: data.servicePackages || [],
+    siteBanners: data.siteBanners || [],
+    freelances: data.freelances || [],
+    enterprises: data.enterprises || [],
+    blogPosts: data.blogPosts || [],
+    blogCategories: data.blogCategories || [],
+    notifications: data.notifications || [],
+    siteContent: data.siteContent || [],
+    feeConfig: data.feeConfig ?? null,
+    platformStats: data.platformStats ?? null,
   };
 }
 

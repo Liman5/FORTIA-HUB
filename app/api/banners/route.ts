@@ -26,7 +26,8 @@ export async function GET(req: Request) {
   const cached = readResponseCache(cacheKey);
   if (cached) {
     return new Response(cached, {
-      headers: { "Content-Type": "application/json", "X-Cache": "HIT" },
+      headers: { "Content-Type": "application/json", "X-Cache": "HIT",
+        "Cache-Control": "public, s-maxage=15, stale-while-revalidate=60" },
     });
   }
 
@@ -42,7 +43,8 @@ export async function GET(req: Request) {
     const body = await response.text();
     writeResponseCache(cacheKey, body);
     return new Response(body, {
-      headers: { "Content-Type": "application/json", "X-Cache": "MISS" },
+      headers: { "Content-Type": "application/json", "X-Cache": "MISS",
+        "Cache-Control": "public, s-maxage=15, stale-while-revalidate=60" },
     });
   } catch (error: any) {
     console.error("[BANNERS] Erreur:", error);

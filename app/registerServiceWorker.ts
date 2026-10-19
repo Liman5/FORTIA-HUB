@@ -62,8 +62,10 @@ export function registerServiceWorker() {
 
   // Enregistrement immédiat (ne pas attendre "load" : l'événement peut être
   // déjà passé lors de certaines navigations, ce qui bloquerait l'installation PWA).
+// Renforce la mise à jour automatique : le navigateur ne garde jamais
+// l'ancien fichier du service worker en cache (mise à jour immédiate en prod).
   navigator.serviceWorker
-    .register("/sw.js")
+    .register("/sw.js", { updateViaCache: "none" })
     .then((registration) => {
       console.log(
         "[PWA] Service Worker enregistré avec succès (scope: " + registration.scope + ")"

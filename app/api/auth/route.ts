@@ -19,6 +19,7 @@ import {
 } from "@/lib/services/twoFactor";
 import { notifyUser } from "@/lib/services/notifyUser";
 import { isRetryableDbError, withDbRetry } from "@/lib/server/dbRetry";
+import { clientIp, rateLimit } from "@/lib/server/rateLimit";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -134,6 +135,28 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // ===== Protection anti-abus (force brute / robots) =====
+    // Connexion : 10 essais / 5 min par IP. Inscription & OTP : 8 / 10 min.
+    const ip = clientIp(request);
+    const guardedActions = ["login", "register", "verify-otp", "send-otp"];
+    if (guardedActions.includes(String(body?.action))) {
+      const isLogin = body.action === "login";
+      const wait = rateLimit(
+        `${body.action}:${ip}`,
+        isLogin ? 10 : 8,
+        isLogin ? 5 * 60 * 1000 : 10 * 60 * 1000
+      );
+      if (wait) {
+        return NextResponse.json(
+          {
+            error: `Trop de tentatives. Réessayez dans ${wait} seconde(s).`,
+            code: "RATE_LIMITED",
+          },
+          { status: 429, headers: { "Retry-After": String(wait) } }
+        );
+      }
+    }
 
     // ====== CHECK-EMAIL ======
     if (body.action === "check-email") {
