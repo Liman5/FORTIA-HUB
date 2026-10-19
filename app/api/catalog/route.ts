@@ -3,6 +3,7 @@ import { jsonSafe } from "@/lib/server/json";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/services/authSession";
 import { requireAdmin } from "@/lib/server/requireAdmin";
+import { readResponseCache, writeResponseCache } from "@/lib/server/responseCache";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,18 @@ function projectCourse(c: any) {
 }
 
 export async function GET(req: NextRequest) {
+  const cacheKey = `GET /api/catalog${req.nextUrl.search}`;
+
+  // Cache serveur 15 s : le catalogue est public et identique pour tous.
+  // Sans ce cache, chaque visite consommait plusieurs connexions PostgreSQL
+  // (cause de l'incident P2039 qui faisait échouer la connexion).
+  const cached = readResponseCache(cacheKey);
+  if (cached) {
+    return new Response(cached, {
+      headers: { "Content-Type": "application/json", "X-Cache": "HIT" },
+    });
+  }
+
   try {
     const params = req.nextUrl.searchParams;
     const wantsAll = params.get("all") === "1";
@@ -147,7 +160,7 @@ export async function GET(req: NextRequest) {
 
     const courses = rows.map(projectCourse);
 
-    return jsonSafe({
+    const response = jsonSafe({
       success: true,
       data: {
         courses,
@@ -158,6 +171,11 @@ export async function GET(req: NextRequest) {
         limit,
         hasMore: wantsAll ? false : skip + courses.length < total,
       },
+    });
+    const body = await response.text();
+    writeResponseCache(cacheKey, body);
+    return new Response(body, {
+      headers: { "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (error: any) {
     console.error("[CATALOG] Erreur:", error);

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   clearSessionCookie,
+  extendSessionIfNeeded,
   getCurrentUser,
   revokeSession,
+  setSessionCookie,
 } from "@/lib/services/authSession";
 import { isTwoFactorEnabled } from "@/lib/services/twoFactor";
 
@@ -11,6 +13,7 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/auth/session
  * Vérifie la session JWT (cookie HttpOnly) et retourne l'utilisateur connecté.
+ * Prolonge aussi la session si elle approche de son terme (30 jours glissants).
  * Retourne 401 si non authentifié.
  */
 export async function GET(request: NextRequest) {
@@ -22,8 +25,15 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
+
     const twoFactorEnabled = await isTwoFactorEnabled(user.id);
-    return NextResponse.json({ success: true, user: { ...user, twoFactorEnabled } });
+    const response = NextResponse.json({ success: true, user: { ...user, twoFactorEnabled } });
+
+    // Renouvellement glissant : l'app reste connectée tant qu'elle est utilisée.
+    const extended = await extendSessionIfNeeded(request);
+    if (extended) setSessionCookie(response, extended.token, extended.expiresAt);
+
+    return response;
   } catch (error: any) {
     console.error("[AUTH SESSION] Erreur de vérification:", error?.message);
     return NextResponse.json(

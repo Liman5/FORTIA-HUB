@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useTheme } from "@/lib/store/ThemeProvider";
 import { Logo } from "./Logo";
@@ -67,13 +67,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const [mounted, setMounted] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  // Barre de recherche dépliée sur mobile (la saisie reste DANS l'en-tête)
-  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
-  const mobileSearchRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (isMobileSearchOpen) mobileSearchRef.current?.focus();
-  }, [isMobileSearchOpen]);
 
   /** Saisie dans l'en-tête : alimente le store et ouvre le modal de résultats. */
   const handleSearchInput = (value: string) => {
@@ -180,18 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Global Controls Only */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Recherche (mobile / tablette) : déplie la barre de l'en-tête */}
-            {!isLandingPage && !hideSearch && (
-              <button
-                type="button"
-                onClick={() => setIsMobileSearchOpen((open) => !open)}
-                className="lg:hidden p-2 rounded-xl bg-[#011D46]/80 text-slate-200 hover:text-[#D69E25] border border-[#D69E25]/30 transition shadow"
-                title="Rechercher"
-                aria-label="Ouvrir la recherche"
-              >
-                <Search className="w-4 h-4" />
-              </button>
-            )}
+            {/* La recherche mobile est désormais SOUS l'en-tête (AppShell). */}
 
             {/* Panier → barre du bas (badge) ; Académie et Marketplace → accueil. */}
 
@@ -358,36 +340,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          {/* Barre de recherche mobile : la SAISIE reste dans l'en-tête */}
-          {!isLandingPage && !hideSearch && isMobileSearchOpen && (
-            <div className="lg:hidden pb-3">
-              <div className="flex items-center gap-2 h-11 px-3 rounded-2xl bg-[#011D46]/80 border border-[#D69E25]/40 focus-within:border-[#D69E25] transition">
-                <Search className="w-4 h-4 text-[#D69E25] shrink-0" />
-                <input
-                  ref={mobileSearchRef}
-                  id="app-search-input-mobile"
-                  type="search"
-                  value={searchQuery}
-                  onChange={(event) => handleSearchInput(event.target.value)}
-                  onFocus={() => onOpenSearch?.()}
-                  placeholder="Rechercher une formation, un produit…"
-                  aria-label="Rechercher"
-                  className="flex-1 min-w-0 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMobileSearchOpen(false);
-                    setSearchQuery("");
-                  }}
-                  className="text-slate-400 hover:text-white transition shrink-0"
-                  aria-label="Fermer la recherche"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
+          {/* La barre de recherche mobile se trouve SOUS l'en-tête (AppShell) :
+              elle reste fixe au défilement et n'encombre plus le header. */}
         </div>
       </header>
     </>

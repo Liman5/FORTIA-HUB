@@ -3,6 +3,7 @@ import { jsonSafe } from "@/lib/server/json";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/services/authSession";
 import { requireAdmin } from "@/lib/server/requireAdmin";
+import { readResponseCache, writeResponseCache } from "@/lib/server/responseCache";
 
 
 export const dynamic = "force-dynamic";
@@ -20,8 +21,22 @@ const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 60;
 
 export async function GET(req: NextRequest) {
+  const params = req.nextUrl.searchParams;
+  const cacheKey = `GET /api/marketplace${req.nextUrl.search}`;
+
+  // Cache serveur 15 s pour les visiteurs ANONYMES uniquement (aucun cookie
+  // de session) : le contenu est alors identique pour tous, et c'est la route
+  // la plus appelée au démarrage. Un membre connecté n'est jamais servi
+  // depuis ce cache (il peut voir des brouillons de son propre espace).
+  const hasSession = Boolean(req.cookies.get("fh_session")?.value);
+  const cached = hasSession ? null : readResponseCache(cacheKey);
+  if (cached) {
+    return new Response(cached, {
+      headers: { "Content-Type": "application/json", "X-Cache": "HIT" },
+    });
+  }
+
   try {
-    const params = req.nextUrl.searchParams;
     const page = Math.max(1, Number(params.get("page") || 1));
     const limit = Math.min(
       Math.max(1, Number(params.get("limit") || DEFAULT_LIMIT)),
@@ -71,7 +86,7 @@ export async function GET(req: NextRequest) {
       return { ...rest, payoutMethod: payoutInfo?.method || "" };
     });
 
-    return jsonSafe({
+    const response = jsonSafe({
       success: true,
       data: {
         stores: publicStores,
@@ -81,6 +96,14 @@ export async function GET(req: NextRequest) {
         limit,
         hasMore: (page - 1) * limit + products.length < total,
       },
+    });
+
+    // Mise en cache réservée aux visiteurs anonymes (jamais pour un membre).
+    const body = await response.text();
+    if (isAnonymous) writeResponseCache(cacheKey, body);
+
+    return new Response(body, {
+      headers: { "Content-Type": "application/json", "X-Cache": isAnonymous ? "MISS" : "BYPASS" },
     });
   } catch (error: any) {
     console.error("[MARKETPLACE] Erreur:", error);

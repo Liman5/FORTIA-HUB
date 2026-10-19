@@ -37,8 +37,8 @@ export function isRetryableDbError(error: unknown): boolean {
  */
 export async function withDbRetry<T>(
   task: () => Promise<T>,
-  attempts = 2,
-  delayMs = 350
+  attempts = 3,
+  delayMs = 250
 ): Promise<T> {
   let lastError: unknown;
 
@@ -48,6 +48,7 @@ export async function withDbRetry<T>(
     } catch (error) {
       lastError = error;
       if (!isRetryableDbError(error) || attempt === attempts - 1) throw error;
+      // 250 ms, 500 ms : laisse le pool se libérer sans bloquer l'utilisateur.
       await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
     }
   }

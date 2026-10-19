@@ -17,6 +17,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { FloatingAiAssistant } from "@/components/FloatingAiAssistant";
 import { SearchResultsModal } from "@/components/SearchResultsModal";
 import { AnimatePresence } from "motion/react";
+import { Search, X } from "lucide-react";
 import { registerServiceWorker } from "@/app/registerServiceWorker";
 import { initPwaStore } from "@/lib/pwa/pwaStore";
 import { showSystemNotification } from "@/lib/services/appNotifications";
@@ -251,6 +252,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           isLandingPage={isLandingPage}
           hideSearch={hideHeaderSearch}
         />
+      )}
+
+      {/* ===== BARRE DE RECHERCHE SOUS L'EN-TÊTE (app mobile / tablette) =====
+          Elle reste FIXE au défilement (sticky sous le header de 64 px) et
+          n'encombre plus l'en-tête. Le modal de résultats s'ouvre au focus. */}
+      {!isAdminPage && !isLandingPage && !hideHeaderSearch && (
+        <div className="lg:hidden sticky top-16 z-30 bg-[#021231]/95 backdrop-blur-md border-b border-[#D69E25]/20">
+          <div className="max-w-7xl mx-auto px-3 py-2">
+            <div className="flex items-center gap-2 h-11 px-3 rounded-2xl bg-[#011D46]/90 border border-[#D69E25]/30 focus-within:border-[#D69E25] transition">
+              <Search className="w-4 h-4 text-[#D69E25] shrink-0" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onFocus={openSearch}
+                placeholder="Rechercher une formation, un produit, un service…"
+                aria-label="Rechercher"
+                enterKeyHint="search"
+                autoComplete="off"
+                className="flex-1 min-w-0 bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none"
+              />
+              {searchQuery.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="text-slate-400 hover:text-white transition shrink-0"
+                  aria-label="Effacer la recherche"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Sidebar - masqué sur la landing page */}

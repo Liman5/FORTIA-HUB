@@ -11,6 +11,7 @@ import {
   saveCommissionRule,
   type SaleScope,
 } from "@/lib/server/commissions";
+import { invalidateResponseCache } from "@/lib/server/responseCache";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "action et data requis" }, { status: 400 });
     }
 
-    // ===== Contrôle des droits de l'administrateur (si session admin) =====
+    // Toute écriture invalide le cache serveur des routes publiques :
+    // les visiteurs voient immédiatement la nouvelle version.
+    invalidateResponseCache();
+
     const adminActor = await requireAdmin(req).catch(() => null);
     if (adminActor) {
       const role = normalizeRole(adminActor.role);

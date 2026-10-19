@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { jsonSafe } from "@/lib/server/json";
 import { prisma } from "@/lib/prisma";
+import { readResponseCache, writeResponseCache } from "@/lib/server/responseCache";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,16 @@ const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 60;
 
 export async function GET(req: NextRequest) {
+  const cacheKey = `GET /api/services${req.nextUrl.search}`;
+
+  // Cache serveur 15 s (contenu public identique pour tous).
+  const cached = readResponseCache(cacheKey);
+  if (cached) {
+    return new Response(cached, {
+      headers: { "Content-Type": "application/json", "X-Cache": "HIT" },
+    });
+  }
+
   try {
     const params = req.nextUrl.searchParams;
     const page = Math.max(1, Number(params.get("page") || 1));
@@ -65,7 +76,7 @@ export async function GET(req: NextRequest) {
         prisma.blogPost.count({ where: blogWhere }).catch(() => 0),
       ]);
 
-    return jsonSafe({
+    const response = jsonSafe({
       success: true,
       data: {
         servicePackages,
@@ -78,6 +89,11 @@ export async function GET(req: NextRequest) {
         limit,
         hasMore: (page - 1) * limit + blogPosts.length < blogTotal,
       },
+    });
+    const body = await response.text();
+    writeResponseCache(cacheKey, body);
+    return new Response(body, {
+      headers: { "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (error: any) {
     console.error("[SERVICES] Erreur:", error);

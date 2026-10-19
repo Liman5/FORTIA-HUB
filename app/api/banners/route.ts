@@ -1,5 +1,6 @@
 import { jsonSafe } from "@/lib/server/json";
 import { prisma } from "@/lib/prisma";
+import { readResponseCache, writeResponseCache } from "@/lib/server/responseCache";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +15,22 @@ export const dynamic = "force-dynamic";
  *   • l'administration les voit toutes pour pouvoir les réactiver.
  *
  *   ?active=1 → ne renvoie que les bannières actives.
+ *
+ * CACHE SERVEUR 15 s (soulage le pool PostgreSQL ; cf. incident P2039).
  */
 export async function GET(req: Request) {
-  try {
-    const url = new URL(req.url);
-    const onlyActive = url.searchParams.get("active") === "1";
+  const url = new URL(req.url);
+  const onlyActive = url.searchParams.get("active") === "1";
+  const cacheKey = `GET /api/banners${onlyActive ? "?active=1" : ""}`;
 
+  const cached = readResponseCache(cacheKey);
+  if (cached) {
+    return new Response(cached, {
+      headers: { "Content-Type": "application/json", "X-Cache": "HIT" },
+    });
+  }
+
+  try {
     const siteBanners = await prisma.siteBanner
       .findMany({
         where: onlyActive ? { isActive: true } : undefined,
@@ -27,7 +38,12 @@ export async function GET(req: Request) {
       })
       .catch(() => [] as never[]);
 
-    return jsonSafe({ success: true, data: { siteBanners } });
+    const response = jsonSafe({ success: true, data: { siteBanners } });
+    const body = await response.text();
+    writeResponseCache(cacheKey, body);
+    return new Response(body, {
+      headers: { "Content-Type": "application/json", "X-Cache": "MISS" },
+    });
   } catch (error: any) {
     console.error("[BANNERS] Erreur:", error);
     return jsonSafe({ error: "Erreur de lecture des bannières." }, { status: 500 });

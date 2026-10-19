@@ -15,8 +15,26 @@ import { withDbRetry } from "@/lib/server/dbRetry";
 /** Nom du cookie de session utilisateur. */
 export const SESSION_COOKIE_NAME = "fh_session";
 
-/** Durée de validité d'une session (7 jours). */
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+/** Durée de validité d'une session (30 jours, prolongée à chaque usage actif). */
+const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Cache mémoire : évite de relire la session en base à chaque requête. */
+const SESSION_CACHE_TTL_MS = 30 * 1000;
+const sessionCache = new Map<string, { userId: string; expiresAt: number; checkedAt: number }>();
+
+/** Cache mémoire du profil utilisateur (20 s) — soulage fortement le pool. */
+const USER_CACHE_TTL_MS = 20 * 1000;
+const userCache = new Map<string, { data: any; savedAt: number }>();
+
+/** Vide les caches (déconnexion, changement de profil). */
+export function clearSessionCaches(token?: string, userId?: string): void {
+  if (token) sessionCache.delete(token);
+  if (userId) userCache.delete(userId);
+  if (!token && !userId) {
+    sessionCache.clear();
+    userCache.clear();
+  }
+}
 
 function getJwtSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
@@ -86,17 +104,78 @@ export async function createUserSession(
   const token = await signSessionToken(user.id, user.email);
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
 
-  await prisma.session.create({
-    data: {
-      userId: user.id,
-      token,
-      expiresAt,
-      userAgent: request.headers.get("user-agent") || "",
-      ipAddress: request.headers.get("x-forwarded-for") || "",
-    },
-  });
+  // Écriture de la session en base = BEST-EFFORT.
+  // Si le pool PostgreSQL est saturé, l'utilisateur doit pouvoir se connecter
+  // quand même : le JWT signé fait foi, la ligne sera recréée plus tard.
+  try {
+    await Promise.race([
+      prisma.session.create({
+        data: {
+          userId: user.id,
+          token,
+          expiresAt,
+          userAgent: request.headers.get("user-agent") || "",
+          ipAddress: request.headers.get("x-forwarded-for") || "",
+        },
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("session-create-timeout")), 8000)
+      ),
+    ]);
+    clearSessionCaches(token, user.id);
+  } catch (e: any) {
+    console.warn("[AUTH SESSION] Session non enregistrée en base (JWT émis) :", e?.message);
+  }
 
   return { token, expiresAt };
+}
+
+/**
+ * PROLONGATION GLISSANTE : tant que l'utilisateur revient dans l'app,
+ * sa session est repoussée (30 jours). Il n'est donc plus obligé de se
+ * reconnecter chaque semaine ; seule une absence prolongée l'exige.
+ *
+ * Retourne le nouveau cookie à poser, ou null si rien à faire.
+ */
+export async function extendSessionIfNeeded(
+  request: NextRequest
+): Promise<{ token: string; expiresAt: Date } | null> {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+
+  const payload = await verifySessionToken(token);
+  if (!payload?.sub) return null;
+
+  const cached = sessionCache.get(token);
+  if (!cached) return null; // cache non rempli : on attend le prochain passage
+
+  const now = Date.now();
+  const remaining = cached.expiresAt - now;
+  const TWENTY_DAYS = 20 * 24 * 60 * 60 * 1000;
+
+  // Rien à faire : session large, ou expiration inconnue (mode dégradé).
+  if (remaining > TWENTY_DAYS || remaining < 60 * 1000) return null;
+
+  const newToken = await signSessionToken(payload.sub, payload.email);
+  const expiresAt = new Date(now + SESSION_DURATION_MS);
+
+  try {
+    await Promise.race([
+      prisma.session.update({ where: { token }, data: { token: newToken, expiresAt } }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("extend-timeout")), 5000)),
+    ]);
+  } catch (e: any) {
+    console.warn("[AUTH SESSION] Prolongation en base impossible :", e?.message);
+  }
+
+  sessionCache.delete(token);
+  sessionCache.set(newToken, {
+    userId: payload.sub,
+    expiresAt: expiresAt.getTime(),
+    checkedAt: now,
+  });
+
+  return { token: newToken, expiresAt };
 }
 
 /**
@@ -156,23 +235,60 @@ export async function getCurrentUser(request: NextRequest): Promise<{
   const payload = await verifySessionToken(token);
   if (!payload?.sub) return null;
 
-  // Lecture résiliente : si le pool PostgreSQL est saturé (P2039), on
-  // réessaie au lieu de faire échouer TOUTE la requête API (500 côté
-  // marketplace/services). En dernier recours : traité comme « non connecté ».
-  let session: { userId: string | null; expiresAt: Date } | null = null;
-  try {
-    session = await withDbRetry(() =>
-      prisma.session.findUnique({
-        where: { token },
-        select: { userId: true, expiresAt: true },
-      })
-    );
-  } catch (error) {
-    console.warn("[AUTH SESSION] Lecture de session impossible :", (error as Error)?.message);
-    return null;
+  // ===== 1) Session : cache mémoire (30 s) avant toute lecture en base =====
+  // Sans ce cache, chaque appel d'API faisait 2 requêtes SQL (session + user) :
+  // c'est ce qui saturait le pool et provoquait P2039 au moment de se connecter.
+  const cachedSession = sessionCache.get(token);
+  const now = Date.now();
+  let sessionUserId = payload.sub;
+
+  if (cachedSession && now - cachedSession.checkedAt < SESSION_CACHE_TTL_MS) {
+    if (cachedSession.expiresAt < now) return null;
+    sessionUserId = cachedSession.userId;
+  } else {
+    try {
+      const session = await withDbRetry(() =>
+        prisma.session.findUnique({
+          where: { token },
+          select: { userId: true, expiresAt: true },
+        })
+      );
+
+      if (!session || session.expiresAt.getTime() < now) {
+        sessionCache.delete(token);
+        return null;
+      }
+      if (session.userId !== payload.sub) {
+        sessionCache.delete(token);
+        return null;
+      }
+
+      sessionUserId = session.userId;
+      sessionCache.set(token, {
+        userId: session.userId,
+        expiresAt: session.expiresAt.getTime(),
+        checkedAt: now,
+      });
+    } catch (error) {
+      // Base momentanément saturée : on NE déconnecte PAS l'utilisateur.
+      // Le JWT est signé et valide ; on re-valide en base à la prochaine occasion.
+      console.warn(
+        "[AUTH SESSION] Vérification en base impossible, JWT accepté (mode dégradé) :",
+        (error as Error)?.message
+      );
+      sessionCache.set(token, {
+        userId: payload.sub,
+        expiresAt: now + 15 * 1000,
+        checkedAt: now,
+      });
+    }
   }
-  if (!session || session.expiresAt < new Date()) return null;
-  if (session.userId !== payload.sub) return null;
+
+  // ===== 2) Profil : cache mémoire (20 s) =====
+  const cachedUser = userCache.get(sessionUserId);
+  if (cachedUser && now - cachedUser.savedAt < USER_CACHE_TTL_MS) {
+    return cachedUser.data;
+  }
 
   // Sécurité : on ne lit QUE la ligne du compte authentifié (jamais un autre user)
   interface SessionUserRow {
@@ -216,7 +332,9 @@ export async function getCurrentUser(request: NextRequest): Promise<{
     );
   } catch (error) {
     console.warn("[AUTH SESSION] Lecture du compte impossible :", (error as Error)?.message);
-    return null;
+    // Profil déjà connu récemment → on le sert plutôt que de déconnecter.
+    const stale = userCache.get(sessionUserId);
+    return stale ? stale.data : null;
   }
   if (!user || !user.isActive) return null;
 
@@ -237,7 +355,7 @@ export async function getCurrentUser(request: NextRequest): Promise<{
     if (Array.isArray(parsed)) paymentHistory = parsed;
   } catch {}
 
-  return {
+  const profile = {
     id: user.id,
     name: user.name,
     email: user.email,
@@ -252,6 +370,9 @@ export async function getCurrentUser(request: NextRequest): Promise<{
     earnedCertificates: certificates,
     paymentHistory: paymentHistory,
   };
+
+  userCache.set(sessionUserId, { data: profile, savedAt: now });
+  return profile;
 }
 
 /**
@@ -260,8 +381,15 @@ export async function getCurrentUser(request: NextRequest): Promise<{
 export async function revokeSession(request: NextRequest): Promise<number> {
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return 0;
-  const result = await prisma.session.deleteMany({ where: { token } });
-  return result.count;
+  const payload = await verifySessionToken(token);
+  clearSessionCaches(token, payload?.sub);
+  try {
+    const result = await withDbRetry(() => prisma.session.deleteMany({ where: { token } }));
+    return result.count;
+  } catch (e: any) {
+    console.warn("[AUTH SESSION] Révocation en base impossible :", e?.message);
+    return 0;
+  }
 }
 
 /**
