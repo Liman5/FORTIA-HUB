@@ -17,6 +17,7 @@ import {
   X,
   Images,
   ShieldCheck,
+  BadgeCheck,
 } from "lucide-react";
 
 export type AdminModuleKey =
@@ -25,6 +26,7 @@ export type AdminModuleKey =
   | "produits"
   | "services"
   | "bannieres"
+  | "boutiques"
   | "marketplace"
   | "support"
   | "formateurs"
@@ -89,6 +91,13 @@ const MODULES: {
     icon: Images,
     color: "text-[#D69E25]",
     activeBg: "bg-[#D69E25] text-[#021231]",
+  },
+  {
+    key: "boutiques",
+    label: "Vérification Boutique",
+    icon: BadgeCheck,
+    color: "text-orange-400",
+    activeBg: "bg-orange-500 text-white",
   },
   {
     key: "marketplace",

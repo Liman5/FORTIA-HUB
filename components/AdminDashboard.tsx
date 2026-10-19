@@ -936,79 +936,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   (% ou montant fixe), avec récapitulatif réel d'application. */}
               <CommissionRatesPanel />
 
-              {/* SECTION: Vendor Applications */}
-              <div className="space-y-4">
-                <h3 className="font-black text-base text-white flex items-center gap-2">
-                  <Users className="w-5 h-5 text-[#D69E25]" />
-                  <span>Candidatures Vendeurs à Examiner ({vendorApplications.length})</span>
-                </h3>
 
-                {vendorApplications.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">Aucune candidature vendeur reçue pour le moment.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="bg-[#021231] text-slate-400 uppercase text-[10px]">
-                        <tr>
-                          <th className="p-3">Candidat</th>
-                          <th className="p-3">Projet de Boutique</th>
-                          <th className="p-3">Catégorie</th>
-                          <th className="p-3">Téléphone / Contact</th>
-                          <th className="p-3">Date</th>
-                          <th className="p-3">Statut</th>
-                          <th className="p-3">Actions Moderation</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {vendorApplications.map((app) => (
-                          <tr key={app.id} className="hover:bg-[#021231]/50 transition">
-                            <td className="p-3">
-                              <p className="font-bold text-white">{app.applicantName}</p>
-                              <p className="text-[10px] text-slate-400">{app.email}</p>
-                            </td>
-                            <td className="p-3">
-                              <p className="font-bold text-[#D69E25]">{app.storeName}</p>
-                              <p className="text-[10px] text-slate-400 line-clamp-1">{app.storeDescription}</p>
-                            </td>
-                            <td className="p-3 text-slate-200">{app.storeCategory}</td>
-                            <td className="p-3 text-slate-300 font-mono">{app.phone}</td>
-                            <td className="p-3 text-slate-400">{app.submittedAt}</td>
-                            <td className="p-3">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                isApproved(app.status) ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                                isRejected(app.status) ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                                'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                              }`}>
-                                {app.status}
-                              </span>
-                            </td>
-                            <td className="p-3">
-                              {isPending(app.status) ? (
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    onClick={() => onApproveVendorApplication && onApproveVendorApplication(app.id)}
-                                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg transition"
-                                  >
-                                    Valider & Créer Boutique
-                                  </button>
-                                  <button
-                                    onClick={() => onRejectVendorApplication && onRejectVendorApplication(app.id)}
-                                    className="px-2.5 py-1 bg-red-600/30 hover:bg-red-600 text-red-300 hover:text-white font-bold text-[11px] rounded-lg transition"
-                                  >
-                                    Rejeter
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-[11px] text-slate-500 italic">Traité</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+              {/* Les candidatures vendeurs sont désormais traitées dans le
+                  module dédié « Vérification Boutique » (panneau indépendant,
+                  avec toutes les informations du candidat). */}
 
               {/* SECTION: All Stores Management */}
               <div className="space-y-4 pt-4 border-t border-slate-800">

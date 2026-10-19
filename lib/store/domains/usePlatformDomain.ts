@@ -240,6 +240,19 @@ export function usePlatformDomain({
         setStores(data.stores);
         setActiveVendorStore(data.stores[0]);
       }
+
+      // ===== Catalogue et contenu réel (source : base de données) =====
+      if (Array.isArray(data.courses)) setCourses(data.courses);
+      if (Array.isArray(data.courseCategories) && data.courseCategories.length > 0)
+        setCourseCategories(data.courseCategories);
+      if (Array.isArray(data.trainingCenters) && data.trainingCenters.length > 0)
+        setTrainingCenters(data.trainingCenters);
+      if (Array.isArray(data.products)) setMarketplaceProducts(data.products);
+      if (Array.isArray(data.servicePackages)) setServices(data.servicePackages);
+      if (Array.isArray(data.freelances)) setFreelances(data.freelances);
+      if (Array.isArray(data.enterprises)) setEnterprises(data.enterprises);
+      if (Array.isArray(data.blogPosts)) setBlogPosts(data.blogPosts);
+
       setAdminDataLoaded(true);
     } catch (error) {
       console.warn("[Plateforme] Chargement des données admin impossible:", error);

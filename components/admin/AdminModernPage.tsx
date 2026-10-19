@@ -8,6 +8,7 @@ import { AdminSidebar, AdminModuleKey } from "./AdminSidebar";
 import { AdminStatsModule } from "./AdminStatsModule";
 import { AdminCourseCategoriesPanel } from "./AdminCourseCategoriesPanel";
 import { AdminBannersPanel } from "./AdminBannersPanel";
+import { AdminVendorVerificationsPanel } from "./AdminVendorVerificationsPanel";
 import { AdminAdminsPanel } from "./AdminAdminsPanel";
 import { normalizeAdminRole } from "@/lib/server/adminRoles";
 import { AdminDashboard } from "@/components/AdminDashboard";
@@ -284,6 +285,8 @@ export function AdminModernPage() {
     // repli ci-dessous n'est jamais utilisée (AdminDashboard n'est pas monté
     // pour ce module) — aucune intégration au CMS.
     bannieres: "site_content",
+    // Le module « Vérification Boutique » rend son propre panneau.
+    boutiques: "marketplace",
     marketplace: "marketplace",
     support: "support",
     formateurs: "instructors",
@@ -304,7 +307,11 @@ export function AdminModernPage() {
       title: "Bannières du Site",
       subtitle: "Bandeau animé du haut de site : image R2, animation, bouton (lien interne/externe) et durée d'affichage",
     },
-    marketplace: { title: "Marketplace & Vendeurs", subtitle: "Boutiques, candidatures, retraits et commissions" },
+    marketplace: { title: "Marketplace & Vendeurs", subtitle: "Boutiques actives, retraits et commissions" },
+    boutiques: {
+      title: "Vérification Boutique",
+      subtitle: "Candidatures vendeurs : informations complètes et décision d'approbation",
+    },
     support: { title: "Support Post-Achat", subtitle: "Demandes de support des clients après achat" },
     formateurs: { title: "Gestion des Formateurs", subtitle: "Centres de formation autonomes et commissions" },
     kyc: { title: "Vérifications KYC", subtitle: "Validation des badges freelance et entreprise" },
@@ -419,6 +426,11 @@ export function AdminModernPage() {
               onDelete={deleteBanner}
               onToggleActive={toggleBannerActive}
             />
+          ) : activeModule === "boutiques" ? (
+            /* ===== MODULE INDÉPENDANT : VÉRIFICATION BOUTIQUE =====
+               Candidatures vendeurs isolées de Marketplace, avec toutes les
+               informations du candidat avant approbation. */
+            <AdminVendorVerificationsPanel />
           ) : activeModule === "admins" ? (
             /* ===== COMPTES ADMINISTRATEURS (superadmin uniquement) ===== */
             <AdminAdminsPanel />
