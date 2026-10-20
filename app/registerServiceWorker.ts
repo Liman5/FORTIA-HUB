@@ -71,6 +71,10 @@ export function registerServiceWorker() {
         "[PWA] Service Worker enregistré avec succès (scope: " + registration.scope + ")"
       );
 
+      // Vérification IMMÉDIATE : dès l'ouverture de l'app, on demande au
+      // navigateur s'il existe un nouveau worker (mise à jour sans délai).
+      registration.update().catch(() => {});
+
       // Mise à jour automatique : quand une nouvelle version du worker
       // est détectée, on la force et on recharge l'app pour appliquer les
       // nouveaux builds sans action manuelle.

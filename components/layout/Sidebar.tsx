@@ -18,7 +18,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { useActiveSection } from "@/lib/store/useActiveSection";
 import { usePwaInstall, promptInstall, getInstallDiagnostics } from "@/lib/pwa/pwaStore";
 import { Download, Check } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { APP_VERSION, RELEASE_NOTES } from "@/lib/appInfo";
+import { applyUpdate, checkForUpdate } from "@/lib/services/appVersion";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -39,11 +41,25 @@ export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: Si
   const { setActiveTab } = useActiveSection();
   const { isInstalled, isIOS } = usePwaInstall();
   const [installMsg, setInstallMsg] = useState<string | null>(null);
+  const [updateState, setUpdateState] = useState<"idle" | "checking" | "updating" | "latest">("idle");
   const [showNotes, setShowNotes] = useState(false);
 
   const handleNav = (tab: string) => {
     setActiveTab(tab);
     onClose();
+  };
+
+  /** Recherche (et applique) une mise à jour de l'application. */
+  const handleCheckUpdate = async () => {
+    setUpdateState("checking");
+    const available = await checkForUpdate();
+    if (!available) {
+      setUpdateState("latest");
+      window.setTimeout(() => setUpdateState("idle"), 4000);
+      return;
+    }
+    setUpdateState("updating");
+    await applyUpdate();
   };
 
   const handleInstallApp = async () => {
@@ -207,6 +223,33 @@ export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: Si
                 <div className="px-3 py-2 rounded-xl bg-[#D69E25]/10 border border-[#D69E25]/40 text-[10px] text-amber-200 leading-relaxed">
                   {installMsg}
                 </div>
+              )}
+
+              {/* Mise à jour de l'application : détecte un nouveau déploiement
+                  et applique immédiatement (purge caches + service workers). */}
+              <button
+                onClick={handleCheckUpdate}
+                disabled={updateState === "checking" || updateState === "updating"}
+                className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl border border-[#D69E25]/50 text-[#D69E25] font-black text-xs hover:bg-[#D69E25] hover:text-[#021231] transition disabled:opacity-60"
+                title="Rechercher et appliquer une mise à jour"
+              >
+                {updateState === "checking" || updateState === "updating" ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                {updateState === "updating"
+                  ? "Mise à jour…"
+                  : updateState === "checking"
+                    ? "Recherche…"
+                    : updateState === "latest"
+                      ? "À jour"
+                      : "Mettre à jour l'app"}
+              </button>
+              {updateState === "latest" && (
+                <p className="text-[10px] text-emerald-400 text-center font-bold">
+                  Vous avez la dernière version.
+                </p>
               )}
               <div className="sidebar-footer-text text-[10px] text-slate-500 font-semibold">
                 FORTIA HUB © {new Date().getFullYear()} · v{APP_VERSION}

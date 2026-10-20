@@ -1,5 +1,18 @@
 /** @type {import('next').NextConfig} */
+const BUILD_ID =
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.NEXT_PUBLIC_BUILD_ID ||
+  String(Date.now());
+
 const nextConfig = {
+  /**
+   * Identifiant de build exposé au navigateur : permet à l'application
+   * installée (PWA) de comparer sa version à celle du serveur et de se
+   * mettre à jour automatiquement dès qu'un déploiement est disponible.
+   */
+  env: {
+    NEXT_PUBLIC_BUILD_ID: BUILD_ID,
+  },
   images: {
     remotePatterns: [
       {

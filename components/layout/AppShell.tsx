@@ -9,6 +9,7 @@ import { Navbar } from "@/components/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNavbar } from "@/components/BottomNavbar";
 import { PWAInstallBanner } from "@/components/PWAInstallBanner";
+import { AppUpdateWatcher } from "@/components/AppUpdateWatcher";
 import { AdminAuthModal } from "@/components/AdminAuthModal";
 import { CoursePlayerModal } from "@/components/CoursePlayerModal";
 import { KycModal } from "@/components/KycModal";
@@ -304,6 +305,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* PWA Install Prompt Banner */}
       <PWAInstallBanner />
+
+      {/* Mise à jour automatique : détecte un nouveau déploiement et
+          recharge l'application (purge caches + service workers). */}
+      <AppUpdateWatcher />
 
       {/* Main View Router */}
       {/* Main View Router — isolé : une erreur de page n'emporte plus

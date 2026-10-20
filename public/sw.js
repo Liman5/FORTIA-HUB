@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fortia-hub-cache-v5';
+const CACHE_NAME = 'fortia-hub-cache-v6';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
