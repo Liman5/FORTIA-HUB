@@ -353,6 +353,10 @@ export interface BlogPost {
   date: string;
   readTime: string;
   image: string;
+  /** Couleur d'accent (badges, dégradé si aucune image). */
+  accentColor?: string;
+  /** Rendu de la vignette : image | color | gradient. */
+  coverStyle?: "image" | "color" | "gradient";
   tags: string[];
 }
 

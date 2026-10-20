@@ -1343,6 +1343,61 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true });
       }
 
+      // ============ BLOG (module éditorial) ============
+      case "create-blog-post": {
+        const created = await prisma.blogPost.create({
+          data: {
+            title: data.title || "Article",
+            slug: data.slug || `article-${Date.now()}`,
+            excerpt: data.excerpt || "",
+            content: data.content || "",
+            authorName: data.authorName || "Équipe FORTIA",
+            authorAvatar: data.authorAvatar || "",
+            authorRole: data.authorRole || "",
+            category: data.category || "",
+            date: data.date || new Date().toISOString().split("T")[0],
+            readTime: data.readTime || "5 min",
+            image: data.image || "",
+            accentColor: data.accentColor || "#D69E25",
+            coverStyle: data.coverStyle || "image",
+            tags: Array.isArray(data.tags) ? data.tags : [],
+            isPublished: data.isPublished ?? true,
+          } as any,
+        });
+        return NextResponse.json({ success: true, id: created.id });
+      }
+
+      case "update-blog-post": {
+        if (!uuidOrNull(data.id)) return NextResponse.json({ error: "id (UUID) requis" }, { status: 400 });
+        const updated = await prisma.blogPost.update({
+          where: { id: data.id },
+          data: {
+            title: data.title ?? undefined,
+            slug: data.slug ?? undefined,
+            excerpt: data.excerpt ?? undefined,
+            content: data.content ?? undefined,
+            authorName: data.authorName ?? undefined,
+            authorAvatar: data.authorAvatar ?? undefined,
+            authorRole: data.authorRole ?? undefined,
+            category: data.category ?? undefined,
+            date: data.date ?? undefined,
+            readTime: data.readTime ?? undefined,
+            image: data.image ?? undefined,
+            accentColor: data.accentColor ?? undefined,
+            coverStyle: data.coverStyle ?? undefined,
+            tags: Array.isArray(data.tags) ? data.tags : undefined,
+            isPublished: data.isPublished ?? undefined,
+          } as any,
+        });
+        return NextResponse.json({ success: true, id: updated.id });
+      }
+
+      case "delete-blog-post": {
+        if (!uuidOrNull(data.id)) return NextResponse.json({ error: "id (UUID) requis" }, { status: 400 });
+        await prisma.blogPost.delete({ where: { id: data.id } });
+        return NextResponse.json({ success: true });
+      }
+
       // ============ MISE À JOUR PRODUIT ============
       case "update-product": {
         const updated = await prisma.product.update({

@@ -18,6 +18,7 @@ import {
   Images,
   ShieldCheck,
   BadgeCheck,
+  FileText,
 } from "lucide-react";
 
 export type AdminModuleKey =
@@ -34,6 +35,7 @@ export type AdminModuleKey =
   | "devis"
   | "frais"
   | "cms"
+  | "blog"
   | "admins";
 
 interface AdminSidebarProps {
@@ -147,6 +149,15 @@ const MODULES: {
     icon: Globe,
     color: "text-cyan-400",
     activeBg: "bg-cyan-500 text-white",
+  },
+  {
+    // Module éditorial indépendant : publier des articles (image facultative,
+    // style et couleur de vignette au choix).
+    key: "blog",
+    label: "Blog & Articles",
+    icon: FileText,
+    color: "text-amber-300",
+    activeBg: "bg-amber-500 text-[#021231]",
   },
   {
     // Comptes administrateurs : visible UNIQUEMENT pour un superadministrateur

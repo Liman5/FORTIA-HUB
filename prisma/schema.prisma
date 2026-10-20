@@ -1088,6 +1088,10 @@ model BlogPost {
   date        String       @default("")
   readTime    String       @default("5 min") @map("read_time")
   image       String       @default("")
+  /** Couleur d'accent de l'article (badges, dégradé si pas d'image). */
+  accentColor String       @default("#D69E25") @map("accent_color")
+  /** image | color | gradient — rendu de la vignette. */
+  coverStyle  String       @default("image") @map("cover_style")
   tags        String[]     @default([])
   isPublished Boolean      @default(true) @map("is_published")
   createdAt   DateTime     @default(now()) @map("created_at")

@@ -51,7 +51,11 @@ type WriteAction =
   // Bannières du site (module indépendant)
   | "create-banner"
   | "update-banner"
-  | "delete-banner";
+  | "delete-banner"
+  // Blog (module éditorial)
+  | "create-blog-post"
+  | "update-blog-post"
+  | "delete-blog-post";
 
 export interface WriteResult {
   success: boolean;

@@ -10,6 +10,7 @@ import { AdminCourseCategoriesPanel } from "./AdminCourseCategoriesPanel";
 import { AdminBannersPanel } from "./AdminBannersPanel";
 import { AdminVendorVerificationsPanel } from "./AdminVendorVerificationsPanel";
 import { AdminAdminsPanel } from "./AdminAdminsPanel";
+import { AdminBlogPanel } from "./AdminBlogPanel";
 import { normalizeAdminRole } from "@/lib/server/adminRoles";
 import { AdminDashboard } from "@/components/AdminDashboard";
 import { FloatingAiAssistant } from "@/components/FloatingAiAssistant";
@@ -98,6 +99,8 @@ export function AdminModernPage() {
     updateBanner,
     deleteBanner,
     toggleBannerActive,
+    blogPosts,
+    setBlogPosts,
   } = store;
 
   // Session administrateur confirmée → (re)charge les collections réservées
@@ -296,6 +299,7 @@ export function AdminModernPage() {
     cms: "site_content",
     // Le module « Administrateurs » rend son propre panneau (aucun onglet CMS).
     admins: "site_content",
+    blog: "site_content",
   };
 
   const MODULE_TITLES: Record<AdminModuleKey, { title: string; subtitle: string }> = {
@@ -321,6 +325,10 @@ export function AdminModernPage() {
     admins: {
       title: "Comptes administrateurs",
       subtitle: "Création des admins par le superadministrateur · mot de passe unique par compte · superadmin insupprimable",
+    },
+    blog: {
+      title: "Blog & Articles",
+      subtitle: "Publication d'articles : image facultative, couleur d'accent, style de vignette et visibilité",
     },
   };
 
@@ -425,6 +433,13 @@ export function AdminModernPage() {
               onUpdate={updateBanner}
               onDelete={deleteBanner}
               onToggleActive={toggleBannerActive}
+            />
+          ) : activeModule === "blog" ? (
+            /* ===== MODULE INDÉPENDANT : BLOG & ARTICLES ===== */
+            <AdminBlogPanel
+              posts={blogPosts}
+              onPostsChange={(next) => setBlogPosts(next as any)}
+              onRefresh={() => store.refreshPlatformData?.()}
             />
           ) : activeModule === "boutiques" ? (
             /* ===== MODULE INDÉPENDANT : VÉRIFICATION BOUTIQUE =====

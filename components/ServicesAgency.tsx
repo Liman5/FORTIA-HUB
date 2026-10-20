@@ -103,39 +103,23 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
   const activeServices = services.filter(s => s.isActive !== false);
 
   return (
-    <section className="py-14 bg-[#021231] min-h-[600px] relative overflow-hidden" id="services-section">
+    <section className="py-6 sm:py-8 bg-[#021231] min-h-[400px] relative overflow-hidden" id="services-section">
       {/* Background decorations */}
       <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/20 to-transparent" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(214,158,37,0.04)_0%,transparent_50%)]" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 relative z-10">
-        {/* Section Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
-          transition={{ duration: 0.6 }}
-          className="text-center max-w-3xl mx-auto space-y-4"
-        >
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            whileInView={{ scale: 1, opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 bg-white/5 backdrop-blur-xl border border-[#D69E25]/40 px-4 py-2 rounded-full text-xs font-bold text-[#D69E25] mb-2"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Prestations Sur-Mesure & Agence</span>
-          </motion.div>
-          <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5 relative z-10">
+        {/* Section Header — sans badge, sans espace vide */}
+        <div className="text-center max-w-3xl mx-auto space-y-2">
+          <h2 className="text-xl sm:text-3xl font-black text-white tracking-tight">
             Services Professionnels &{" "}
             <span className="animated-gradient-text inline-block">Conseil Entrepreneurial</span>
           </h2>
-          <p className="text-slate-400 text-sm leading-relaxed">
+          <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
             Profitez de l'expertise de notre équipe créative et stratégique pour concevoir vos logos, affiches, livres blancs, montages vidéo et piloter la croissance de votre entreprise.
           </p>
-        </motion.div>
+        </div>
 
         {/* Services Cards Grid */}
         <div className="grid grid-cols-2 gap-3 sm:gap-6 max-w-4xl mx-auto">
@@ -173,13 +157,14 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
                   <button
                     type="button"
                     onClick={(e) => {
+                      // Sans image : on laisse le clic remonter → fiche détaillée.
+                      if (allImagesOf(serv).length === 0) return;
                       e.stopPropagation();
                       openGallery(serv);
                     }}
-                    disabled={allImagesOf(serv).length === 0}
-                    title={allImagesOf(serv).length > 1 ? "Voir les photos" : "Voir l'image"}
+                    title={allImagesOf(serv).length > 1 ? "Voir les photos" : "Agrandir l'image"}
                     className={`relative w-24 xs:w-28 sm:w-32 lg:w-36 shrink-0 self-stretch overflow-hidden bg-[#021231] ${
-                      allImagesOf(serv).length > 0 ? "cursor-zoom-in" : "cursor-default"
+                      allImagesOf(serv).length > 0 ? "cursor-zoom-in" : "cursor-pointer"
                     }`}
                   >
                     {serv.image ? (

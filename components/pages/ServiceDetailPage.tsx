@@ -128,6 +128,11 @@ export function ServiceDetailPage() {
                   </span>
                 </>
               )}
+              {images.length > 0 && (
+                <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-[#D69E25] px-2 py-0.5 text-[10px] font-black text-[#021231]">
+                  <Images className="w-3 h-3" /> Agrandir
+                </span>
+              )}
             </div>
 
             {images.length > 1 && (

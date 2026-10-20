@@ -118,6 +118,7 @@ export interface AppStoreContextValue {
   freelances: FreelanceProfile[];
   enterprises: EnterpriseProfile[];
   blogPosts: BlogPost[];
+  setBlogPosts: React.Dispatch<React.SetStateAction<BlogPost[]>>;
   feeConfig: RegistrationFeeConfig;
   setFeeConfig: (config: RegistrationFeeConfig) => void;
   kycSubmissions: KycSubmission[];
