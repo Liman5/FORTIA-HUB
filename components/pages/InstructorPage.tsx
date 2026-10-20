@@ -27,11 +27,10 @@ export function InstructorPage() {
   // (brouillons inclus) dès que la session est connue.
   React.useEffect(() => {
     if (isUserLoggedIn) {
-      // Les centres sont mis en cache (5 min) : on force une lecture fraîche pour
-      // que les modifications faites par l'admin (nom, présentation, photo,
-      // bannissement) apparaissent immédiatement côté application.
-      clearCache(["catalog", "site"]);
-      refreshPlatformData();
+      // Lecture FORCÉE (sans cache) : les centres mis en cache 5 min réaffichaient
+      // l'ancienne photo / le nom précédent après un rechargement.
+      clearCache(["marketplace", "catalog", "site", "services"]);
+      refreshPlatformData(true);
       loadAllCourses();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

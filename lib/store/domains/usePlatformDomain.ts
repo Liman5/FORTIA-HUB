@@ -213,6 +213,16 @@ export function usePlatformDomain({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ======== SESSION CONNECTÉE : LECTURE FORCÉE (sans cache) ========
+  // Le cache local (5 min) réaffichait d'ANCIENNES valeurs après rechargement
+  // (photo et présentation du centre de formation, statut, suspension…).
+  // Dès qu'un utilisateur est identifié, on ignore le cache et on relit la base.
+  useEffect(() => {
+    if (!userProfile?.id) return;
+    refreshPlatformData(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile?.id]);
+
   // ======== DONNÉES RÉSERVÉES À L'ADMINISTRATION ========
   const loadAdminData = useCallback(async () => {
     try {

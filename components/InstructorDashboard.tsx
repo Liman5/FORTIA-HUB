@@ -21,6 +21,11 @@ import {
   Pencil,
   TrendingUp,
   X,
+  BadgeCheck,
+  Copyright,
+  ShieldCheck,
+  FileCheck,
+  AlertTriangle,
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
 import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2, resolveStorageUrl } from "@/lib/services/clientUpload";
@@ -208,7 +213,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const logoFileRef = useRef<HTMLInputElement>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string>("");
-  const { setTrainingCenters } = useAppStore();
+  const { setTrainingCenters, refreshPlatformData } = useAppStore();
 
   /** Applique la mise à jour du centre dans le store (affichage instantané). */
   const patchCenter = (updates: Partial<TrainingCenter>) => {
@@ -244,7 +249,9 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
       });
       if ((saved as { success?: boolean })?.success) {
         patchCenter({ logo: up.url });
-        clearCache(["catalog", "site"]);
+        clearCache(["marketplace", "catalog", "site"]);
+        // Relecture serveur : la photo reste affichée après un rechargement.
+        refreshPlatformData(true);
         setLogoPreview(up.url);
       } else {
         setLogoPreview("");
@@ -286,7 +293,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
           centerName: profileName.trim() || center.centerName,
           description: profileBio,
         });
-        clearCache(["catalog", "site"]);
+        clearCache(["marketplace", "catalog", "site"]);
+        refreshPlatformData(true);
         setProfileSaved(true);
         window.setTimeout(() => {
           setProfileSaved(false);
@@ -519,6 +527,15 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-[#D69E25]/15 text-[#D69E25] border border-[#D69E25]/35 px-2 py-0.5 rounded-full">
                   <BookOpen className="w-3 h-3" /> {myCourses.length} formation{myCourses.length > 1 ? "s" : ""}
                 </span>
+                {/* Point d'information : règles anti-abus (discret, à côté des badges) */}
+                <button
+                  onClick={() => setShowRules(true)}
+                  title="Règles de publication (important)"
+                  aria-label="Règles de publication"
+                  className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border border-[#D69E25]/60 text-[9px] font-black leading-none text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] transition"
+                >
+                  i
+                </button>
               </div>
               {center.description ? (
                 <p className="text-[11px] sm:text-xs line-clamp-2 max-w-xl" style={{ color: "#CBD5E1" }}>
@@ -557,15 +574,6 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               >
                 <Pencil className="w-3.5 h-3.5" />
                 <span>Modifier ma présentation</span>
-              </button>
-              {/* Point d'information : règles anti-abus (droits d'auteur, authenticité) */}
-              <button
-                onClick={() => setShowRules(true)}
-                title="Règles de publication (important)"
-                aria-label="Règles de publication"
-                className="h-10 w-10 shrink-0 rounded-full border border-[#D69E25]/50 bg-[#021231] text-[#D69E25] font-black hover:bg-[#D69E25] hover:text-[#021231] transition flex items-center justify-center self-center"
-              >
-                i
               </button>
             </div>
           </div>
@@ -1608,16 +1616,46 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="p-4 space-y-2 text-[11px] leading-relaxed text-slate-300">
-                <p>✅ <strong>Contenu authentique</strong> : votre formation doit être créée par vous, sans copie d'une autre formation.</p>
-                <p>✅ <strong>Droits d'auteur</strong> : images, vidéos, musiques et documents utilisés doivent être libres de droits ou autorisés.</p>
-                <p>✅ <strong>Aucune fausse promesse</strong> : pas de gains garantis, pas de fausses certifications, pas d'usurpation d'identité.</p>
-                <p>✅ <strong>Produits livrables réels</strong> : les fichiers annoncés doivent exister et correspondre à la description.</p>
-                <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-red-200">
-                  ⚠️ En cas de non-respect : <strong>suspension immédiate</strong> de la formation,
-                  <strong> fonds gelés</strong>, motif affiché sur votre espace et possibilité de{" "}
-                  <strong>demander un examen</strong> à l'administration.
-                </p>
+              <div className="p-4 space-y-2.5 text-[11px] leading-relaxed text-slate-300">
+                {[
+                  {
+                    icon: BadgeCheck,
+                    title: "Contenu authentique",
+                    text: "Votre formation doit être créée par vous, sans copie d'une autre formation.",
+                  },
+                  {
+                    icon: Copyright,
+                    title: "Droits d'auteur",
+                    text: "Images, vidéos, musiques et documents doivent être libres de droits ou autorisés.",
+                  },
+                  {
+                    icon: ShieldCheck,
+                    title: "Aucune fausse promesse",
+                    text: "Pas de gains garantis, de fausses certifications ni d'usurpation d'identité.",
+                  },
+                  {
+                    icon: FileCheck,
+                    title: "Livrables réels",
+                    text: "Les fichiers annoncés doivent exister et correspondre à la description.",
+                  },
+                ].map((rule) => (
+                  <div key={rule.title} className="flex items-start gap-2">
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#D69E25]/15 text-[#D69E25]">
+                      <rule.icon className="h-3.5 w-3.5" />
+                    </span>
+                    <p>
+                      <strong className="text-white">{rule.title}</strong> — {rule.text}
+                    </p>
+                  </div>
+                ))}
+                <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-red-200">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <p>
+                    En cas de non-respect : <strong>suspension immédiate</strong>,{" "}
+                    <strong>fonds gelés</strong>, motif affiché sur votre espace et possibilité de{" "}
+                    <strong>demander un examen</strong> à l'administration.
+                  </p>
+                </div>
               </div>
               <div className="px-4 pb-4">
                 <button

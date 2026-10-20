@@ -40,7 +40,7 @@ export interface AppStoreContextValue {
   // Chargement des données platform (Supabase)
   platformLoaded: boolean;
   /** Recharge les données plateforme (Supabase) à la demande (après une écriture) */
-  refreshPlatformData: () => Promise<void>;
+  refreshPlatformData: (force?: boolean) => Promise<void>;
   /** Données sensibles d'administration chargées ? (commandes, KYC, retraits…) */
   adminDataLoaded: boolean;
   /** Charge les collections réservées à l'administration (endpoint protégé). */
