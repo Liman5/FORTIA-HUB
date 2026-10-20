@@ -103,10 +103,17 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
     };
   }, []);
 
-  /** Commission du panier (type « produit numérique », puis taux général). */
+  /** Le panier ne contient-il QUE des services ? (commande de service) */
+  const isServiceOrder = useMemo(
+    () => cartItems.length > 0 && cartItems.every((item) => item.type === "service"),
+    [cartItems]
+  );
+
+  /** Commission du panier (type « service » ou « produit numérique », puis général). */
   const commission = useMemo(() => {
+    const scope = isServiceOrder ? "service" : "digital_product";
     const scoped =
-      commissionRules.find((r) => r.scope === "digital_product") ||
+      commissionRules.find((r) => r.scope === scope) ||
       commissionRules.find((r) => r.scope === "general");
     const mode = scoped?.mode || "percent";
     const value = scoped?.value ?? 10;
@@ -117,7 +124,7 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
       commissionUsd: Math.round(commissionUsd * 100) / 100,
       vendorUsd: Math.round((amount - commissionUsd) * 100) / 100,
     };
-  }, [commissionRules, totalAmountUsd]);
+  }, [commissionRules, totalAmountUsd, isServiceOrder]);
 
   const handleProcessPayment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,14 +163,16 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
         buyerEmail,
         buyerPhone,
         buyerUserId: buyerUserId || undefined,
-        storeId: realProduct?.storeId || realStore?.id || undefined,
-        storeName: realProduct?.storeName || realStore?.name || "Marketplace FORTIA HUB",
+        storeId: isServiceOrder ? undefined : realProduct?.storeId || realStore?.id || undefined,
+        storeName: isServiceOrder
+          ? "Services FORTIA HUB"
+          : realProduct?.storeName || realStore?.name || "Marketplace FORTIA HUB",
         productId: realProduct?.id || firstItem.id,
         productTitle: realProduct?.title || firstItem.title,
         amountUsd: totalAmountUsd,
         platformCommissionUsd: commission.commissionUsd,
         vendorEarningsUsd: commission.vendorUsd,
-        saleScope: "digital_product",
+        saleScope: isServiceOrder ? "service" : "digital_product",
         paymentGateway: selectedGateway,
         transactionRef: ref,
         status: "Payé",

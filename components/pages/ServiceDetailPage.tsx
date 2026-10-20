@@ -26,7 +26,7 @@ import { ServicePackage } from "@/lib/types";
  */
 export function ServiceDetailPage() {
   const params = useParams<{ id: string }>();
-  const { services } = useAppStore();
+  const { services, addToCart } = useAppStore();
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(false);
 
@@ -213,14 +213,26 @@ export function ServiceDetailPage() {
               </div>
             )}
 
-            {/* Commander (paiement) ou contacter */}
+            {/* Commander : le service est AJOUTÉ AU PANIER (commande de service),
+                le paiement se finalise dans /cart — plus de fenêtre ici. */}
             <div className="flex flex-col sm:flex-row gap-2 pt-1">
-              <a
-                href={`/services?service=${service.id}`}
+              <button
+                type="button"
+                onClick={() => {
+                  addToCart({
+                    id: service.id,
+                    type: "service",
+                    title: service.title,
+                    price: Number(service.startingPrice) || 0,
+                    image: service.image || "",
+                    categoryLabel: service.category,
+                  });
+                  window.location.href = "/cart?payer=1";
+                }}
                 className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#D69E25] px-4 py-3 text-xs font-black text-[#021231] hover:bg-amber-400 transition"
               >
                 <ShoppingCart className="w-4 h-4" /> Commander ce service
-              </a>
+              </button>
               <a
                 href={`mailto:support@fortiahub.com?subject=${encodeURIComponent(
                   `Demande d'information : ${service.title}`
@@ -232,8 +244,8 @@ export function ServiceDetailPage() {
             </div>
             <p className="flex items-center gap-1.5 text-[10px] text-slate-500">
               <MessageCircle className="w-3 h-3" />
-              Un ordre de service est créé après validation : notre équipe vous contacte pour le
-              paiement et le suivi.
+              Le service est ajouté à votre panier : le paiement et le suivi de la commande se font
+              depuis le panier.
             </p>
           </div>
         </div>
