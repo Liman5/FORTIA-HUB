@@ -62,7 +62,7 @@ export interface TrainingCenter {
   description: string;
   logo: string;
   banner: string;
-  status: 'pending' | 'active' | 'suspended';
+  status: 'pending' | 'active' | 'suspended' | 'banned';
   isVerified: boolean;
   feePaid: boolean;
   feeAmountUsd: number;

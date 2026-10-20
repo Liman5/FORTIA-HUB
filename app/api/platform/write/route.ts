@@ -1750,6 +1750,34 @@ export async function POST(req: NextRequest) {
       }
 
       // ============ CONFIG TARIFS ============
+      // ============ ADMIN : BANNIR / SUPPRIMER UN CENTRE ============
+      case "ban-training-center": {
+        if (!uuidOrNull(data.centerId))
+          return NextResponse.json({ error: "centerId (UUID) requis" }, { status: 400 });
+        const current = await prisma.trainingCenter.findUnique({
+          where: { id: data.centerId },
+          select: { status: true },
+        });
+        if (!current) return NextResponse.json({ error: "Centre introuvable" }, { status: 404 });
+        const nextStatus = current.status === "banned" ? "active" : "banned";
+        await prisma.trainingCenter.update({
+          where: { id: data.centerId },
+          data: { status: nextStatus } as any,
+        });
+        return NextResponse.json({ success: true, status: nextStatus });
+      }
+
+      case "delete-training-center": {
+        if (!uuidOrNull(data.centerId))
+          return NextResponse.json({ error: "centerId (UUID) requis" }, { status: 400 });
+        // Les formations restent en base mais sont détachées du centre supprimé.
+        await prisma.course
+          .updateMany({ where: { centerId: data.centerId }, data: { centerId: null } as any })
+          .catch(() => null);
+        await prisma.trainingCenter.delete({ where: { id: data.centerId } });
+        return NextResponse.json({ success: true });
+      }
+
       case "update-training-center-config": {
         if (!uuidOrNull(data.centerId))
           return NextResponse.json({ error: "centerId (UUID) requis" }, { status: 400 });

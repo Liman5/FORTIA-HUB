@@ -60,6 +60,31 @@ export function InstructorPage() {
     })[0] ||
     (instructorCenter && instructorCenter.ownerId === userProfile?.id ? instructorCenter : null);
 
+  // Accès BANNI par l'administration : le formateur ne peut plus entrer.
+  if (myCenter && myCenter.status === "banned") {
+    return (
+      <div className="min-h-screen bg-[#021231] text-white flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-2xl border border-red-500/40 bg-[#011D46] p-6 text-center space-y-3">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-500/15">
+            <span className="text-xl">🚫</span>
+          </div>
+          <h1 className="text-lg font-black">Accès suspendu</h1>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            L'accès à votre espace formateur a été <strong className="text-red-300">banni</strong> par
+            l'administration. Vos formations restent visibles mais vous ne pouvez plus les gérer ni en
+            publier.
+          </p>
+          <a
+            href="mailto:support@fortiahub.com?subject=Suspension%20de%20mon%20espace%20formateur"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#D69E25] px-4 py-2.5 text-xs font-black text-[#021231] hover:bg-amber-400 transition"
+          >
+            Contacter le support
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   // Achat d'espace de stockage : mémorisé ici, l'étape PAIEMENT (page, sans
   // fenêtre superposée) prend alors la place du tableau de bord.
   const handleBuyStorage = (center: TrainingCenter, gb: number, usd: number) => {

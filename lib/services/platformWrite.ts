@@ -25,6 +25,8 @@ type WriteAction =
   | "approve-payout"
   | "create-training-center"
   | "pay-training-center-fee"
+  | "ban-training-center"
+  | "delete-training-center"
   | "submit-course-by-instructor"
   | "suspend-course"
   | "delete-course"

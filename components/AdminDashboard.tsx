@@ -26,6 +26,8 @@ import { AdminServicesPanel } from './AdminServicesPanel';
 import { CommissionRatesPanel } from './admin/CommissionRatesPanel';
 import { enhanceTitle, enhanceDescription, enhanceFeatures } from '../utils/aiEnhancer';
 import { getSignedUrl } from '../lib/services/clientUpload';
+import { apiWritePlatform } from '../lib/services/platformWrite';
+import { useAppStore } from '@/lib/store/AppStore';
 import { SuccessConfirmationModal } from './SuccessConfirmationModal';
 import { 
   ShieldCheck, 
@@ -215,6 +217,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddInstructor,
   onSuspendCourse
 }) => {
+  // Setter du store : permet à l'admin de modifier / bannir / supprimer un
+  // centre et de voir le résultat immédiatement (sans rechargement).
+  const { setTrainingCenters } = useAppStore();
   const [activeTab, setActiveTab] = useState<'stats' | 'site_content' | 'courses' | 'products' | 'services' | 'quotes' | 'kyc' | 'fees' | 'marketplace' | 'support' | 'instructors'>(initialTab);
   const [selectedKyc, setSelectedKyc] = useState<KycSubmission | null>(null);
 
@@ -1543,6 +1548,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onAddInstructor={onAddInstructor || (() => {})}
                 onSuspendCourse={onSuspendCourse || (() => {})}
                 onDeleteCourse={onDeleteCourse || (() => {})}
+                onToggleBan={async (center, nextStatus) => {
+                  const res = await apiWritePlatform("ban-training-center", { centerId: center.id });
+                  if (res.success) {
+                    setTrainingCenters((prev) =>
+                      prev.map((c) => (c.id === center.id ? { ...c, status: nextStatus } : c))
+                    );
+                    alert(
+                      nextStatus === "banned"
+                        ? "Accès du formateur banni : il ne peut plus accéder à son centre."
+                        : "Accès du formateur rétabli."
+                    );
+                  } else {
+                    alert(res.error || "Action impossible.");
+                  }
+                }}
+                onUpdateCenter={async (center, updates) => {
+                  const res = await apiWritePlatform("update-training-center-config", {
+                    centerId: center.id,
+                    centerName: updates.centerName,
+                    description: updates.description,
+                    storageQuotaGb: updates.storageQuotaGb,
+                  });
+                  if (res.success) {
+                    setTrainingCenters((prev) =>
+                      prev.map((c) => (c.id === center.id ? { ...c, ...updates } : c))
+                    );
+                    alert("Centre mis à jour.");
+                  } else {
+                    alert(res.error || "Enregistrement impossible.");
+                  }
+                }}
+                onDeleteCenter={async (center) => {
+                  const res = await apiWritePlatform("delete-training-center", {
+                    centerId: center.id,
+                  });
+                  if (res.success) {
+                    setTrainingCenters((prev) => prev.filter((c) => c.id !== center.id));
+                    alert(`Le centre « ${center.centerName} » a été supprimé.`);
+                  } else {
+                    alert(res.error || "Suppression impossible.");
+                  }
+                }}
               />
             </div>
           )}
