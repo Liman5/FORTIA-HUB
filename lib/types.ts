@@ -198,6 +198,9 @@ export interface SiteBanner {
   subtitle?: string;
   /** Image importée sur Cloudflare R2 (dossier `site-media`). */
   imageUrl: string;
+  /** Point focal du recadrage (« 50% 50% ») : appliqué en `object-position`
+   *  sur le bandeau, pour le format web comme pour le format mobile. */
+  imagePosition?: string;
   /** Animation d'apparition / transition de la bannière. */
   animation?: BannerAnimation;
   /** Durée d'affichage de la bannière avant la suivante (millisecondes). */

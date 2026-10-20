@@ -31,6 +31,7 @@ function mapBanner(raw: any): SiteBanner {
     title: raw.title || "",
     subtitle: raw.subtitle || "",
     imageUrl: raw.imageUrl || raw.image_url || "",
+    imagePosition: raw.imagePosition || raw.image_position || "50% 50%",
     animation: raw.animation || "fade",
     intervalMs: Number(raw.intervalMs ?? raw.interval_ms ?? 5000) || 5000,
     buttonLabel: raw.buttonLabel || raw.button_label || "",

@@ -38,6 +38,8 @@ interface InstructorDashboardProps {
   storagePurchases: InstructorStoragePurchase[];
   isUserLoggedIn: boolean;
   userEmail?: string;
+  /** Photo de profil du membre connecté (source UNIQUE du visuel du formateur). */
+  userAvatar?: string;
   onCreateCenter: (data: { centerName: string; description: string }) => void;
   onAddCourse: (course: Course) => void;
   onUpdateCourse: (courseId: string, updates: Partial<Course>) => void;
@@ -55,6 +57,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   storagePurchases,
   isUserLoggedIn,
   userEmail,
+  userAvatar,
   onCreateCenter,
   onAddCourse,
   onUpdateCourse,
@@ -191,13 +194,21 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   // Image de couverture : upload fichier (pas seulement URL)
   const coverFileRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
-  // === Identité du centre : photo de profil (logo) + présentation ===
-  const logoFileRef = useRef<HTMLInputElement>(null);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
+  // === Identité du centre : présentation (le visuel vient du profil membre) ===
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileBio, setProfileBio] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+
+  /** Ouvre le formulaire « Créer une formation » et amène l'utilisateur dessus. */
+  const goToCourseForm = () => {
+    setActiveTab("add");
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        document.getElementById("course-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+    }
+  };
 
   /** Enregistre l'identité du centre (nom, présentation) puis rafraîchit. */
   const saveCenterProfile = async () => {
@@ -220,31 +231,6 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
       }
     } finally {
       setSavingProfile(false);
-    }
-  };
-
-  /** Importe la photo de profil du centre dans Cloudflare R2 puis l'enregistre. */
-  const handleLogoUpload = async (file?: File) => {
-    if (!file) return;
-    if (!center?.id) {
-      alert("Créez d'abord votre centre de formation.");
-      return;
-    }
-    setUploadingLogo(true);
-    try {
-      const up = await uploadFileToR2(file, "store-images", center.id, true);
-      if (!up.success || !up.url) {
-        alert(up.error || "Import de l'image impossible.");
-        return;
-      }
-      const saved = await apiWritePlatform("update-training-center-config", {
-        centerId: center.id,
-        logo: up.url,
-      });
-      if ((saved as { success?: boolean })?.success) window.location.reload();
-      else alert((saved as { error?: string })?.error || "Enregistrement impossible.");
-    } finally {
-      setUploadingLogo(false);
     }
   };
   // Quota de stockage réellement utilisé (quota plateforme du formateur)
@@ -415,46 +401,33 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
           </button>
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
-            {/* Photo de profil du centre : import direct dans Cloudflare R2 */}
-            <div className="relative shrink-0 self-start">
-              <button
-                type="button"
-                onClick={() => logoFileRef.current?.click()}
-                disabled={uploadingLogo}
-                title="Changer la photo de mon centre"
-                className="group relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-[#D69E25] bg-[#021231] flex items-center justify-center"
-              >
-                {center.logo ? (
-                  <img src={center.logo} alt={center.centerName} className="w-full h-full object-cover" />
+            {/* Visuel du formateur : UNIQUEMENT la photo de profil du membre */}
+            <div className="shrink-0 self-start">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-[#D69E25] bg-[#021231] flex items-center justify-center">
+                {userAvatar ? (
+                  <img src={userAvatar} alt="Photo de profil" className="w-full h-full object-cover" />
                 ) : (
                   <GraduationCap className="w-9 h-9 text-[#D69E25]" />
                 )}
-                <span className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                  {uploadingLogo ? (
-                    <Loader2 className="w-5 h-5 animate-spin text-white" />
-                  ) : (
-                    <Camera className="w-5 h-5 text-white" />
-                  )}
-                </span>
-              </button>
-              <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#D69E25] flex items-center justify-center pointer-events-none">
-                <Camera className="w-3 h-3 text-[#021231]" />
-              </span>
-              <input
-                ref={logoFileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleLogoUpload(e.target.files?.[0])}
-              />
+              </div>
+              <a
+                href="/member"
+                className="mt-1.5 block text-center text-[10px] font-bold text-[#D69E25] hover:underline"
+                title="Modifier ma photo dans mon espace membre"
+              >
+                Profil membre
+              </a>
             </div>
 
             {/* Identité */}
             <div className="min-w-0 flex-1 space-y-1.5">
-              <h1 className="text-xl sm:text-2xl font-black truncate" style={{ color: "#F8FAFC" }}>
+              <h1
+                className="text-lg sm:text-2xl font-black leading-tight break-words"
+                style={{ color: "#FFFFFF", textShadow: "0 1px 2px rgba(0,0,0,0.35)" }}
+              >
                 {center.centerName}
               </h1>
-              <p className="text-[11px] sm:text-xs truncate" style={{ color: "#94A3B8" }}>
+              <p className="text-[11px] sm:text-xs break-all" style={{ color: "#B6C2D4" }}>
                 {userEmail}
               </p>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -486,7 +459,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
               <button
-                onClick={() => setActiveTab("add")}
+                onClick={goToCourseForm}
                 className="px-4 py-2.5 bg-[#D69E25] hover:bg-amber-400 text-[#021231] font-black text-xs rounded-xl transition flex items-center justify-center gap-2"
               >
                 <Plus className="w-4 h-4" />
@@ -752,7 +725,10 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
 
         {/* Add course */}
         {activeTab === "add" && (
-          <div className="bg-[#011D46] border border-[#D69E25]/40 rounded-3xl p-6 sm:p-8 space-y-5 max-w-2xl">
+          <div
+            id="course-form"
+            className="bg-[#011D46] border border-[#D69E25]/40 rounded-3xl p-6 sm:p-8 space-y-5 max-w-2xl"
+          >
             <h3 className="font-bold text-base flex items-center gap-2">
               <Plus className="w-5 h-5 text-[#D69E25]" /> Publier une nouvelle Formation
             </h3>

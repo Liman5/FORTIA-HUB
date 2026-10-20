@@ -66,6 +66,7 @@ const EMPTY_BANNER: SiteBanner = {
   title: "",
   subtitle: "",
   imageUrl: "",
+  imagePosition: "50% 50%",
   animation: "fade",
   intervalMs: 5000,
   buttonLabel: "",
@@ -74,6 +75,15 @@ const EMPTY_BANNER: SiteBanner = {
   isActive: true,
   displayOrder: 0,
 };
+
+/** Points focaux rapides (appliqués en object-position, web + mobile). */
+const FOCUS_PRESETS = [
+  { label: "Centre", value: "50% 50%" },
+  { label: "Haut", value: "50% 0%" },
+  { label: "Bas", value: "50% 100%" },
+  { label: "Gauche", value: "0% 50%" },
+  { label: "Droite", value: "100% 50%" },
+];
 
 export function AdminBannersPanel({
   banners = [],
@@ -86,7 +96,17 @@ export function AdminBannersPanel({
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(null);
   const [form, setForm] = useState<SiteBanner>(EMPTY_BANNER);
+
+  /** Clic sur l'aperçu → définit le point focal (recadrage) de la bannière. */
+  const handleFocusClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(n)));
+    const x = clamp(((event.clientX - rect.left) / rect.width) * 100);
+    const y = clamp(((event.clientY - rect.top) / rect.height) * 100);
+    setForm((prev) => ({ ...prev, imagePosition: `${x}% ${y}%` }));
+  };
 
   const resetForm = () => {
     setForm({ ...EMPTY_BANNER, displayOrder: banners.length });
@@ -120,6 +140,10 @@ export function AdminBannersPanel({
       const result = await uploadFileToR2(file, "site-media", "banners", true);
       if (result.success && result.url) {
         setForm((prev) => ({ ...prev, imageUrl: result.url }));
+        // Dimensions réelles de l'image importée (affichées à l'admin).
+        const probe = new window.Image();
+        probe.onload = () => setImageSize({ w: probe.naturalWidth, h: probe.naturalHeight });
+        probe.src = result.url;
       } else {
         alert(result.error || "Importation impossible sur FORTIA HUB.");
       }
@@ -205,7 +229,12 @@ export function AdminBannersPanel({
 
           {/* --- Image (Cloudflare R2) --- */}
           <div className="space-y-3">
-            <label className={labelClass}>Image de la bannière (Cloudflare R2) *</label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className={labelClass}>Image de la bannière (Cloudflare R2) *</label>
+              <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-[#D69E25]/15 text-[#D69E25] border border-[#D69E25]/30">
+                Web 1920 × 480 · Mobile 1080 × 470
+              </span>
+            </div>
             <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" />
             <div
               onClick={() => !uploading && fileRef.current?.click()}
@@ -230,20 +259,104 @@ export function AdminBannersPanel({
                     : "Importer l'image de la bannière"}
               </p>
               <p className="text-[10px] text-slate-400">
-                Format panoramique recommandé (ex. 1600×500 px) • PNG, JPG, WEBP, SVG • max 50 Mo
+                Recommandé : <strong className="text-slate-300">1920 × 480 px</strong> (web, 4:1) —{" "}
+                <strong className="text-slate-300">1080 × 470 px</strong> (mobile, 2.3:1)
+                <br />
+                PNG, JPG, WEBP ou SVG · max 50 Mo · une seule image, deux cadrages
               </p>
             </div>
             {form.imageUrl && (
-              <div className="relative rounded-xl overflow-hidden border border-slate-700 h-32">
-                <img src={form.imageUrl} alt="Aperçu bannière" className="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, imageUrl: "" })}
-                  className="absolute top-2 right-2 p-1.5 rounded-lg bg-[#021231]/80 text-red-400 hover:bg-red-500 hover:text-white transition"
-                  title="Retirer l'image"
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
+                  <span className="text-slate-400">
+                    Dimensions :{" "}
+                    <span className="font-mono text-slate-200">
+                      {imageSize ? `${imageSize.w} × ${imageSize.h} px` : "—"}
+                    </span>
+                    {imageSize ? (
+                      <span className="text-slate-500"> · ratio {(imageSize.w / imageSize.h).toFixed(2)}:1</span>
+                    ) : null}
+                  </span>
+                  <span className="text-slate-400">
+                    Recadrage :{" "}
+                    <span className="font-mono text-slate-200">{form.imagePosition || "50% 50%"}</span>
+                  </span>
+                </div>
+
+                {/* Source : clic pour choisir le point focal */}
+                <div
+                  onClick={handleFocusClick}
+                  className="relative rounded-xl overflow-hidden border border-slate-700 bg-[#021231] h-32 cursor-crosshair"
+                  title="Cliquez sur la zone à conserver au centre du cadrage"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                  <img src={form.imageUrl} alt="Source" className="w-full h-full object-contain" />
+                  <span
+                    className="absolute w-3 h-3 rounded-full border-2 border-[#D69E25] bg-[#D69E25]/50 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{
+                      left: (form.imagePosition || "50% 50%").split(" ")[0] || "50%",
+                      top: (form.imagePosition || "50% 50%").split(" ")[1] || "50%",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setForm({ ...form, imageUrl: "" });
+                      setImageSize(null);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-[#021231]/80 text-red-400 hover:bg-red-500 hover:text-white transition"
+                    title="Retirer l'image"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {FOCUS_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, imagePosition: preset.value })}
+                      className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black border transition ${
+                        (form.imagePosition || "50% 50%") === preset.value
+                          ? "bg-[#D69E25] text-[#021231] border-[#D69E25]"
+                          : "bg-[#021231] text-slate-300 border-slate-700 hover:border-[#D69E25]"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Aperçus réels : bandeau web (4:1) et bandeau mobile (2.3:1) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wide text-slate-500 mb-1">
+                      Aperçu web · 4:1
+                    </p>
+                    <div className="relative rounded-xl overflow-hidden border border-slate-700 aspect-[4/1] bg-[#021231]">
+                      <img
+                        src={form.imageUrl}
+                        alt="Aperçu web"
+                        className="w-full h-full object-cover"
+                        style={{ objectPosition: form.imagePosition || "50% 50%" }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wide text-slate-500 mb-1">
+                      Aperçu mobile · 2.3:1
+                    </p>
+                    <div className="relative rounded-xl overflow-hidden border border-slate-700 aspect-[2.3/1] bg-[#021231]">
+                      <img
+                        src={form.imageUrl}
+                        alt="Aperçu mobile"
+                        className="w-full h-full object-cover"
+                        style={{ objectPosition: form.imagePosition || "50% 50%" }}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

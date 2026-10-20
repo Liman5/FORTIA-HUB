@@ -14,6 +14,10 @@ ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS image TEXT NOT NULL DEFAUL
 -- en `object-position` sur la carte, en mobile comme en web.
 ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS image_position TEXT NOT NULL DEFAULT '50% 50%';
 
+-- ========== 2. RECADRAGE DES BANNIÈRES DU SITE ==========
+-- Point focal appliqué en `object-position` sur le bandeau (web et mobile).
+ALTER TABLE site_banners ADD COLUMN IF NOT EXISTS image_position TEXT NOT NULL DEFAULT '50% 50%';
+
 -- ========== 2. BANNIÈRES DU SITE ==========
 CREATE TABLE IF NOT EXISTS site_banners (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

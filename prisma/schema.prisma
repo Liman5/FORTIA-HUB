@@ -1037,6 +1037,8 @@ model SiteBanner {
   subtitle     String   @default("")
   /** Image importée sur Cloudflare R2 (dossier public `site-media`). */
   imageUrl     String   @default("") @map("image_url")
+  /** Point focal du recadrage (« 50% 50% ») → object-position du bandeau. */
+  imagePosition String  @default("50% 50%") @map("image_position")
   /** none | fade | slide | zoom | flip */
   animation    String   @default("fade")
   /** Durée d'affichage avant passage à la bannière suivante (ms). */

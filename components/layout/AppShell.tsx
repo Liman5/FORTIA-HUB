@@ -35,6 +35,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     pathname === "/services" ||
     pathname === "/vendor" ||
     pathname === "/instructor" ||
+    pathname === "/cart" ||
+    pathname === "/library" ||
     pathname.startsWith("/vendorstore");
   const store = useAppStore();
   const { activeTab, setActiveTab } = useActiveSection();

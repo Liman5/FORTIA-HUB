@@ -132,6 +132,7 @@ function HeroBanner() {
         external: banner.linkTarget === "external",
         animation: banner.animation || "fade",
         interval: Math.min(60000, Math.max(2000, Number(banner.intervalMs) || 6000)),
+        position: banner.imagePosition || "50% 50%",
       }));
 
     if (managed.length > 0) return managed;
@@ -233,6 +234,7 @@ function HeroBanner() {
             {...variantsFor(slide.animation)}
             transition={{ duration: 0.6, ease: "easeInOut" }}
             className="w-full h-40 sm:h-64 lg:h-80 object-cover block"
+            style={{ objectPosition: slide.position }}
             draggable={false}
           />
         </AnimatePresence>

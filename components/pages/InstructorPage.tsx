@@ -98,6 +98,7 @@ export function InstructorPage() {
       storagePurchases={instructorStoragePurchases}
       isUserLoggedIn={isUserLoggedIn}
       userEmail={userProfile?.email}
+      userAvatar={(userProfile as { avatar?: string } | null)?.avatar}
       onCreateCenter={(data) => createTrainingCenter(data)}
       onAddCourse={addInstructorCourse}
       onUpdateCourse={updateInstructorCourse}
