@@ -27,6 +27,7 @@ import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2, resolveStora
 import { hashSecret } from "@/lib/services/offlineVideo";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
+import { clearCache } from "@/lib/services/api/http";
 
 interface InstructorDashboardProps {
   center: TrainingCenter | null;
@@ -199,6 +200,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const [profileName, setProfileName] = useState("");
   const [profileBio, setProfileBio] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
 
   /** Ouvre le formulaire « Créer une formation » et amène l'utilisateur dessus. */
   const goToCourseForm = () => {
@@ -224,8 +226,15 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
         description: profileBio,
       });
       if ((res as { success?: boolean })?.success) {
-        setIsProfileOpen(false);
-        window.location.reload();
+        // Les centres de formation sont mis en cache : sans invalidation, la
+        // page rechargée réaffichait l'ANCIENNE présentation.
+        clearCache(["catalog", "site"]);
+        setProfileSaved(true);
+        window.setTimeout(() => {
+          setProfileSaved(false);
+          setIsProfileOpen(false);
+          window.location.reload();
+        }, 1200);
       } else {
         alert((res as { error?: string })?.error || "Enregistrement impossible.");
       }
@@ -1490,21 +1499,32 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 </p>
               </div>
 
-              <div className="px-4 pb-4 flex gap-2">
-                <button
-                  onClick={() => setIsProfileOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-[#011D46] border border-slate-700 text-slate-300 text-xs font-black hover:bg-[#032454] transition"
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={saveCenterProfile}
-                  disabled={savingProfile}
-                  className="flex-1 py-2.5 rounded-xl bg-[#D69E25] text-[#021231] text-xs font-black hover:bg-amber-400 transition flex items-center justify-center gap-2 disabled:opacity-60"
-                >
-                  {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  Enregistrer
-                </button>
+              <div className="px-4 pb-4">
+                {profileSaved ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 px-3 py-3">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
+                    <p className="text-[11px] font-bold text-emerald-200">
+                      Modifications enregistrées — actualisation de la page…
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setIsProfileOpen(false)}
+                      className="flex-1 py-2.5 rounded-xl bg-[#011D46] border border-slate-700 text-slate-300 text-xs font-black hover:bg-[#032454] transition"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={saveCenterProfile}
+                      disabled={savingProfile}
+                      className="flex-1 py-2.5 rounded-xl bg-[#D69E25] text-[#021231] text-xs font-black hover:bg-amber-400 transition flex items-center justify-center gap-2 disabled:opacity-60"
+                    >
+                      {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                      Enregistrer
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

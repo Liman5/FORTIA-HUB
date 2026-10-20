@@ -100,3 +100,4 @@ SELECT * FROM (VALUES
   ('Strategie Marketing Digital 360', 'Marketing Digital', 'Elaboration d une strategie marketing complete : reseaux sociaux, campagnes publicitaires, SEO et tunnel de vente.', 250, '7 jours', 'Share2', ARRAY['Audit complet de votre presence digitale','Plan d action marketing personnalise','Calendrier editorial 30 jours','Recommandations SEO & publicitaires'], 'blue', 'pulse', '#3B82F6', 'Conseil Expert', FALSE, TRUE, 5)
 ) AS v(title, category, description, starting_price, estimated_days, icon_name, deliverables, border_style, card_animation, accent_color, badge_text, featured, is_active, display_order)
 WHERE NOT EXISTS (SELECT 1 FROM service_packages);
+ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS images TEXT[] NOT NULL DEFAULT '{}';

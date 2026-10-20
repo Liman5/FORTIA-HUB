@@ -184,6 +184,8 @@ export interface ServicePackage {
   /** Point focal du recadrage de l'image (« 50% 50% », « 50% 20% »…) :
    *  appliqué en `object-position` sur la carte, mobile comme web. */
   imagePosition?: string;
+  /** Galerie d'images supplémentaires (consultables depuis la carte et la fiche). */
+  images?: string[];
 }
 
 // ============================================================

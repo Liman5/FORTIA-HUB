@@ -90,3 +90,5 @@ CREATE POLICY "site_banners_lecture_publique" ON site_banners
 DROP POLICY IF EXISTS "site_banners_ecriture_service" ON site_banners;
 CREATE POLICY "site_banners_ecriture_service" ON site_banners
   FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+-- Galerie d'images supplementaires (la 1re image reste le visuel principal).
+ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS images TEXT[] NOT NULL DEFAULT '{}';

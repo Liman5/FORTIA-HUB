@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from "react";
 import { motion } from 'motion/react';
 import { ServicePackage, ServiceQuoteRequest } from '../types';
 import { apiWritePlatform } from '../lib/services/platformWrite';
@@ -20,6 +20,9 @@ import {
   X,
   Sparkles,
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Images,
 } from 'lucide-react';
 
 interface ServicesAgencyProps {
@@ -38,6 +41,38 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
   const [projectDetails, setProjectDetails] = useState('');
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
+  /** Galerie plein écran : images du service + index courant (null = fermée). */
+  const [gallery, setGallery] = useState<{ images: string[]; index: number } | null>(null);
+
+  /** Toutes les images d'un service (visuel principal + galerie, sans doublon). */
+  const allImagesOf = (serv: ServicePackage): string[] => {
+    const list = [serv.image, ...(Array.isArray(serv.images) ? serv.images : [])].filter(
+      (url): url is string => typeof url === "string" && url.length > 0
+    );
+    return Array.from(new Set(list));
+  };
+
+  const openGallery = (serv: ServicePackage) => {
+    const images = allImagesOf(serv);
+    if (images.length === 0) return;
+    setGallery({ images, index: 0 });
+  };
+
+  /**
+   * Depuis la fiche détaillée (`/service/[id]`), l'utilisateur arrive avec
+   * `?service=<id>` : on ouvre directement le formulaire de commande / devis.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get("service");
+    if (!id) return;
+    const found = (services || []).find((s) => String(s.id) === id);
+    if (!found) return;
+    setSelectedService(found);
+    setSelectedOptions([]);
+    setSubmittedSuccess(false);
+  }, [services]);
+
 
   // Map icon strings to Lucide icon components
   const getServiceIcon = (name: string) => {
@@ -212,13 +247,23 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
                 <div className="absolute -top-20 -right-20 w-40 h-40 rounded-full bg-white/5 blur-3xl group-hover:bg-[#D69E25]/10 transition-colors duration-500" />
 
                 {/* ===== HAUT DE CARTE =====
-                    WEB  : visuel À GAUCHE (colonne pleine hauteur) + infos à droite.
-                    MOBILE : visuel EN HAUT, pleine largeur (hauteur fixe) + infos dessous.
-                    `imagePosition` (point focal défini dans l'admin) est appliqué
-                    en object-position : le recadrage reste correct dans les 2 formats. */}
-                <div className="relative flex flex-col sm:flex-row sm:items-stretch">
-                  {/* --- Visuel importé sur Cloudflare R2 --- */}
-                  <div className="relative w-full h-36 sm:h-auto sm:w-32 lg:w-36 shrink-0 sm:self-stretch overflow-hidden bg-[#021231]">
+                    MÊME disposition sur mobile et sur web : visuel À GAUCHE
+                    (colonne pleine hauteur) + informations à droite. Sur mobile
+                    tout est simplement plus compact (une carte par colonne). */}
+                <div className="relative flex flex-row items-stretch">
+                  {/* --- Visuel : clic = galerie (si plusieurs images) --- */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openGallery(serv);
+                    }}
+                    disabled={allImagesOf(serv).length === 0}
+                    title={allImagesOf(serv).length > 1 ? "Voir les photos" : "Voir l'image"}
+                    className={`relative w-24 xs:w-28 sm:w-32 lg:w-36 shrink-0 self-stretch overflow-hidden bg-[#021231] ${
+                      allImagesOf(serv).length > 0 ? "cursor-zoom-in" : "cursor-default"
+                    }`}
+                  >
                     {serv.image ? (
                       <img
                         src={serv.image}
@@ -233,22 +278,28 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
                           background: `linear-gradient(135deg, ${accent}25, transparent 70%)`,
                         }}
                       >
-                        <IconComp className="w-8 h-8" style={{ color: accent }} />
+                        <IconComp className="w-7 h-7" style={{ color: accent }} />
                       </div>
                     )}
+                    {allImagesOf(serv).length > 1 && (
+                      <span className="absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-black/65 px-1.5 py-0.5 text-[9px] font-black text-white">
+                        <Images className="w-2.5 h-2.5" />
+                        {allImagesOf(serv).length}
+                      </span>
+                    )}
                     {/* Filet doré de séparation visuel / informations */}
-                    <div className="absolute inset-x-0 bottom-0 h-px sm:inset-y-0 sm:left-auto sm:right-0 sm:h-auto sm:w-px bg-gradient-to-r sm:bg-gradient-to-b from-transparent via-[#D69E25]/40 to-transparent" />
-                  </div>
+                    <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-[#D69E25]/40 to-transparent" />
+                  </button>
 
                   {/* --- Colonne DROITE : informations du service --- */}
-                  <div className="flex-1 min-w-0 p-4 sm:p-5 space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-400 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full">
+                  <div className="flex-1 min-w-0 p-3.5 sm:p-5 space-y-2 sm:space-y-3">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full">
                         {serv.category}
                       </span>
                       {serv.badgeText && (
                         <span
-                          className="text-[10px] font-bold px-2.5 py-1 rounded-full border"
+                          className="text-[9px] sm:text-[10px] font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full border"
                           style={{
                             color: accent,
                             borderColor: `${accent}50`,
@@ -259,44 +310,52 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
                         </span>
                       )}
                       {serv.featured && !serv.badgeText && (
-                        <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full">
+                        <span className="text-[9px] sm:text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full">
                           ★ En avant
                         </span>
                       )}
                     </div>
 
-                  <h3 className="font-extrabold text-white text-base group-hover:text-[#D69E25] transition-colors">
+                  <h3 className="font-extrabold text-white text-[13px] sm:text-base leading-snug group-hover:text-[#D69E25] transition-colors">
                     {serv.title}
                   </h3>
 
-                  <p className="text-slate-400 text-xs leading-relaxed line-clamp-3">
+                  <p className="text-slate-400 text-[11px] sm:text-xs leading-relaxed line-clamp-2 sm:line-clamp-3">
                     {serv.description}
                   </p>
 
                   {/* Deliverables List */}
-                  <div className="pt-2 space-y-1.5 border-t border-white/10 text-xs">
+                  <div className="pt-1.5 sm:pt-2 space-y-1 sm:space-y-1.5 border-t border-white/10 text-xs">
                     {(serv.deliverables || []).slice(0, 3).map((del, i) => (
                       <div key={i} className="flex items-start gap-1.5">
-                        <Check className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: accent }} />
-                        <span className="text-[11px] leading-tight text-slate-300">{del}</span>
+                        <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 mt-0.5" style={{ color: accent }} />
+                        <span className="text-[10px] sm:text-[11px] leading-tight text-slate-300 line-clamp-1">{del}</span>
                       </div>
                     ))}
                   </div>
                   </div>
                 </div>
 
-                <div className="px-6 pb-5 pt-3 border-t border-white/10 flex items-center justify-between">
+                <div className="px-3.5 sm:px-6 pb-3.5 sm:pb-5 pt-2.5 sm:pt-3 border-t border-white/10 flex items-center justify-between gap-2">
                   <div>
-                    <span className="text-xs text-slate-500 block font-medium">À partir de</span>
-                    <span className="text-xl font-black text-[#D69E25]">${Number(serv.startingPrice) || 0}</span>
+                    <span className="text-[10px] sm:text-xs text-slate-500 block font-medium">À partir de</span>
+                    <span className="text-base sm:text-xl font-black text-[#D69E25]">${Number(serv.startingPrice) || 0}</span>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400">
-                      <Clock className="w-3.5 h-3.5" style={{ color: accent }} />
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold text-slate-400">
+                      <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" style={{ color: accent }} />
                       {serv.estimatedDays}
                     </span>
-                    <ArrowRight className="w-4 h-4 text-[#D69E25] opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-300" />
+                    <a
+                      href={serv.id ? `/service/${serv.id}` : "/services"}
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 rounded-full border border-[#D69E25]/40 px-2.5 py-1 text-[10px] font-black text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] transition"
+                      title="Voir la fiche complète"
+                    >
+                      Détails
+                      <ArrowRight className="w-3 h-3" />
+                    </a>
                   </div>
                 </div>
               </motion.div>
@@ -498,6 +557,78 @@ export const ServicesAgency: React.FC<ServicesAgencyProps> = ({
                 )}
               </div>
             </motion.div>
+          </div>
+        )}
+
+        {/* ===== GALERIE PLEIN ÉCRAN (consultation des photos du service) ===== */}
+        {gallery && gallery.images.length > 0 && (
+          <div
+            className="fixed inset-0 z-[130] bg-black/90 backdrop-blur-sm flex flex-col"
+            onClick={() => setGallery(null)}
+          >
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-[11px] font-black text-white/80">
+                Photo {gallery.index + 1} / {gallery.images.length}
+              </span>
+              <button
+                onClick={() => setGallery(null)}
+                className="p-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition"
+                aria-label="Fermer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div
+              className="relative flex-1 flex items-center justify-center px-3 pb-3 min-h-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={gallery.images[gallery.index]}
+                alt={`Photo ${gallery.index + 1}`}
+                className="max-h-full max-w-full object-contain rounded-xl"
+              />
+              {gallery.images.length > 1 && (
+                <>
+                  <button
+                    onClick={() =>
+                      setGallery((g) =>
+                        g ? { ...g, index: (g.index - 1 + g.images.length) % g.images.length } : g
+                      )
+                    }
+                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 text-white hover:bg-[#D69E25] hover:text-[#021231] transition"
+                    aria-label="Photo précédente"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() =>
+                      setGallery((g) => (g ? { ...g, index: (g.index + 1) % g.images.length } : g))
+                    }
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 text-white hover:bg-[#D69E25] hover:text-[#021231] transition"
+                    aria-label="Photo suivante"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+            </div>
+
+            {gallery.images.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto px-3 pb-4" onClick={(e) => e.stopPropagation()}>
+                {gallery.images.map((url, i) => (
+                  <button
+                    key={`${url}-${i}`}
+                    onClick={() => setGallery((g) => (g ? { ...g, index: i } : g))}
+                    className={`w-14 h-14 shrink-0 rounded-lg overflow-hidden border-2 transition ${
+                      i === gallery.index ? "border-[#D69E25]" : "border-white/15 hover:border-white/40"
+                    }`}
+                  >
+                    <img src={url} alt={`Miniature ${i + 1}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

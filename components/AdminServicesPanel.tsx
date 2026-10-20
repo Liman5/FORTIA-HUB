@@ -106,7 +106,44 @@ export const AdminServicesPanel: React.FC<AdminServicesPanelProps> = ({
   const [optionInput, setOptionInput] = useState({ name: "", price: 0 });
 
   const imageFileRef = useRef<HTMLInputElement>(null);
+  const galleryFileRef = useRef<HTMLInputElement>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+
+  /** Import de plusieurs images de galerie (Cloudflare R2, dossier services). */
+  const handleGalleryUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    setUploadingGallery(true);
+    try {
+      const urls: string[] = [];
+      for (const file of files) {
+        const result = await uploadFileToR2(file, "site-media", "services", true);
+        if (result.success && result.url) urls.push(result.url);
+      }
+      if (urls.length) {
+        setForm((prev) => {
+          const current = Array.isArray(prev.images) ? prev.images : [];
+          return { ...prev, images: [...current, ...urls.filter((u) => !current.includes(u))] };
+        });
+      } else {
+        alert("Aucune image n'a pu être importée (session administrateur requise).");
+      }
+    } finally {
+      setUploadingGallery(false);
+      if (galleryFileRef.current) galleryFileRef.current.value = "";
+    }
+  };
+
+  /** Retire une image de la galerie. */
+  const removeGalleryImage = (index: number) => {
+    setForm((prev) => {
+      const current = Array.isArray(prev.images) ? [...prev.images] : [];
+      current.splice(index, 1);
+      return { ...prev, images: current };
+    });
+  };
+
   /** Dimensions réelles du visuel importé (px) — affichées dans l'éditeur. */
   const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(null);
 
@@ -580,6 +617,63 @@ export const AdminServicesPanel: React.FC<AdminServicesPanelProps> = ({
                       <div className="h-4 w-16 rounded bg-[#D69E25]/25" />
                     </div>
                   </div>
+                </div>
+
+                {/* ===== GALERIE : images supplémentaires consultables ===== */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      Galerie — {Array.isArray(form.images) ? form.images.length : 0} image
+                      {(form.images?.length || 0) > 1 ? "s" : ""}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => galleryFileRef.current?.click()}
+                      disabled={uploadingGallery}
+                      className="px-3 py-1.5 rounded-lg bg-[#011D46] border border-slate-700 text-slate-200 text-[10px] font-black hover:border-[#D69E25] transition flex items-center gap-1.5 disabled:opacity-60"
+                    >
+                      {uploadingGallery ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Plus className="w-3.5 h-3.5" />
+                      )}
+                      Ajouter des images
+                    </button>
+                    <input
+                      ref={galleryFileRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleGalleryUpload}
+                      className="hidden"
+                    />
+                  </div>
+
+                  {(form.images || []).length > 0 ? (
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                      {(form.images || []).map((url, i) => (
+                        <div
+                          key={`${url}-${i}`}
+                          className="relative rounded-lg overflow-hidden border border-slate-700 aspect-square bg-[#021231]"
+                        >
+                          <img src={url} alt={`Galerie ${i + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeGalleryImage(i)}
+                            className="absolute top-1 right-1 p-1 rounded bg-[#021231]/85 text-red-400 hover:bg-red-500 hover:text-white transition"
+                            title="Retirer cette image"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-500">
+                      Aucune image supplémentaire. Les clients pourront consulter la galerie depuis la
+                      carte du service et la fiche détaillée.
+                    </p>
+                  )}
                 </div>
 
                 <p className="text-[11px] text-slate-400 leading-relaxed">

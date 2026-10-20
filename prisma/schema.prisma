@@ -979,6 +979,8 @@ model ServicePackage {
   image         String           @default("")
   /** Point focal du recadrage (« 50% 50% ») → object-position de la carte. */
   imagePosition String           @default("50% 50%") @map("image_position")
+  /** Galerie : images supplémentaires consultables (le visuel principal reste `image`). */
+  images        String[]         @default([])
   borderStyle   String           @default("gold") @map("border_style")
   cardAnimation String           @default("fade-up") @map("card_animation")
   accentColor   String           @default("#D69E25") @map("accent_color")
