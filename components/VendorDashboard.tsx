@@ -319,7 +319,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10 space-y-6">
           {/* Identité de la boutique + statut */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-            {/* Logo + point d'information (discret, en haut à droite du logo) */}
+            {/* Logo */}
             <div className="relative shrink-0 self-center sm:self-auto">
               {store.logo ? (
                 <motion.img
@@ -334,14 +334,6 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   <Store className="w-7 h-7 sm:w-8 sm:h-8 text-[#D69E25]" />
                 </div>
               )}
-              <button
-                onClick={() => setShowRules(true)}
-                title="Règles de publication (important)"
-                aria-label="Règles de publication"
-                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-[#D69E25] bg-[#021231] text-[10px] font-black leading-none text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] transition"
-              >
-                i
-              </button>
             </div>
 
             <div className="flex-1 min-w-0 text-center sm:text-left space-y-2">
@@ -354,6 +346,16 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-[#021231] border border-emerald-300 text-[10px] font-black px-2.5 py-1 rounded-full">
                     <CheckCircle2 className="w-3 h-3" /> Statut : Boutique Active
                   </span>
+                  {/* Point d'information : icône vectorielle (lucide Info) */}
+                  <button
+                    onClick={() => setShowRules(true)}
+                    title="Règles de publication (important)"
+                    aria-label="Règles de publication"
+                    className="inline-flex items-center gap-1 rounded-full border border-[#D69E25]/60 bg-[#D69E25]/10 px-2 py-1 text-[10px] font-bold text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] transition"
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                    Règles
+                  </button>
                 </div>
               </div>
 

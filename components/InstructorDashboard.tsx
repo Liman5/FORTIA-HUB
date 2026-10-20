@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   FileCheck,
   AlertTriangle,
+  Info,
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
 import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2, resolveStorageUrl } from "@/lib/services/clientUpload";
@@ -527,14 +528,15 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-[#D69E25]/15 text-[#D69E25] border border-[#D69E25]/35 px-2 py-0.5 rounded-full">
                   <BookOpen className="w-3 h-3" /> {myCourses.length} formation{myCourses.length > 1 ? "s" : ""}
                 </span>
-                {/* Point d'information : règles anti-abus (discret, à côté des badges) */}
+                {/* Point d'information : icône vectorielle (lucide Info) */}
                 <button
                   onClick={() => setShowRules(true)}
                   title="Règles de publication (important)"
                   aria-label="Règles de publication"
-                  className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border border-[#D69E25]/60 text-[9px] font-black leading-none text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] transition"
+                  className="inline-flex items-center gap-1 rounded-full border border-[#D69E25]/60 bg-[#D69E25]/10 px-2 py-0.5 text-[10px] font-bold text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] transition"
                 >
-                  i
+                  <Info className="h-3 w-3" />
+                  Règles
                 </button>
               </div>
               {center.description ? (
