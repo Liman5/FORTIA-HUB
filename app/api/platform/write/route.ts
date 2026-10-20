@@ -1683,10 +1683,28 @@ export async function POST(req: NextRequest) {
       // ============ CRÉATION CENTRE DE FORMATION ============
       case "create-training-center": {
         const centerName = data.centerName || "Centre de Formation";
+        // UN COMPTE = UN SEUL CENTRE : si l'utilisateur possède déjà un centre,
+        // on renvoie celui-ci au lieu d'en créer un doublon (c'est ce qui faisait
+        // apparaître plusieurs centres / noms différents sur un même compte).
+        const ownerId = uuidOrNull(data.ownerId);
+        if (ownerId) {
+          const existing = await prisma.trainingCenter.findFirst({
+            where: { ownerId },
+            orderBy: [{ feePaid: "desc" }, { createdAt: "desc" }],
+          });
+          if (existing) {
+            return NextResponse.json({
+              success: true,
+              id: existing.id,
+              alreadyExists: true,
+              centerName: existing.centerName,
+            });
+          }
+        }
         const slug = centerName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now().toString(36);
         const created = await prisma.trainingCenter.create({
           data: {
-            ownerId: data.ownerId || undefined,
+            ownerId: ownerId || undefined,
             centerName,
             slug,
             description: data.description || "",

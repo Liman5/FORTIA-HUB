@@ -526,7 +526,17 @@ export function useCatalogDomain({
       setInstructorCenter(null);
       return;
     }
-    const found = trainingCenters.find((c) => c.ownerId === userProfile.id) || null;
+    // UN SEUL centre par compte : on sélectionne toujours le même de façon
+    // déterministe (centre actif/payé d'abord, puis le plus récent). Cela évite
+    // qu'un compte affiche successivement plusieurs centres (IBX, IBXPRESS…).
+    const owned = trainingCenters.filter((c) => c.ownerId === userProfile.id);
+    const score = (c: TrainingCenter) => (c.feePaid || c.status === "active" ? 1 : 0);
+    const found =
+      owned.sort((a, b) => {
+        const diff = score(b) - score(a);
+        if (diff !== 0) return diff;
+        return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+      })[0] || null;
     setInstructorCenter(found);
   }, [isUserLoggedIn, userProfile?.id, trainingCenters]);
 

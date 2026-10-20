@@ -26,6 +26,7 @@ import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase
 import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2, resolveStorageUrl } from "@/lib/services/clientUpload";
 import { hashSecret } from "@/lib/services/offlineVideo";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
+import { useAppStore } from "@/lib/store/AppStore";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 import { clearCache } from "@/lib/services/api/http";
 
@@ -201,6 +202,55 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const [profileBio, setProfileBio] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+  // Photo du centre : import R2 + aperçu immédiat (temps réel)
+  const logoFileRef = useRef<HTMLInputElement>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string>("");
+  const { setTrainingCenters } = useAppStore();
+
+  /** Applique la mise à jour du centre dans le store (affichage instantané). */
+  const patchCenter = (updates: Partial<TrainingCenter>) => {
+    if (!center?.id) return;
+    setTrainingCenters((prev) =>
+      prev.map((c) => (c.id === center.id ? { ...c, ...updates } : c))
+    );
+  };
+
+  /** Import de la photo du centre dans Cloudflare R2 puis enregistrement. */
+  const handleLogoUpload = async (file?: File) => {
+    if (!file) return;
+    if (!center?.id) {
+      alert("Créez d'abord votre centre de formation.");
+      return;
+    }
+    // Aperçu instantané (avant même la fin de l'upload)
+    const localUrl = URL.createObjectURL(file);
+    setLogoPreview(localUrl);
+    setUploadingLogo(true);
+    try {
+      const up = await uploadFileToR2(file, "site-media", "centers", true);
+      if (!up.success || !up.url) {
+        setLogoPreview("");
+        alert(up.error || "Import de l'image impossible.");
+        return;
+      }
+      const saved = await apiWritePlatform("update-training-center-config", {
+        centerId: center.id,
+        logo: up.url,
+      });
+      if ((saved as { success?: boolean })?.success) {
+        patchCenter({ logo: up.url });
+        clearCache(["catalog", "site"]);
+        setLogoPreview(up.url);
+      } else {
+        setLogoPreview("");
+        alert((saved as { error?: string })?.error || "Enregistrement impossible.");
+      }
+    } finally {
+      setUploadingLogo(false);
+      if (logoFileRef.current) logoFileRef.current.value = "";
+    }
+  };
 
   /** Ouvre le formulaire « Créer une formation » et amène l'utilisateur dessus. */
   const goToCourseForm = () => {
@@ -226,15 +276,18 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
         description: profileBio,
       });
       if ((res as { success?: boolean })?.success) {
-        // Les centres de formation sont mis en cache : sans invalidation, la
-        // page rechargée réaffichait l'ANCIENNE présentation.
+        // Mise à jour IMMÉDIATE de l'affichage (plus de rechargement dépendant
+        // du cache) : le nom et la présentation changent à l'écran sur-le-champ.
+        patchCenter({
+          centerName: profileName.trim() || center.centerName,
+          description: profileBio,
+        });
         clearCache(["catalog", "site"]);
         setProfileSaved(true);
         window.setTimeout(() => {
           setProfileSaved(false);
           setIsProfileOpen(false);
-          window.location.reload();
-        }, 1200);
+        }, 1500);
       } else {
         alert((res as { error?: string })?.error || "Enregistrement impossible.");
       }
@@ -410,22 +463,38 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
           </button>
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
-            {/* Visuel du formateur : UNIQUEMENT la photo de profil du membre */}
+            {/* Photo du centre : import R2, aperçu immédiat, image par défaut */}
             <div className="shrink-0 self-start">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-[#D69E25] bg-[#021231] flex items-center justify-center">
-                {userAvatar ? (
-                  <img src={userAvatar} alt="Photo de profil" className="w-full h-full object-cover" />
-                ) : (
-                  <GraduationCap className="w-9 h-9 text-[#D69E25]" />
-                )}
-              </div>
-              <a
-                href="/member"
-                className="mt-1.5 block text-center text-[10px] font-bold text-[#D69E25] hover:underline"
-                title="Modifier ma photo dans mon espace membre"
+              <button
+                type="button"
+                onClick={() => logoFileRef.current?.click()}
+                disabled={uploadingLogo}
+                title="Changer la photo de mon centre de formation"
+                className="group relative h-20 w-20 overflow-hidden rounded-2xl border-2 border-[#D69E25] bg-[#021231] sm:h-24 sm:w-24"
               >
-                Profil membre
-              </a>
+                <img
+                  src={logoPreview || center.logo || "/pwa-192x192.png"}
+                  alt={center.centerName}
+                  className="h-full w-full object-cover"
+                />
+                <span className="absolute inset-0 flex items-center justify-center bg-black/55 opacity-0 transition group-hover:opacity-100">
+                  {uploadingLogo ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-white" />
+                  ) : (
+                    <Camera className="h-5 w-5 text-white" />
+                  )}
+                </span>
+              </button>
+              <input
+                ref={logoFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleLogoUpload(e.target.files?.[0])}
+              />
+              <p className="mt-1 text-center text-[10px] font-bold text-[#D69E25]">
+                {center.logo || logoPreview ? "Changer" : "Ajouter une photo"}
+              </p>
             </div>
 
             {/* Identité */}
@@ -487,6 +556,18 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Rappel : une photo de centre rassure les apprenants (disparaît dès
+              qu'une photo est importée). */}
+          {!center.logo && !logoPreview && (
+            <div className="flex items-start gap-2 rounded-xl border border-[#D69E25]/40 bg-[#D69E25]/10 px-3 py-2">
+              <Camera className="mt-0.5 h-4 w-4 shrink-0 text-[#D69E25]" />
+              <p className="text-[11px] leading-tight" style={{ color: "#F3E3BF" }}>
+                <strong>Ajoutez une photo à votre centre de formation :</strong> elle inspire confiance
+                et met en valeur vos formations. Cliquez sur le logo pour importer votre image.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

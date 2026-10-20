@@ -44,12 +44,21 @@ export function InstructorPage() {
     );
   }
 
-  // Centre du formateur connecté (par ownerId)
+  // Centre du formateur connecté — UN SEUL par compte, choisi de façon
+  // déterministe (actif/payé d'abord, puis le plus récent). On ignore un
+  // `instructorCenter` qui appartiendrait à un autre compte (données résiduelles
+  // d'une session précédente : c'est ce qui affichait tour à tour IBX, IBXPRESS…).
+  const ownedCenters = userProfile?.id
+    ? trainingCenters.filter((c) => c.ownerId === userProfile.id)
+    : [];
+  const rank = (c: TrainingCenter) => (c.feePaid || c.status === "active" ? 1 : 0);
   const myCenter =
-    instructorCenter ||
-    (userProfile?.id
-      ? trainingCenters.find((c) => c.ownerId === userProfile.id) || null
-      : null);
+    ownedCenters.sort((a, b) => {
+      const diff = rank(b) - rank(a);
+      if (diff !== 0) return diff;
+      return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+    })[0] ||
+    (instructorCenter && instructorCenter.ownerId === userProfile?.id ? instructorCenter : null);
 
   // Achat d'espace de stockage : mémorisé ici, l'étape PAIEMENT (page, sans
   // fenêtre superposée) prend alors la place du tableau de bord.

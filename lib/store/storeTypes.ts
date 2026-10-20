@@ -179,6 +179,7 @@ export interface AppStoreContextValue {
 
   // Académie Multi-Formateurs
   trainingCenters: TrainingCenter[];
+  setTrainingCenters: React.Dispatch<React.SetStateAction<TrainingCenter[]>>;
   /** Catégories de formations stockées en base (alimentent les filtres du catalogue). */
   courseCategories: CourseCategoryRecord[];
   /** Crée une catégorie de formation (persistée dans course_categories). */

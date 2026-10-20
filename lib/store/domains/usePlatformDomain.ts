@@ -161,9 +161,18 @@ export function usePlatformDomain({
       if (data.feeConfig) setFeeConfigState(data.feeConfig as any);
       if (data.trainingCenters?.length > 0) {
         setTrainingCenters(data.trainingCenters as any);
-        const myCenter = (data.trainingCenters as any).find(
+        // Même règle que le domaine catalogue : un compte = un seul centre,
+        // choisi de façon déterministe (actif/payé d'abord, puis le plus récent).
+        const owned = (data.trainingCenters as any[]).filter(
           (c: any) => c.ownerId === userProfile?.id
         );
+        const score = (c: any) => (c.feePaid || c.status === "active" ? 1 : 0);
+        const myCenter =
+          owned.sort((a: any, b: any) => {
+            const diff = score(b) - score(a);
+            if (diff !== 0) return diff;
+            return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+          })[0] || null;
         if (myCenter) setInstructorCenter(myCenter);
       }
       if (data.courseCategories?.length > 0) {
