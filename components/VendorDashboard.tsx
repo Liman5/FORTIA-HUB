@@ -327,7 +327,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
             <div className="flex-1 min-w-0 text-center sm:text-left space-y-2">
               <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-3">
-                <h1 className="text-xl sm:text-2xl font-black text-white leading-tight truncate">{store.name}</h1>
+                <h1 className="text-xl sm:text-2xl font-black text-[#F8FAFC] leading-tight truncate">{store.name}</h1>
                 <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2">
                   <span className="inline-flex items-center gap-1.5 bg-[#D69E25]/15 text-[#D69E25] border border-[#D69E25]/40 text-[10px] font-extrabold px-2.5 py-1 rounded-full">
                     <Award className="w-3 h-3" /> FORTIA Vendeur Pro
@@ -338,11 +338,11 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 </div>
               </div>
 
-              <p className="text-[11px] sm:text-xs text-slate-300 truncate max-w-full">
-                Propriétaire : <strong className="text-white">{store.ownerName}</strong> · {store.ownerEmail}
+              <p className="text-[11px] sm:text-xs text-[#CBD5E1] truncate max-w-full">
+                Propriétaire : <strong className="text-[#F8FAFC]">{store.ownerName}</strong> · {store.ownerEmail}
               </p>
 
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-1 text-[11px] text-slate-300">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-1 text-[11px] text-[#CBD5E1]">
                 <span>
                   Commissions plateforme : <strong className="text-[#D69E25]">10%</strong>
                 </span>

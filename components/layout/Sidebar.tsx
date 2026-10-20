@@ -18,8 +18,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { useActiveSection } from "@/lib/store/useActiveSection";
 import { usePwaInstall, promptInstall, getInstallDiagnostics } from "@/lib/pwa/pwaStore";
 import { Download, Check } from "lucide-react";
-import { Loader2, RefreshCw } from "lucide-react";
-import { APP_VERSION, RELEASE_NOTES } from "@/lib/appInfo";
+import { Loader2, RefreshCw, ChevronRight } from "lucide-react";
+import { APP_VERSION } from "@/lib/appInfo";
 import { applyUpdate, checkForUpdate } from "@/lib/services/appVersion";
 
 interface SidebarProps {
@@ -42,7 +42,6 @@ export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: Si
   const { isInstalled, isIOS } = usePwaInstall();
   const [installMsg, setInstallMsg] = useState<string | null>(null);
   const [updateState, setUpdateState] = useState<"idle" | "checking" | "updating" | "latest">("idle");
-  const [showNotes, setShowNotes] = useState(false);
 
   const handleNav = (tab: string) => {
     setActiveTab(tab);
@@ -101,142 +100,146 @@ export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: Si
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
+          {/* Voile */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="sidebar-backdrop fixed inset-0 z-50 bg-black/70 backdrop-blur-md"
+            transition={{ duration: 0.18 }}
+            className="sidebar-backdrop fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
             onClick={onClose}
           />
 
-          {/* Modal Popup à droite */}
+          {/* Panneau latéral (drawer compact) */}
           <motion.div
-            initial={{ opacity: 0, x: 60, scale: 0.95 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 60, scale: 0.95 }}
-            transition={{ type: "spring", damping: 28, stiffness: 300 }}
-            className="sidebar-panel fixed right-4 top-4 bottom-4 z-50 w-[320px] max-w-[90vw] bg-[#011D46] border-2 border-[#D69E25]/30 rounded-3xl shadow-2xl flex flex-col overflow-hidden"
+            initial={{ opacity: 0, x: 48 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 48 }}
+            transition={{ type: "spring", damping: 30, stiffness: 320 }}
+            className="sidebar-panel fixed right-0 top-0 bottom-0 z-50 w-[84vw] max-w-[330px] bg-[#011D46] border-l border-[#D69E25]/30 flex flex-col"
           >
-            {/* Header */}
-            <div className="sidebar-header flex items-center justify-between p-4 border-b border-[#D69E25]/20 bg-gradient-to-r from-[#011D46] to-[#D69E25]/10">
-              <div className="sidebar-title text-sm font-black text-white">
+            {/* En-tête */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#D69E25]/20">
+              <span className="sidebar-title text-sm font-black text-[#F8FAFC]">
                 FORTIA <span className="text-[#D69E25]">HUB</span>
-              </div>
+              </span>
               <button
                 onClick={onClose}
-                className="sidebar-close-btn p-2 rounded-lg bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700 transition"
+                className="sidebar-close-btn p-1.5 rounded-lg text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-white/5 transition"
                 aria-label="Fermer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Auth Section */}
-            <div className="sidebar-section p-4 space-y-2 border-b border-[#D69E25]/10 bg-[#021231]/50">
+            {/* Compte / connexion */}
+            <div className="px-3 py-3 border-b border-[#D69E25]/10">
               {isUserLoggedIn ? (
-                <>
-                  <div className="sidebar-label text-xs text-slate-400 font-semibold mb-2">Connecté</div>
-                  <button
-                    onClick={() => handleNav("member")}
-                    className="sidebar-account-btn flex items-center gap-2 w-full px-3 py-2.5 rounded-xl bg-[#D69E25]/10 border border-[#D69E25]/30 text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] text-xs font-bold transition"
-                  >
+                <button
+                  onClick={() => handleNav("member")}
+                  className="sidebar-account-btn w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-[#D69E25]/10 border border-[#D69E25]/25 hover:bg-[#D69E25]/20 transition text-left"
+                >
+                  <span className="w-8 h-8 rounded-lg bg-[#D69E25] text-[#021231] font-black text-[11px] flex items-center justify-center shrink-0">
                     <User className="w-4 h-4" />
-                    Mon Compte
-                  </button>
-                  <button
-                    onClick={() => handleNav("settings")}
-                    className="sidebar-account-btn flex items-center gap-2 w-full px-3 py-2.5 rounded-xl bg-[#D69E25]/10 border border-[#D69E25]/30 text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] text-xs font-bold transition"
-                  >
-                    <Settings className="w-4 h-4" />
-                    Paramètres
-                  </button>
-                  <button
-                    onClick={() => handleNav("notifications")}
-                    className="sidebar-account-btn flex items-center gap-2 w-full px-3 py-2.5 rounded-xl bg-[#D69E25]/10 border border-[#D69E25]/30 text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] text-xs font-bold transition"
-                  >
-                    <Bell className="w-4 h-4" />
-                    Notifications
-                  </button>
-                </>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-black text-[#F8FAFC]">Mon compte</span>
+                    <span className="block text-[10px] text-[#94A3B8] truncate">
+                      Commandes, bibliothèque, paramètres
+                    </span>
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-[#D69E25] shrink-0" />
+                </button>
               ) : (
-                <>
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => {
                       onOpenAuthModal?.("login");
                       onClose();
                     }}
-                    className="sidebar-btn-connect flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-[#D69E25] text-[#021231] hover:bg-amber-400 text-xs font-black transition"
+                    className="sidebar-btn-connect flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl bg-[#D69E25] text-[#021231] hover:bg-amber-400 text-[11px] font-black transition"
                   >
-                    <LogIn className="w-4 h-4" />
-                    Se Connecter
+                    <LogIn className="w-3.5 h-3.5" />
+                    Connexion
                   </button>
                   <button
                     onClick={() => {
                       onOpenAuthModal?.("signup");
                       onClose();
                     }}
-                    className="sidebar-btn-auth flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl border-2 border-[#D69E25] text-[#D69E25] hover:bg-[#D69E25]/10 text-xs font-bold transition"
+                    className="sidebar-btn-auth flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl border border-[#D69E25]/60 text-[#D69E25] hover:bg-[#D69E25]/10 text-[11px] font-bold transition"
                   >
-                    <UserPlus className="w-4 h-4" />
-                    Créer un Compte
+                    <UserPlus className="w-3.5 h-3.5" />
+                    S'inscrire
                   </button>
-                </>
+                </div>
               )}
             </div>
 
-            {/* Navigation Links */}
-            <div className="flex-1 p-4 space-y-1.5 overflow-y-auto">
-              <div className="sidebar-label px-3 pt-1 pb-2 text-[10px] uppercase tracking-wider text-slate-500 font-black">
-                Navigation
-              </div>
+            {/* Navigation compacte */}
+            <div className="flex-1 overflow-y-auto px-2.5 py-2.5 space-y-0.5">
+              <p className="px-2 pb-1 text-[9px] font-black uppercase tracking-wider text-[#94A3B8]">
+                Explorer
+              </p>
               {sidebarLinks.map((link) => {
                 const Icon = link.icon;
                 return (
                   <button
                     key={link.id}
                     onClick={() => handleNav(link.id)}
-                    className="sidebar-link flex items-center gap-3 w-full px-3 py-3 rounded-xl text-slate-200 hover:bg-[#021231] hover:text-[#D69E25] border border-transparent hover:border-[#D69E25]/30 text-sm font-semibold transition-all"
+                    className="sidebar-link flex items-center gap-2.5 w-full px-2.5 py-2.5 rounded-lg text-[#CBD5E1] hover:bg-white/5 hover:text-[#D69E25] text-[13px] font-semibold transition-colors"
                   >
-                    <Icon className="sidebar-link-icon w-4.5 h-4.5 text-[#D69E25]" />
+                    <Icon className="sidebar-link-icon w-4 h-4 text-[#D69E25] shrink-0" />
                     <span className="sidebar-link-text">{link.label}</span>
                   </button>
                 );
               })}
+
+              {isUserLoggedIn && (
+                <>
+                  <p className="px-2 pt-3 pb-1 text-[9px] font-black uppercase tracking-wider text-[#94A3B8]">
+                    Mon espace
+                  </p>
+                  <button
+                    onClick={() => handleNav("notifications")}
+                    className="sidebar-link flex items-center gap-2.5 w-full px-2.5 py-2.5 rounded-lg text-[#CBD5E1] hover:bg-white/5 hover:text-[#D69E25] text-[13px] font-semibold transition-colors"
+                  >
+                    <Bell className="w-4 h-4 text-[#D69E25] shrink-0" />
+                    Notifications
+                  </button>
+                  <button
+                    onClick={() => handleNav("settings")}
+                    className="sidebar-link flex items-center gap-2.5 w-full px-2.5 py-2.5 rounded-lg text-[#CBD5E1] hover:bg-white/5 hover:text-[#D69E25] text-[13px] font-semibold transition-colors"
+                  >
+                    <Settings className="w-4 h-4 text-[#D69E25] shrink-0" />
+                    Paramètres
+                  </button>
+                </>
+              )}
             </div>
 
-            {/* Footer */}
-            <div className="sidebar-footer p-4 border-t border-[#D69E25]/10 bg-[#021231]/50 space-y-2">
-              {/* Bouton Télécharger l'App - masqué si déjà installé */}
+            {/* Pied : actions compactes */}
+            <div className="px-3 py-3 border-t border-[#D69E25]/10 space-y-2">
               {!isInstalled && (
                 <button
                   onClick={handleInstallApp}
-                  className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black text-xs hover:brightness-110 active:scale-95 transition shadow-lg"
-                  title="Télécharger l'application FORTIA HUB"
+                  className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg bg-[#D69E25] text-[#021231] font-black text-[11px] hover:bg-amber-400 transition"
+                  title="Installer l'application FORTIA HUB"
                 >
-                  <Download className="w-4 h-4" />
-                  Télécharger l'App
+                  <Download className="w-3.5 h-3.5" />
+                  Installer l'app
                 </button>
               )}
-              {installMsg && (
-                <div className="px-3 py-2 rounded-xl bg-[#D69E25]/10 border border-[#D69E25]/40 text-[10px] text-amber-200 leading-relaxed">
-                  {installMsg}
-                </div>
-              )}
 
-              {/* Mise à jour de l'application : détecte un nouveau déploiement
-                  et applique immédiatement (purge caches + service workers). */}
               <button
                 onClick={handleCheckUpdate}
                 disabled={updateState === "checking" || updateState === "updating"}
-                className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl border border-[#D69E25]/50 text-[#D69E25] font-black text-xs hover:bg-[#D69E25] hover:text-[#021231] transition disabled:opacity-60"
-                title="Rechercher et appliquer une mise à jour"
+                className="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg border border-[#D69E25]/50 text-[#D69E25] font-bold text-[11px] hover:bg-[#D69E25] hover:text-[#021231] transition disabled:opacity-60"
               >
                 {updateState === "checking" || updateState === "updating" ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className="w-3.5 h-3.5" />
                 )}
                 {updateState === "updating"
                   ? "Mise à jour…"
@@ -244,43 +247,23 @@ export function Sidebar({ isOpen, onClose, isUserLoggedIn, onOpenAuthModal }: Si
                     ? "Recherche…"
                     : updateState === "latest"
                       ? "À jour"
-                      : "Mettre à jour l'app"}
+                      : "Mettre à jour"}
               </button>
+
+              {installMsg && (
+                <p className="px-2 py-1.5 rounded-lg bg-[#D69E25]/10 border border-[#D69E25]/30 text-[10px] text-[#FDE68A] leading-relaxed">
+                  {installMsg}
+                </p>
+              )}
               {updateState === "latest" && (
                 <p className="text-[10px] text-emerald-400 text-center font-bold">
                   Vous avez la dernière version.
                 </p>
               )}
-              <div className="sidebar-footer-text text-[10px] text-slate-500 font-semibold">
+
+              <p className="text-[10px] text-[#94A3B8] text-center font-semibold">
                 FORTIA HUB © {new Date().getFullYear()} · v{APP_VERSION}
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowNotes((v) => !v)}
-                className="w-full text-left text-[10px] text-[#D69E25] hover:text-amber-300 font-black underline decoration-dotted"
-              >
-                {showNotes ? "▾ Masquer" : "▸ Voir les dernières corrections"} (v{RELEASE_NOTES[0]?.version || APP_VERSION})
-              </button>
-              {showNotes && (
-                <div className="px-3 py-2 rounded-xl bg-white/[0.03] border border-[#D69E25]/20 space-y-1.5 max-h-40 overflow-y-auto">
-                  {RELEASE_NOTES.map((r) => (
-                    <div key={r.version} className="space-y-1">
-                      <p className="text-[10px] font-black text-[#D69E25]">
-                        v{r.version} — {r.date}
-                      </p>
-                      <ul className="space-y-1">
-                        {r.items.map((item, i) => (
-                          <li key={i} className="text-[10px] text-slate-400 leading-snug flex items-start gap-1.5">
-                            <Check className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="sidebar-footer-sub text-[10px] text-slate-600">LEARN. BUILD. SUCCEED.</div>
+              </p>
             </div>
           </motion.div>
         </>
