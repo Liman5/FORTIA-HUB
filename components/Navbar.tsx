@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useTheme } from "@/lib/store/ThemeProvider";
 import { Logo } from "./Logo";
@@ -193,9 +194,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </button>
 
-              {/* Popup réduit */}
-              {isNotifOpen && (
-                <div className="absolute right-0 top-full mt-2 w-[calc(100vw-1.5rem)] max-w-[360px] bg-[#021231] border border-[#D69E25]/40 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden z-[70]">
+              {/* Popup rendu dans un PORTAIL : position fixe sous l'en-tête.
+                  Sans portail, le backdrop-filter de l'en-tête créait un
+                  containing block et le panneau était rogné sur mobile. */}
+              {mounted && isNotifOpen && createPortal(
+                <div className="notif-popup-container fixed inset-x-0 top-[64px] z-[120] flex justify-center px-3 pointer-events-none">
+                <div className="pointer-events-auto w-full max-w-[380px] bg-[#021231] border border-[#D69E25]/40 rounded-2xl overflow-hidden">
                   {/* Header du popup */}
                   <div className="flex items-center justify-between px-4 py-3 bg-[#011D46] border-b border-[#D69E25]/30">
                     <div className="flex items-center gap-2">
@@ -270,6 +274,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
+                </div>,
+                document.body
               )}
             </div>
             )}

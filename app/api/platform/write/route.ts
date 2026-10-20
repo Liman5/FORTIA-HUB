@@ -1674,13 +1674,29 @@ export async function POST(req: NextRequest) {
 
       // ============ CONFIG TARIFS ============
       case "update-training-center-config": {
-        if (!data.centerId) return NextResponse.json({ error: "centerId requis" }, { status: 400 });
+        if (!uuidOrNull(data.centerId))
+          return NextResponse.json({ error: "centerId (UUID) requis" }, { status: 400 });
+        // Seul le propriétaire du centre (ou un administrateur) peut le modifier.
+        if (!adminActor) {
+          const owner = await getCurrentUser(req).catch(() => null);
+          const target = await prisma.trainingCenter
+            .findUnique({ where: { id: data.centerId }, select: { ownerId: true } })
+            .catch(() => null);
+          if (!target) return NextResponse.json({ error: "Centre introuvable" }, { status: 404 });
+          if (!owner?.id || target.ownerId !== owner.id)
+            return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
+        }
         const updated = await prisma.trainingCenter.update({
           where: { id: data.centerId },
           data: {
             storageQuotaGb: data.storageQuotaGb ?? undefined,
             feeAmountUsd: data.feeAmountUsd ?? undefined,
             status: data.status ?? undefined,
+            // Identité du centre (logo/photo de profil, bannière, présentation)
+            centerName: typeof data.centerName === "string" && data.centerName.trim() ? data.centerName.trim() : undefined,
+            description: typeof data.description === "string" ? data.description : undefined,
+            logo: typeof data.logo === "string" ? data.logo : undefined,
+            banner: typeof data.banner === "string" ? data.banner : undefined,
           } as any,
         });
         return NextResponse.json({ success: true, id: updated.id });

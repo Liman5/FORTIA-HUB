@@ -17,6 +17,10 @@ import {
   BookOpen,
   Download,
   UploadCloud,
+  Camera,
+  Pencil,
+  TrendingUp,
+  X,
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
 import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2, resolveStorageUrl } from "@/lib/services/clientUpload";
@@ -187,6 +191,62 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   // Image de couverture : upload fichier (pas seulement URL)
   const coverFileRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
+  // === Identité du centre : photo de profil (logo) + présentation ===
+  const logoFileRef = useRef<HTMLInputElement>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileBio, setProfileBio] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  /** Enregistre l'identité du centre (nom, présentation) puis rafraîchit. */
+  const saveCenterProfile = async () => {
+    if (!center?.id) {
+      alert("Créez d'abord votre centre de formation.");
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      const res = await apiWritePlatform("update-training-center-config", {
+        centerId: center.id,
+        centerName: profileName.trim() || center.centerName,
+        description: profileBio,
+      });
+      if ((res as { success?: boolean })?.success) {
+        setIsProfileOpen(false);
+        window.location.reload();
+      } else {
+        alert((res as { error?: string })?.error || "Enregistrement impossible.");
+      }
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  /** Importe la photo de profil du centre dans Cloudflare R2 puis l'enregistre. */
+  const handleLogoUpload = async (file?: File) => {
+    if (!file) return;
+    if (!center?.id) {
+      alert("Créez d'abord votre centre de formation.");
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const up = await uploadFileToR2(file, "store-images", center.id, true);
+      if (!up.success || !up.url) {
+        alert(up.error || "Import de l'image impossible.");
+        return;
+      }
+      const saved = await apiWritePlatform("update-training-center-config", {
+        centerId: center.id,
+        logo: up.url,
+      });
+      if ((saved as { success?: boolean })?.success) window.location.reload();
+      else alert((saved as { error?: string })?.error || "Enregistrement impossible.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
   // Quota de stockage réellement utilisé (quota plateforme du formateur)
   const [usedBytes, setUsedBytes] = useState<number>(() => Number(center?.storageUsedBytes || 0));
   useEffect(() => {
@@ -316,66 +376,200 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     );
   }
 
+  /**
+   * Gains des 7 derniers jours (barres) : calculé sur les commissions réelles
+   * du formateur — aucune donnée inventée, zéro si rien n'a été vendu.
+   */
+  const weeklyEarnings = Array.from({ length: 7 }, (_, i) => {
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() - (6 - i));
+    const next = new Date(day);
+    next.setDate(next.getDate() + 1);
+    const amount = (commissions || [])
+      .filter((c) => {
+        const t = new Date(c.createdAt).getTime();
+        return t >= day.getTime() && t < next.getTime();
+      })
+      .reduce((sum, c) => sum + (Number(c.instructorEarningsUsd) || 0), 0);
+    return { day, amount };
+  });
+  const weeklyMax = Math.max(...weeklyEarnings.map((d) => d.amount), 1);
+  const weeklyTotal = weeklyEarnings.reduce((s, d) => s + d.amount, 0);
+
   return (
     <div className="bg-[#021231] text-white min-h-screen pb-16 space-y-8 fortia-flat">
-      {/* Header */}
+      {/* ===== En-tête STUDIO : identité du centre + actions ===== */}
       <div className="bg-[#011D46] border-b border-[#D69E25]/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-4">
-          {/* Bouton retour */}
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-7 space-y-4">
           <button
             onClick={() => {
               if (typeof window !== "undefined") {
                 window.location.href = "/member";
               }
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#021231] border border-[#D69E25]/40 text-[#D69E25] text-xs font-black rounded-xl hover:bg-[#032454] hover:border-[#D69E25]/70 transition shadow"
+            className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#021231] border border-[#D69E25]/40 text-[#D69E25] text-[11px] font-black rounded-xl hover:bg-[#032454] hover:border-[#D69E25]/70 transition"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>← Retour à mon Espace Membre</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Mon espace membre</span>
           </button>
 
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-[#D69E25]/20 border-2 border-[#D69E25] flex items-center justify-center">
-                <GraduationCap className="w-8 h-8 text-[#D69E25]" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-black">{center.centerName}</h1>
-                <p className="text-xs text-slate-300">{userEmail}</p>
-                <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
+            {/* Photo de profil du centre : import direct dans Cloudflare R2 */}
+            <div className="relative shrink-0 self-start">
+              <button
+                type="button"
+                onClick={() => logoFileRef.current?.click()}
+                disabled={uploadingLogo}
+                title="Changer la photo de mon centre"
+                className="group relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-[#D69E25] bg-[#021231] flex items-center justify-center"
+              >
+                {center.logo ? (
+                  <img src={center.logo} alt={center.centerName} className="w-full h-full object-cover" />
+                ) : (
+                  <GraduationCap className="w-9 h-9 text-[#D69E25]" />
+                )}
+                <span className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                  {uploadingLogo ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-white" />
+                  ) : (
+                    <Camera className="w-5 h-5 text-white" />
+                  )}
+                </span>
+              </button>
+              <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#D69E25] flex items-center justify-center pointer-events-none">
+                <Camera className="w-3 h-3 text-[#021231]" />
+              </span>
+              <input
+                ref={logoFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleLogoUpload(e.target.files?.[0])}
+              />
+            </div>
+
+            {/* Identité */}
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <h1 className="text-xl sm:text-2xl font-black truncate" style={{ color: "#F8FAFC" }}>
+                {center.centerName}
+              </h1>
+              <p className="text-[11px] sm:text-xs truncate" style={{ color: "#94A3B8" }}>
+                {userEmail}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
                   <CheckCircle2 className="w-3 h-3" /> Centre actif
                 </span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-[#D69E25]/15 text-[#D69E25] border border-[#D69E25]/35 px-2 py-0.5 rounded-full">
+                  <BookOpen className="w-3 h-3" /> {myCourses.length} formation{myCourses.length > 1 ? "s" : ""}
+                </span>
               </div>
+              {center.description ? (
+                <p className="text-[11px] sm:text-xs line-clamp-2 max-w-xl" style={{ color: "#CBD5E1" }}>
+                  {center.description}
+                </p>
+              ) : (
+                <button
+                  onClick={() => {
+                    setProfileName(center.centerName);
+                    setProfileBio(center.description || "");
+                    setIsProfileOpen(true);
+                  }}
+                  className="text-[11px] font-bold text-[#D69E25] hover:underline inline-flex items-center gap-1"
+                >
+                  <Pencil className="w-3 h-3" /> Ajouter une présentation de mon centre
+                </button>
+              )}
             </div>
-            <button
-              onClick={() => setActiveTab("add")}
-              className="px-5 py-2.5 bg-[#D69E25] hover:bg-amber-400 text-[#021231] font-black text-xs rounded-xl transition shadow flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Ajouter une Formation</span>
-            </button>
+
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => setActiveTab("add")}
+                className="px-4 py-2.5 bg-[#D69E25] hover:bg-amber-400 text-[#021231] font-black text-xs rounded-xl transition flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Créer une formation</span>
+              </button>
+              <button
+                onClick={() => {
+                  setProfileName(center.centerName);
+                  setProfileBio(center.description || "");
+                  setIsProfileOpen(true);
+                }}
+                className="px-4 py-2.5 bg-[#021231] border border-[#D69E25]/40 text-[#D69E25] font-black text-xs rounded-xl hover:bg-[#032454] transition flex items-center justify-center gap-2"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>Modifier ma présentation</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4">
-          <div className="bg-[#011D46] border border-slate-800 p-5 rounded-3xl">
-            <span className="text-[11px] text-slate-400 font-semibold block">Mes Formations</span>
-            <span className="text-2xl font-black">{myCourses.length}</span>
+        {/* ===== Indicateurs clés ===== */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { label: "Formations", value: String(myCourses.length), icon: BookOpen, tint: "text-[#D69E25]", bg: "bg-[#D69E25]/12" },
+            { label: "Étudiants", value: String(totalStudents), icon: Users, tint: "text-sky-300", bg: "bg-sky-500/12" },
+            { label: "Revenus", value: `$${totalEarnings}`, icon: DollarSign, tint: "text-emerald-300", bg: "bg-emerald-500/12" },
+            { label: "Stockage", value: `${usedGb.toFixed(1)} Go`, icon: HardDrive, tint: "text-violet-300", bg: "bg-violet-500/12", sub: `/ ${center.storageQuotaGb} Go` },
+          ].map((kpi) => (
+            <div key={kpi.label} className="bg-[#011D46] border border-slate-800 rounded-2xl p-3.5 sm:p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                  {kpi.label}
+                </span>
+                <span className={`w-7 h-7 rounded-lg ${kpi.bg} flex items-center justify-center shrink-0`}>
+                  <kpi.icon className={`w-3.5 h-3.5 ${kpi.tint}`} />
+                </span>
+              </div>
+              <p className="text-lg sm:text-2xl font-black tabular-nums truncate">{kpi.value}</p>
+              {kpi.sub && <p className="text-[10px] text-slate-500 truncate">{kpi.sub}</p>}
+            </div>
+          ))}
+        </div>
+
+        {/* ===== Gains des 7 derniers jours ===== */}
+        <div className="bg-[#011D46] border border-slate-800 rounded-2xl p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-xs sm:text-sm font-black flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[#D69E25]" />
+                Gains — 7 derniers jours
+              </h3>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                Part formateur des ventes enregistrées (net de commission)
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-lg sm:text-xl font-black text-emerald-300 tabular-nums">${weeklyTotal.toFixed(2)}</p>
+              <p className="text-[10px] text-slate-500">cette semaine</p>
+            </div>
           </div>
-          <div className="bg-[#011D46] border border-slate-800 p-5 rounded-3xl">
-            <span className="text-[11px] text-slate-400 font-semibold block">Étudiants</span>
-            <span className="text-2xl font-black">{totalStudents}</span>
+
+          <div className="flex items-end justify-between gap-1.5 h-28">
+            {weeklyEarnings.map((d, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                <span className="text-[9px] font-bold text-slate-400 tabular-nums">
+                  {d.amount > 0 ? `$${d.amount.toFixed(0)}` : ""}
+                </span>
+                <div
+                  className="w-full rounded-t-md bg-gradient-to-t from-[#AB6F10] to-[#D69E25] transition-all"
+                  style={{ height: `${Math.max((d.amount / weeklyMax) * 100, d.amount > 0 ? 6 : 2)}%`, minHeight: 3 }}
+                  title={`${d.amount.toFixed(2)} $`}
+                />
+              </div>
+            ))}
           </div>
-          <div className="bg-[#011D46] border border-slate-800 p-5 rounded-3xl">
-            <span className="text-[11px] text-slate-400 font-semibold block">Revenus</span>
-            <span className="text-2xl font-black text-emerald-400">${totalEarnings}</span>
-          </div>
-          <div className="bg-[#011D46] border border-slate-800 p-5 rounded-3xl">
-            <span className="text-[11px] text-slate-400 font-semibold block">Stockage</span>
-            <span className="text-2xl font-black">{usedGb.toFixed(2)} <span className="text-xs text-slate-400">/ {center.storageQuotaGb} GB</span></span>
+          <div className="flex items-center justify-between gap-1.5 mt-1.5">
+            {weeklyEarnings.map((d, i) => (
+              <span key={i} className="flex-1 text-center text-[9px] font-bold uppercase text-slate-500">
+                {d.day.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}
+              </span>
+            ))}
           </div>
         </div>
 
@@ -1273,6 +1467,72 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
           title="Formation publiée !"
           message="Votre formation a été enregistrée et publiée avec succès. Elle est maintenant visible dans votre catalogue et sur la plateforme."
         />
+
+        {/* ===== Modale : identité du centre (nom + présentation) ===== */}
+        {isProfileOpen && (
+          <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3">
+            <div className="w-full max-w-md bg-[#021231] border border-[#D69E25]/40 rounded-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 bg-[#011D46] border-b border-[#D69E25]/25">
+                <h3 className="text-sm font-black flex items-center gap-2" style={{ color: "#F8FAFC" }}>
+                  <Pencil className="w-4 h-4 text-[#D69E25]" />
+                  Présentation de mon centre
+                </h3>
+                <button
+                  onClick={() => setIsProfileOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition"
+                  aria-label="Fermer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">Nom du centre</label>
+                  <input
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    maxLength={80}
+                    className="w-full px-3 py-2.5 bg-[#011D46] border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:border-[#D69E25] focus:outline-none"
+                    placeholder="Ex. IBXPRESS Academy"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    Présentation <span className="text-slate-500 font-normal">({profileBio.length}/400)</span>
+                  </label>
+                  <textarea
+                    value={profileBio}
+                    onChange={(e) => setProfileBio(e.target.value.slice(0, 400))}
+                    rows={4}
+                    className="w-full px-3 py-2.5 bg-[#011D46] border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:border-[#D69E25] focus:outline-none resize-none"
+                    placeholder="Ce que vous enseignez, votre expérience, à qui s'adressent vos formations…"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  La photo de profil se change en cliquant sur le logo, en haut de la page.
+                </p>
+              </div>
+
+              <div className="px-4 pb-4 flex gap-2">
+                <button
+                  onClick={() => setIsProfileOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-[#011D46] border border-slate-700 text-slate-300 text-xs font-black hover:bg-[#032454] transition"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={saveCenterProfile}
+                  disabled={savingProfile}
+                  className="flex-1 py-2.5 rounded-xl bg-[#D69E25] text-[#021231] text-xs font-black hover:bg-amber-400 transition flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
