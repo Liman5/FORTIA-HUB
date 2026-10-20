@@ -41,6 +41,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.style.colorScheme = "light";
     }
 
+    // Couleur de la barre d'état du téléphone (PWA / navigateur mobile).
+    // Mode nuit : navy profond. Mode clair : gris-bleu doux (jamais blanc pur).
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "theme-color");
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute("content", isDarkMode ? "#021231" : "#E8EDF3");
+
     // N'écrase la préférence stockée qu'une fois celle-ci restaurée
     if (!themeRestored) return;
     try {

@@ -21,6 +21,29 @@
   }
 }
 
+/* ===== MODE NUIT : PAGE D'ACCUEIL (cartes blanches → navy) =====
+   La page d'accueil utilise des fonds blancs explicites ; sans ces règles,
+   elle restait entièrement claire même en mode nuit. */
+html.dark .home-page [class*="bg-white"] {
+  background-color: #011d46 !important;
+}
+html.dark .home-page [class*="bg-[#F4F6FA]"] {
+  background-color: #021231 !important;
+}
+html.dark .home-page [class*="border-slate-200"],
+html.dark .home-page [class*="border-slate-100"] {
+  border-color: #1e2b45 !important;
+}
+html.dark .home-page [class*="text-slate-900"],
+html.dark .home-page [class*="text-slate-800"],
+html.dark .home-page [class*="text-slate-700"] {
+  color: #e2e8f0 !important;
+}
+html.dark .home-page [class*="text-slate-600"],
+html.dark .home-page [class*="text-slate-500"] {
+  color: #94a3b8 !important;
+}
+
 /* ===== MODE CLAIR GLOBAL =====
    En mode clair (html.light) : AUCUN fond gris. Fond de page et
    surfaces = blanc pur (#ffffff). La séparation se fait par des

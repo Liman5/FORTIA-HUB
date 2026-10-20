@@ -735,7 +735,7 @@ export function HomePage() {
   const isLoading = !platformLoaded;
 
   return (
-    <div className="min-h-screen bg-[#F4F6FA] text-slate-900 font-sans antialiased">
+    <div className="home-page min-h-screen bg-[#F4F6FA] text-slate-900 dark:bg-[#021231] dark:text-white font-sans antialiased">
       {/* L'en-tête (recherche, notifications, panier, menu), la navigation
           basse et les fenêtres modales sont fournis par <AppShell> :
           strictement identiques sur toutes les pages. */}

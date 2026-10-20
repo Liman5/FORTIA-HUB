@@ -319,19 +319,30 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10 space-y-6">
           {/* Identité de la boutique + statut */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-            {store.logo ? (
-              <motion.img
-                src={store.logo}
-                alt={store.name}
-                className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#D69E25] shrink-0 self-center sm:self-auto"
-                animate={{ y: [0, -5, 0] }}
-                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              />
-            ) : (
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-[#D69E25] shrink-0 self-center sm:self-auto bg-[#021231] flex items-center justify-center">
-                <Store className="w-7 h-7 sm:w-8 sm:h-8 text-[#D69E25]" />
-              </div>
-            )}
+            {/* Logo + point d'information (discret, en haut à droite du logo) */}
+            <div className="relative shrink-0 self-center sm:self-auto">
+              {store.logo ? (
+                <motion.img
+                  src={store.logo}
+                  alt={store.name}
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#D69E25]"
+                  animate={{ y: [0, -5, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                />
+              ) : (
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-[#D69E25] bg-[#021231] flex items-center justify-center">
+                  <Store className="w-7 h-7 sm:w-8 sm:h-8 text-[#D69E25]" />
+                </div>
+              )}
+              <button
+                onClick={() => setShowRules(true)}
+                title="Règles de publication (important)"
+                aria-label="Règles de publication"
+                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-[#D69E25] bg-[#021231] text-[10px] font-black leading-none text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] transition"
+              >
+                i
+              </button>
+            </div>
 
             <div className="flex-1 min-w-0 text-center sm:text-left space-y-2">
               <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-3">
@@ -379,16 +390,6 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
             >
               <Plus className="w-4 h-4" />
               <span>Nouveau Produit</span>
-            </button>
-
-            {/* Point d'information : règles anti-abus pour les vendeurs */}
-            <button
-              onClick={() => setShowRules(true)}
-              title="Règles de publication (important)"
-              aria-label="Règles de publication"
-              className="inline-flex h-[18px] w-[18px] shrink-0 self-center items-center justify-center rounded-full border border-[#D69E25]/60 text-[9px] font-black leading-none text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] transition"
-            >
-              i
             </button>
           </div>
 
