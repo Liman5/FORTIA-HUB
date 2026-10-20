@@ -28,6 +28,19 @@ const adapter = new PrismaPg({
   keepAlive: true,
 });
 
+// ============================================================
+// Journalisation Prisma
+// ------------------------------------------------------------
+// Par défaut : uniquement les ERREURS (les requêtes SQL ne sont plus
+// affichées dans la console de `npm run dev`).
+// Pour les voir ponctuellement pendant un diagnostic :
+//   PRISMA_LOG_QUERIES=true   dans .env.local
+// ============================================================
+const prismaLog: ("query" | "info" | "warn" | "error")[] =
+  process.env.PRISMA_LOG_QUERIES === "true"
+    ? ["query", "warn", "error"]
+    : ["error"];
+
 // Singleton Prisma pour éviter les connexions multiples en dev
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
@@ -35,7 +48,7 @@ export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+    log: prismaLog,
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
