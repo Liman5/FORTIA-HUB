@@ -302,7 +302,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   return (
     <div className="bg-[#021231] text-white min-h-screen pb-16 space-y-8 fortia-flat">
       {/* Top Banner & Header */}
-      <div className="vendor-header-banner relative bg-[#011D46] border-b border-[#D69E25]/30 overflow-hidden shadow-2xl" style={{ backgroundColor: "#011D46" }}>
+      <div className="vendor-header-banner relative bg-[#011D46] border-b border-[#D69E25]/30 overflow-hidden" style={{ backgroundColor: "#011D46" }}>
         {/* Glow effects */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/50 to-transparent" />
         <div className="absolute -top-20 right-20 w-64 h-64 rounded-full bg-[#D69E25]/5 blur-3xl" />
@@ -315,12 +315,12 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               <motion.img
                 src={store.logo}
                 alt={store.name}
-                className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20 shrink-0 self-center sm:self-auto"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#D69E25] shrink-0 self-center sm:self-auto"
                 animate={{ y: [0, -5, 0] }}
                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
               />
             ) : (
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20 shrink-0 self-center sm:self-auto bg-[#021231] flex items-center justify-center">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-[#D69E25] shrink-0 self-center sm:self-auto bg-[#021231] flex items-center justify-center">
                 <Store className="w-7 h-7 sm:w-8 sm:h-8 text-[#D69E25]" />
               </div>
             )}
@@ -332,7 +332,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   <span className="inline-flex items-center gap-1.5 bg-[#D69E25]/15 text-[#D69E25] border border-[#D69E25]/40 text-[10px] font-extrabold px-2.5 py-1 rounded-full">
                     <Award className="w-3 h-3" /> FORTIA Vendeur Pro
                   </span>
-                  <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-[#021231] border border-emerald-300 text-[10px] font-black px-2.5 py-1 rounded-full shadow shadow-emerald-500/30">
+                  <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-[#021231] border border-emerald-300 text-[10px] font-black px-2.5 py-1 rounded-full">
                     <CheckCircle2 className="w-3 h-3" /> Statut : Boutique Active
                   </span>
                 </div>
@@ -367,24 +367,15 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
             <button
               onClick={handleOpenAddProduct}
-              className="group relative w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#D69E25] via-[#F6E05E] to-[#AB6F10] bg-[length:200%_auto] hover:bg-right text-[#021231] font-black text-xs rounded-xl transition-all duration-300 shadow-lg shadow-[#D69E25]/30 overflow-hidden"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#D69E25] hover:bg-amber-400 text-[#021231] font-black text-xs rounded-xl transition-colors"
             >
-              <span className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 group-hover:animate-shine transition-opacity" />
               <Plus className="w-4 h-4" />
               <span>Nouveau Produit</span>
             </button>
           </div>
 
         {/* Tab Navigation */}
-          <div className="flex items-center gap-2 mt-8 border-t border-white/10 pt-4 overflow-x-auto scrollbar-none relative">
-            {/* Petites flèches dorées indicatrices de scroll sur mobile (sans fond sombre) */}
-            <div className="absolute pointer-events-none top-1/2 -translate-y-1/2 left-1 z-10 md:hidden">
-              <ChevronDown className="w-4 h-4 text-[#D69E25] -rotate-90 animate-pulse drop-shadow-[0_0_6px_rgba(214,158,37,0.6)]" />
-            </div>
-            <div className="absolute pointer-events-none top-1/2 -translate-y-1/2 right-1 z-10 md:hidden">
-              <ChevronDown className="w-4 h-4 text-[#D69E25] rotate-90 animate-pulse drop-shadow-[0_0_6px_rgba(214,158,37,0.6)]" />
-            </div>
-
+          <div className="flex items-center gap-1.5 mt-6 sm:mt-8 pt-4 border-t border-slate-800 overflow-x-auto scrollbar-none snap-x">
             {[
               { id: 'analytics' as const, label: 'Tableau de Bord', icon: TrendingUp },
               { id: 'products' as const, label: `Mes Produits (${storeProducts.length})`, icon: ShoppingBag },
@@ -397,9 +388,9 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2 whitespace-nowrap ${
+                  className={`relative shrink-0 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${
                     isActive
-                      ? 'bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] shadow-lg shadow-[#D69E25]/20'
+                      ? 'bg-[#D69E25] text-[#021231]'
                       : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
                   }`}
                 >
@@ -413,7 +404,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
       </div>
 
       {/* Main Content Area */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 space-y-5 sm:space-y-6">
 
         {/* TAB 1: ANALYTICS & REVENUE */}
         {activeTab === 'analytics' && (
@@ -426,10 +417,10 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
             >
               {[
-                { label: "Chiffre d'Affaires Brut", value: `$${grossRevenueUsd}`, sub: `≈ ${Math.round(grossRevenueUsd * 600).toLocaleString()} FCFA`, badge: "100% des ventes accumulées", badgeColor: "text-emerald-400", color: "#D69E25" },
-                { label: "Commissions Plateforme (10%)", value: `$${platformFeeUsd}`, sub: `≈ ${Math.round(platformFeeUsd * 600).toLocaleString()} FCFA`, badge: "Frais de gestion & infrastructure", badgeColor: "text-slate-400", color: "#F59E0B" },
-                { label: "Revenu Net Vendeur", value: `$${netEarningsUsd}`, sub: `≈ ${netEarningsFcfa.toLocaleString()} FCFA`, badge: "Disponible pour retrait instantané", badgeColor: "text-emerald-300", color: "#D69E25", highlighted: true },
-                { label: "Nombre de Ventes", value: `${storeOrders.length + (store.salesCount || 0)}`, sub: "", badge: "Produits numériques délivrés", badgeColor: "text-emerald-400", color: "#D69E25" },
+                { label: "Chiffre d'Affaires", icon: DollarSign, value: `$${grossRevenueUsd}`, sub: `≈ ${Math.round(grossRevenueUsd * 600).toLocaleString()} FCFA`, badge: "100% des ventes accumulées", badgeColor: "text-emerald-400", color: "#D69E25" },
+                { label: "Commissions (10%)", icon: CreditCard, value: `$${platformFeeUsd}`, sub: `≈ ${Math.round(platformFeeUsd * 600).toLocaleString()} FCFA`, badge: "Frais de gestion & infrastructure", badgeColor: "text-slate-400", color: "#F59E0B" },
+                { label: "Revenu Net", icon: TrendingUp, value: `$${netEarningsUsd}`, sub: `≈ ${netEarningsFcfa.toLocaleString()} FCFA`, badge: "Disponible pour retrait instantané", badgeColor: "text-emerald-300", color: "#D69E25", highlighted: true },
+                { label: "Ventes", icon: PackageCheck, value: `${storeOrders.length + (store.salesCount || 0)}`, sub: "", badge: "Produits numériques délivrés", badgeColor: "text-emerald-400", color: "#D69E25" },
               ].map((stat, idx) => (
                 <motion.div
                   key={stat.label}
@@ -437,26 +428,38 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: idx * 0.1, ease: "easeOut" }}
                   whileHover={{ y: -4 }}
-                  className={`group relative bg-white/[0.04] backdrop-blur-xl border rounded-3xl p-5 space-y-2 overflow-hidden transition-all duration-300 ${
-                    stat.highlighted ? 'border-[#D69E25]/50 shadow-lg shadow-[#D69E25]/10' : 'border-white/10 hover:border-white/20'
+                                    className={`group relative rounded-2xl border p-3.5 sm:p-4 space-y-2 bg-[#011D46]/80 transition-colors ${
+                    stat.highlighted ? 'border-[#D69E25]/60' : 'border-slate-800 hover:border-slate-700'
                   }`}
                 >
-                  <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent ${stat.highlighted ? 'via-[#D69E25]/60' : 'via-white/20'} to-transparent opacity-0 group-hover:opacity-100 transition-opacity`} />
-                  <span className="text-[11px] text-slate-400 font-semibold block">{stat.label}</span>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className={`text-2xl font-black ${stat.highlighted ? 'text-[#D69E25]' : 'text-white'}`}>{stat.value}</span>
-                    {stat.sub && <span className="text-[10px] text-slate-500 font-semibold truncate">{stat.sub}</span>}
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide text-slate-400 leading-tight">
+                      {stat.label}
+                    </span>
+                    <span className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center ${
+                      stat.highlighted ? 'bg-[#D69E25] text-[#021231]' : 'bg-[#D69E25]/10 text-[#D69E25]'
+                    }`}>
+                      <stat.icon className="w-4 h-4" />
+                    </span>
                   </div>
-                  <span className={`text-[10px] font-bold block ${stat.badgeColor}`}>{stat.badge}</span>
+                  <p className={`text-xl sm:text-2xl font-black truncate ${stat.highlighted ? 'text-[#D69E25]' : 'text-white'}`}>
+                    {stat.value}
+                  </p>
+                  <div className="min-w-0">
+                    {stat.sub && (
+                      <span className="text-[10px] text-slate-500 font-semibold block truncate">{stat.sub}</span>
+                    )}
+                    <span className={`text-[10px] font-bold block truncate ${stat.badgeColor}`}>{stat.badge}</span>
+                  </div>
                 </motion.div>
               ))}
             </motion.div>
 
             {/* Withdraw Funds Box */}
-            <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 p-6 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+            <div className="bg-[#011D46] border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-5">
               <div className="space-y-1 text-center md:text-left">
                 <h3 className="text-lg font-bold text-white flex items-center justify-center md:justify-start gap-2">
-                  <Smartphone className="w-5 h-5 text-cyan-400" />
+                  <Smartphone className="w-5 h-5 text-[#D69E25]" />
                   <span>Demander un Retrait de vos Gains (Wave, OM, PayPal, Crypto)</span>
                 </h3>
                 <p className="text-xs text-slate-300">
