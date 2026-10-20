@@ -57,7 +57,11 @@ type WriteAction =
   // Blog (module éditorial)
   | "create-blog-post"
   | "update-blog-post"
-  | "delete-blog-post";
+  | "delete-blog-post"
+  // Modération des contenus (formations & produits)
+  | "moderate-content"
+  | "restore-content"
+  | "appeal-moderation";
 
 export interface WriteResult {
   success: boolean;

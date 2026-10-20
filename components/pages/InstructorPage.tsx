@@ -3,6 +3,7 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store/AppStore";
+import { clearCache } from "@/lib/services/api/http";
 import { useAuth, useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
 import { InstructorDashboard } from "@/components/InstructorDashboard";
 import { CheckoutStep } from "@/components/CheckoutStep";
@@ -19,13 +20,20 @@ export function InstructorPage() {
   const { isUserLoggedIn, userProfile, sessionChecking } = useAuth();
   const { marketplaceProducts, stores, addSupportSubmission } = useMarketplace();
   const { courses, trainingCenters, instructorCommissions, instructorStoragePurchases, instructorCenter, createTrainingCenter, addInstructorCourse, updateInstructorCourse, suspendInstructorCourse, deleteInstructorCourse, buyInstructorStorage, loadAllCourses } = useCatalog();
-  const { platformLoaded } = useAppStore();
+  const { platformLoaded, refreshPlatformData } = useAppStore();
 
   // Espace formateur : le catalogue public ne contient que la première page et
   // exclut les brouillons. On charge donc l'intégralité des formations
   // (brouillons inclus) dès que la session est connue.
   React.useEffect(() => {
-    if (isUserLoggedIn) loadAllCourses();
+    if (isUserLoggedIn) {
+      // Les centres sont mis en cache (5 min) : on force une lecture fraîche pour
+      // que les modifications faites par l'admin (nom, présentation, photo,
+      // bannissement) apparaissent immédiatement côté application.
+      clearCache(["catalog", "site"]);
+      refreshPlatformData();
+      loadAllCourses();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUserLoggedIn]);
 

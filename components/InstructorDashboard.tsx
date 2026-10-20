@@ -202,6 +202,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const [profileBio, setProfileBio] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+  // Règles de la plateforme (petit bouton d'information anti-abus)
+  const [showRules, setShowRules] = useState(false);
   // Photo du centre : import R2 + aperçu immédiat (temps réel)
   const logoFileRef = useRef<HTMLInputElement>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -228,7 +230,9 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     setLogoPreview(localUrl);
     setUploadingLogo(true);
     try {
-      const up = await uploadFileToR2(file, "site-media", "centers", true);
+      // Bucket public "store-images" (autorise aux formateurs connectés) :
+      // plus besoin de session administrateur pour la photo du centre.
+      const up = await uploadFileToR2(file, "store-images", center.id, true);
       if (!up.success || !up.url) {
         setLogoPreview("");
         alert(up.error || "Import de l'image impossible.");
@@ -554,6 +558,15 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <Pencil className="w-3.5 h-3.5" />
                 <span>Modifier ma présentation</span>
               </button>
+              {/* Point d'information : règles anti-abus (droits d'auteur, authenticité) */}
+              <button
+                onClick={() => setShowRules(true)}
+                title="Règles de publication (important)"
+                aria-label="Règles de publication"
+                className="h-10 w-10 shrink-0 rounded-full border border-[#D69E25]/50 bg-[#021231] text-[#D69E25] font-black hover:bg-[#D69E25] hover:text-[#021231] transition flex items-center justify-center self-center"
+              >
+                i
+              </button>
             </div>
           </div>
 
@@ -686,6 +699,51 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
                 {myCourses.map((c) => (
                   <div key={c.id} className="bg-[#011D46] border border-slate-800 rounded-3xl overflow-hidden">
+                    {/* ===== Suspension : motif, fonds gelés, demande d'examen ===== */}
+                    {c.moderationStatus === "suspended" && (
+                      <div className="space-y-2 border-b border-red-500/40 bg-red-500/10 p-3">
+                        <p className="flex items-center gap-1.5 text-[11px] font-black text-red-300">
+                          <EyeOff className="w-3.5 h-3.5" /> Formation suspendue
+                          {c.fundsFrozen ? " — fonds gelés" : ""}
+                        </p>
+                        <p className="text-[10px] leading-tight text-red-200/90">
+                          Motif : {c.moderationReason || "Non-conformité aux règles de la plateforme."}
+                        </p>
+                        {c.appealStatus === "pending" ? (
+                          <p className="text-[10px] font-bold text-amber-300">
+                            Demande d'examen envoyée — en attente de l'administration.
+                          </p>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              const message = window.prompt(
+                                "Expliquez pourquoi votre formation respecte les règles (contenu authentique, droits d'auteur, pas de fausses promesses…).",
+                                ""
+                              );
+                              if (message === null) return;
+                              if (!message.trim()) {
+                                alert("La demande doit contenir une explication.");
+                                return;
+                              }
+                              const res = await apiWritePlatform("appeal-moderation", {
+                                targetType: "course",
+                                targetId: c.id,
+                                message: message.trim(),
+                              });
+                              if (res.success) {
+                                alert("Demande d'examen envoyée à l'administration.");
+                                window.location.reload();
+                              } else {
+                                alert(res.error || "Envoi impossible.");
+                              }
+                            }}
+                            className="w-full rounded-lg bg-[#D69E25] px-2 py-1.5 text-[10px] font-black text-[#021231] hover:bg-amber-400 transition"
+                          >
+                            Demander un examen
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {c.image ? (
                       <img src={c.image} alt={c.title} className="w-full h-32 object-cover" />
                     ) : (
@@ -1533,6 +1591,45 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
           title="Formation publiée !"
           message="Votre formation a été enregistrée et publiée avec succès. Elle est maintenant visible dans votre catalogue et sur la plateforme."
         />
+
+        {/* ===== Règles de publication (anti-abus) ===== */}
+        {showRules && (
+          <div className="fixed inset-0 z-[130] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3">
+            <div className="w-full max-w-md bg-[#021231] border border-[#D69E25]/40 rounded-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 bg-[#011D46] border-b border-[#D69E25]/25">
+                <h3 className="text-sm font-black" style={{ color: "#F8FAFC" }}>
+                  Règles de publication — à respecter
+                </h3>
+                <button
+                  onClick={() => setShowRules(false)}
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition"
+                  aria-label="Fermer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-4 space-y-2 text-[11px] leading-relaxed text-slate-300">
+                <p>✅ <strong>Contenu authentique</strong> : votre formation doit être créée par vous, sans copie d'une autre formation.</p>
+                <p>✅ <strong>Droits d'auteur</strong> : images, vidéos, musiques et documents utilisés doivent être libres de droits ou autorisés.</p>
+                <p>✅ <strong>Aucune fausse promesse</strong> : pas de gains garantis, pas de fausses certifications, pas d'usurpation d'identité.</p>
+                <p>✅ <strong>Produits livrables réels</strong> : les fichiers annoncés doivent exister et correspondre à la description.</p>
+                <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-red-200">
+                  ⚠️ En cas de non-respect : <strong>suspension immédiate</strong> de la formation,
+                  <strong> fonds gelés</strong>, motif affiché sur votre espace et possibilité de{" "}
+                  <strong>demander un examen</strong> à l'administration.
+                </p>
+              </div>
+              <div className="px-4 pb-4">
+                <button
+                  onClick={() => setShowRules(false)}
+                  className="w-full py-2.5 rounded-xl bg-[#D69E25] text-[#021231] text-xs font-black hover:bg-amber-400 transition"
+                >
+                  J'ai compris
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ===== Modale : identité du centre (nom + présentation) ===== */}
         {isProfileOpen && (

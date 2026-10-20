@@ -36,6 +36,10 @@ interface AdminInstructorsPanelProps {
   ) => Promise<void> | void;
   /** Supprime définitivement le centre (double confirmation gérée par le parent). */
   onDeleteCenter?: (center: TrainingCenter) => Promise<void> | void;
+  /** Suspend une formation non conforme (motif obligatoire, fonds gelés). */
+  onModerateCourse?: (course: Course, reason: string) => Promise<void> | void;
+  /** Rétablit une formation après examen. */
+  onRestoreCourse?: (course: Course) => Promise<void> | void;
 }
 
 export const AdminInstructorsPanel: React.FC<AdminInstructorsPanelProps> = ({
@@ -49,6 +53,8 @@ export const AdminInstructorsPanel: React.FC<AdminInstructorsPanelProps> = ({
   onToggleBan,
   onUpdateCenter,
   onDeleteCenter,
+  onModerateCourse,
+  onRestoreCourse,
 }) => {
   const [email, setEmail] = useState("");
   const [centerName, setCenterName] = useState("");
@@ -58,6 +64,8 @@ export const AdminInstructorsPanel: React.FC<AdminInstructorsPanelProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ centerName: "", description: "", storageQuotaGb: 4 });
   const [workingId, setWorkingId] = useState<string | null>(null);
+  // Centre dont le détail est ouvert (photo, informations, contenus, signalements)
+  const [detailsId, setDetailsId] = useState<string | null>(null);
 
   const totalInstructors = (trainingCenters || []).length;
   const totalCourses = (courses || []).length;
@@ -323,6 +331,87 @@ export const AdminInstructorsPanel: React.FC<AdminInstructorsPanelProps> = ({
                     </div>
                   )}
 
+                  {/* ===== Détail du centre : photo, informations, contenus ===== */}
+                  <div className="mt-2">
+                    <button
+                      onClick={() => setDetailsId(detailsId === c.id ? null : c.id)}
+                      className="w-full sm:w-auto px-2.5 py-1.5 rounded-lg bg-[#011D46] border border-slate-700 text-slate-200 text-[10px] font-black hover:border-[#D69E25] transition"
+                    >
+                      {detailsId === c.id ? "Masquer le détail" : "Voir le détail du centre"}
+                    </button>
+                  </div>
+
+                  {detailsId === c.id && (
+                    <div className="mt-3 rounded-xl border border-slate-700 bg-[#011D46] p-3 space-y-3">
+                      <div className="flex items-start gap-3">
+                        <img
+                          src={c.logo || "/pwa-192x192.png"}
+                          alt={c.centerName}
+                          className="h-16 w-16 shrink-0 rounded-xl border border-slate-700 object-cover"
+                        />
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-sm font-black text-white break-words">{c.centerName}</p>
+                          <p className="text-[10px] text-slate-400 break-all">
+                            Propriétaire : {c.ownerId || "—"}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            Créé le {String(c.createdAt || "").slice(0, 10) || "—"} · Frais payés :{" "}
+                            {c.feePaid ? "oui" : "non"} · Vérifié : {c.isVerified ? "oui" : "non"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {c.description && (
+                        <p className="text-[11px] text-slate-300 leading-relaxed">{c.description}</p>
+                      )}
+
+                      {/* Indicateurs réels du centre */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { label: "Formations", value: String(centerCourses.length) },
+                          {
+                            label: "Étudiants",
+                            value: String(centerCourses.reduce((s, cc) => s + (Number(cc.studentsCount) || 0), 0)),
+                          },
+                          {
+                            label: "Vidéos / leçons",
+                            value: String(
+                              centerCourses.reduce(
+                                (s, cc) =>
+                                  s +
+                                  (Array.isArray(cc.chapters)
+                                    ? cc.chapters.reduce((n, ch) => n + (ch.lessons?.length || 0), 0)
+                                    : 0),
+                                0
+                              )
+                            ),
+                          },
+                          {
+                            label: "Stockage",
+                            value: `${(Number(c.storageUsedBytes || 0) / 1024 ** 3).toFixed(2)} / ${c.storageQuotaGb} Go`,
+                          },
+                        ].map((kpi) => (
+                          <div key={kpi.label} className="rounded-lg border border-slate-700 bg-[#021231] px-2 py-1.5">
+                            <p className="text-[9px] uppercase tracking-wide text-slate-400">{kpi.label}</p>
+                            <p className="text-xs font-black text-white truncate">{kpi.value}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Signalements : formations suspendues pour non-conformité */}
+                      <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-2.5 py-2">
+                        <p className="text-[10px] font-black text-red-300">
+                          Signalements / suspensions :{" "}
+                          {centerCourses.filter((cc) => cc.moderationStatus === "suspended").length}
+                        </p>
+                        <p className="text-[10px] text-slate-400">
+                          Une formation suspendue est dépubliée immédiatement et ses fonds sont gelés
+                          jusqu'à l'examen de la demande du formateur.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {centerCourses.length > 0 && (
                     <div className="mt-3 space-y-2">
                       {centerCourses.map((course) => (
@@ -334,11 +423,44 @@ export const AdminInstructorsPanel: React.FC<AdminInstructorsPanelProps> = ({
                             {course.studentsCount > 0 && (
                               <span className="text-[10px] text-emerald-400 shrink-0">{course.studentsCount} étudiants</span>
                             )}
+                            {course.moderationStatus === "suspended" && (
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-300 shrink-0">
+                                suspendue
+                              </span>
+                            )}
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button onClick={() => onSuspendCourse(course.id)} className="px-2.5 py-1 bg-amber-500/20 text-amber-300 rounded-lg text-[10px] font-bold">
-                              <EyeOff className="w-3.5 h-3.5 inline" /> Suspendre
-                            </button>
+                          <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            {course.moderationStatus === "suspended" ? (
+                              <button
+                                onClick={async () => {
+                                  if (!onRestoreCourse) return;
+                                  if (!window.confirm(`Rétablir la formation « ${course.title} » et dégeler ses fonds ?`)) return;
+                                  await onRestoreCourse(course);
+                                }}
+                                className="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 rounded-lg text-[10px] font-bold flex items-center gap-1"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5" /> Rétablir
+                              </button>
+                            ) : (
+                              <button
+                                onClick={async () => {
+                                  if (!onModerateCourse) return;
+                                  const reason = window.prompt(
+                                    `Suspendre la formation « ${course.title} » ?\n\nMotif communiqué au formateur (faux contenu, violation de droits d'auteur, formation non authentique…) :`,
+                                    "Contenu non conforme aux règles de la plateforme."
+                                  );
+                                  if (reason === null) return;
+                                  if (!reason.trim()) {
+                                    alert("Le motif est obligatoire.");
+                                    return;
+                                  }
+                                  await onModerateCourse(course, reason.trim());
+                                }}
+                                className="px-2.5 py-1 bg-amber-500/20 text-amber-300 rounded-lg text-[10px] font-bold flex items-center gap-1"
+                              >
+                                <EyeOff className="w-3.5 h-3.5" /> Suspendre
+                              </button>
+                            )}
                             <button onClick={() => onDeleteCourse(course.id)} className="p-1.5 bg-red-500/20 text-red-400 rounded-lg">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

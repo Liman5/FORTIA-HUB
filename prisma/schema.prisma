@@ -349,6 +349,15 @@ model Course {
   learningOutcomes Json         @default("[]") @map("learning_outcomes")
   isPublished      Boolean      @default(true) @map("is_published")
   isFeatured       Boolean      @default(false) @map("is_featured")
+  /** ok | suspended — modération : contenu non conforme / non authentique */
+  moderationStatus String       @default("ok") @map("moderation_status")
+  moderationReason String       @default("") @map("moderation_reason")
+  moderationAt     DateTime?    @map("moderation_at")
+  /** Fonds gelés tant que la suspension n'est pas levée */
+  fundsFrozen      Boolean      @default(false) @map("funds_frozen")
+  /** Demande d'examen du formateur (pending | reviewed) et son message */
+  appealStatus     String       @default("") @map("appeal_status")
+  appealMessage    String       @default("") @map("appeal_message")
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
 
@@ -616,6 +625,14 @@ model Product {
   rating          Decimal      @default(0) @db.Decimal(3, 2)
   reviewsCount    Int          @default(0) @map("reviews_count")
   salesCount      Int          @default(0) @map("sales_count")
+  /** ok | suspended — modération : contenu non conforme / non authentique */
+  moderationStatus String      @default("ok") @map("moderation_status")
+  moderationReason String      @default("") @map("moderation_reason")
+  moderationAt     DateTime?   @map("moderation_at")
+  /** Fonds gelés tant que la suspension n'est pas levée */
+  fundsFrozen      Boolean     @default(false) @map("funds_frozen")
+  appealStatus     String      @default("") @map("appeal_status")
+  appealMessage    String      @default("") @map("appeal_message")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 

@@ -60,7 +60,8 @@ import {
   Volume2,
   Save,
   X,
-  Image
+  Image,
+  EyeOff
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -219,7 +220,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   // Setter du store : permet à l'admin de modifier / bannir / supprimer un
   // centre et de voir le résultat immédiatement (sans rechargement).
-  const { setTrainingCenters } = useAppStore();
+  const { setTrainingCenters, refreshPlatformData, loadAdminData } = useAppStore();
   const [activeTab, setActiveTab] = useState<'stats' | 'site_content' | 'courses' | 'products' | 'services' | 'quotes' | 'kyc' | 'fees' | 'marketplace' | 'support' | 'instructors'>(initialTab);
   const [selectedKyc, setSelectedKyc] = useState<KycSubmission | null>(null);
 
@@ -1187,6 +1188,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span>Modifier</span>
                           </button>
                           <button
+                            onClick={async () => {
+                              const reason = window.prompt(
+                                `Suspendre le produit « ${p.title} » ?\n\nMotif communiqué au vendeur (produit non authentique, violation de droits d'auteur…) :`,
+                                "Produit non conforme aux règles de la plateforme."
+                              );
+                              if (reason === null) return;
+                              if (!reason.trim()) {
+                                alert("Le motif est obligatoire.");
+                                return;
+                              }
+                              const res = await apiWritePlatform("moderate-content", {
+                                targetType: "product",
+                                targetId: p.id,
+                                reason: reason.trim(),
+                              });
+                              if (res.success) {
+                                alert(
+                                  `Produit « ${p.title} » suspendu : il est dépublié et ses fonds sont gelés.`
+                                );
+                                await refreshPlatformData?.();
+                                await loadAdminData?.();
+                              } else {
+                                alert(res.error || "Suspension impossible.");
+                              }
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-600/25 border border-amber-500/40 text-amber-300 hover:bg-amber-600 hover:text-white transition flex items-center gap-1.5 font-bold text-[11px]"
+                            title="Suspendre ce produit (fonds gelés)"
+                          >
+                            <EyeOff className="w-3.5 h-3.5" />
+                            <span>Suspendre</span>
+                          </button>
+                          <button
                             onClick={() => handleDeleteProductConfirm(p)}
                             className="px-2.5 py-1.5 rounded-lg bg-red-600/30 border border-red-500/40 text-red-300 hover:bg-red-600 hover:text-white transition flex items-center gap-1.5 font-bold text-[11px]"
                             title="Supprimer ce produit"
@@ -1588,6 +1621,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     alert(`Le centre « ${center.centerName} » a été supprimé.`);
                   } else {
                     alert(res.error || "Suppression impossible.");
+                  }
+                }}
+                onModerateCourse={async (course, reason) => {
+                  const res = await apiWritePlatform("moderate-content", {
+                    targetType: "course",
+                    targetId: course.id,
+                    reason,
+                  });
+                  if (res.success) {
+                    alert(
+                      `Formation « ${course.title} » suspendue : elle est dépubliée et ses fonds sont gelés.`
+                    );
+                    await refreshPlatformData?.();
+                    await loadAdminData?.();
+                  } else {
+                    alert(res.error || "Suspension impossible.");
+                  }
+                }}
+                onRestoreCourse={async (course) => {
+                  const res = await apiWritePlatform("restore-content", {
+                    targetType: "course",
+                    targetId: course.id,
+                  });
+                  if (res.success) {
+                    alert(`Formation « ${course.title} » rétablie, fonds dégelés.`);
+                    await refreshPlatformData?.();
+                    await loadAdminData?.();
+                  } else {
+                    alert(res.error || "Rétablissement impossible.");
                   }
                 }}
               />

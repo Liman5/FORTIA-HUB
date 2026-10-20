@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   BadgeCheck,
   FileText,
+  ShieldAlert,
 } from "lucide-react";
 
 export type AdminModuleKey =
@@ -36,6 +37,7 @@ export type AdminModuleKey =
   | "frais"
   | "cms"
   | "blog"
+  | "moderation"
   | "admins";
 
 interface AdminSidebarProps {
@@ -158,6 +160,15 @@ const MODULES: {
     icon: FileText,
     color: "text-amber-300",
     activeBg: "bg-amber-500 text-[#021231]",
+  },
+  {
+    // Modération : contenus suspendus (formations & produits), fonds gelés,
+    // demandes d'examen et rétablissement.
+    key: "moderation",
+    label: "Modération",
+    icon: ShieldAlert,
+    color: "text-red-400",
+    activeBg: "bg-red-500 text-white",
   },
   {
     // Comptes administrateurs : visible UNIQUEMENT pour un superadministrateur

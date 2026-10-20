@@ -11,6 +11,9 @@ import { AdminBannersPanel } from "./AdminBannersPanel";
 import { AdminVendorVerificationsPanel } from "./AdminVendorVerificationsPanel";
 import { AdminAdminsPanel } from "./AdminAdminsPanel";
 import { AdminBlogPanel } from "./AdminBlogPanel";
+import { AdminModerationPanel } from "./AdminModerationPanel";
+import { apiWritePlatform } from "@/lib/services/platformWrite";
+import type { DigitalProduct } from "@/lib/types";
 import { normalizeAdminRole } from "@/lib/server/adminRoles";
 import { AdminDashboard } from "@/components/AdminDashboard";
 import { FloatingAiAssistant } from "@/components/FloatingAiAssistant";
@@ -300,6 +303,7 @@ export function AdminModernPage() {
     // Le module « Administrateurs » rend son propre panneau (aucun onglet CMS).
     admins: "site_content",
     blog: "site_content",
+    moderation: "support",
   };
 
   const MODULE_TITLES: Record<AdminModuleKey, { title: string; subtitle: string }> = {
@@ -329,6 +333,10 @@ export function AdminModernPage() {
     blog: {
       title: "Blog & Articles",
       subtitle: "Publication d'articles : image facultative, couleur d'accent, style de vignette et visibilité",
+    },
+    moderation: {
+      title: "Modération des contenus",
+      subtitle: "Formations et produits suspendus : motif, fonds gelés, demande d'examen et rétablissement",
     },
   };
 
@@ -440,6 +448,22 @@ export function AdminModernPage() {
               posts={blogPosts}
               onPostsChange={(next) => setBlogPosts(next as any)}
               onRefresh={() => store.refreshPlatformData?.()}
+            />
+          ) : activeModule === "moderation" ? (
+            /* ===== MODULE INDÉPENDANT : MODÉRATION DES CONTENUS ===== */
+            <AdminModerationPanel
+              courses={courses}
+              products={marketplaceProducts as unknown as DigitalProduct[]}
+              onRestore={async (targetType, id) => {
+                const res = await apiWritePlatform("restore-content", { targetType, targetId: id });
+                if (res.success) {
+                  alert("Contenu rétabli : il est republié et ses fonds sont dégelés.");
+                  await store.refreshPlatformData?.();
+                  await store.loadAdminData?.();
+                } else {
+                  alert(res.error || "Rétablissement impossible.");
+                }
+              }}
             />
           ) : activeModule === "boutiques" ? (
             /* ===== MODULE INDÉPENDANT : VÉRIFICATION BOUTIQUE =====

@@ -372,6 +372,25 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               <Plus className="w-4 h-4" />
               <span>Nouveau Produit</span>
             </button>
+
+            {/* Point d'information : règles anti-abus pour les vendeurs */}
+            <button
+              onClick={() =>
+                alert(
+                  "RÈGLES DE PUBLICATION — À RESPECTER\n\n" +
+                    "✅ Produit authentique : vous en détenez les droits.\n" +
+                    "✅ Droits d'auteur : images, textes, modèles et fichiers doivent être libres de droits ou créés par vous.\n" +
+                    "✅ Fichiers livrables réels : ce que vous annoncez doit exister.\n" +
+                    "✅ Aucune fausse promesse (gains garantis, fausses certifications).\n\n" +
+                    "⚠️ En cas de non-respect : suspension immédiate du produit, FONDS GELÉS, motif affiché sur votre espace et possibilité de demander un examen à l'administration."
+                )
+              }
+              title="Règles de publication (important)"
+              aria-label="Règles de publication"
+              className="h-10 w-10 shrink-0 self-center rounded-full border border-[#D69E25]/50 bg-[#021231] text-[#D69E25] font-black hover:bg-[#D69E25] hover:text-[#021231] transition flex items-center justify-center"
+            >
+              i
+            </button>
           </div>
 
         {/* Tab Navigation */}

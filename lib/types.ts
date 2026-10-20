@@ -125,6 +125,13 @@ export interface Course {
   isFeatured?: boolean;
   /** Date de publication réelle (colonne `created_at`), utilisée par la vue « Nouveautés ». */
   createdAt?: string;
+  // ===== Modération (suspension immédiate, fonds gelés, appel) =====
+  moderationStatus?: "ok" | "suspended";
+  moderationReason?: string;
+  moderationAt?: string;
+  fundsFrozen?: boolean;
+  appealStatus?: "" | "pending" | "reviewed";
+  appealMessage?: string;
 }
 
 export type DigitalProductType = 
@@ -155,6 +162,13 @@ export interface DigitalProduct {
   features: string[];
   downloadUrl?: string;
   isPopular?: boolean;
+  // ===== Modération (suspension immédiate, fonds gelés, appel) =====
+  moderationStatus?: "ok" | "suspended";
+  moderationReason?: string;
+  moderationAt?: string;
+  fundsFrozen?: boolean;
+  appealStatus?: "" | "pending" | "reviewed";
+  appealMessage?: string;
 }
 
 export type ServiceCardAnimation = 'none' | 'fade-up' | 'zoom-in' | 'flip' | 'slide-in' | 'pulse';

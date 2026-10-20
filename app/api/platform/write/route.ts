@@ -1398,6 +1398,71 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true });
       }
 
+      // ============ MODÉRATION DES CONTENUS ============
+      // Suspension immédiate d'une formation ou d'un produit non conforme :
+      // le contenu est dépublié, les fonds sont GELÉS et le motif est conservé
+      // pour être affiché au vendeur / formateur, qui peut demander un examen.
+      case "moderate-content": {
+        const targetType = data.targetType === "product" ? "product" : "course";
+        if (!uuidOrNull(data.targetId))
+          return NextResponse.json({ error: "targetId (UUID) requis" }, { status: 400 });
+        const reason = String(data.reason || "Contenu non conforme aux règles de la plateforme.").slice(0, 600);
+        const payload = {
+          moderationStatus: "suspended",
+          moderationReason: reason,
+          moderationAt: new Date(),
+          fundsFrozen: true,
+          appealStatus: "",
+          appealMessage: "",
+          isPublished: false,
+        } as any;
+
+        if (targetType === "product") {
+          await prisma.product.update({ where: { id: data.targetId }, data: payload });
+        } else {
+          await prisma.course.update({ where: { id: data.targetId }, data: payload as any });
+        }
+        return NextResponse.json({ success: true });
+      }
+
+      // Rétablissement par l'administration (fin de suspension, fonds dégelés)
+      case "restore-content": {
+        const targetType = data.targetType === "product" ? "product" : "course";
+        if (!uuidOrNull(data.targetId))
+          return NextResponse.json({ error: "targetId (UUID) requis" }, { status: 400 });
+        const payload = {
+          moderationStatus: "ok",
+          moderationReason: "",
+          moderationAt: null,
+          fundsFrozen: false,
+          appealStatus: "reviewed",
+          isPublished: true,
+        } as any;
+        if (targetType === "product") {
+          await prisma.product.update({ where: { id: data.targetId }, data: payload });
+        } else {
+          await prisma.course.update({ where: { id: data.targetId }, data: payload as any });
+        }
+        return NextResponse.json({ success: true });
+      }
+
+      // Demande d'examen par le propriétaire du contenu suspendu
+      case "appeal-moderation": {
+        const targetType = data.targetType === "product" ? "product" : "course";
+        if (!uuidOrNull(data.targetId))
+          return NextResponse.json({ error: "targetId (UUID) requis" }, { status: 400 });
+        const message = String(data.message || "").slice(0, 800);
+        if (!message.trim())
+          return NextResponse.json({ error: "Expliquez votre demande d'examen." }, { status: 400 });
+        const payload = { appealStatus: "pending", appealMessage: message } as any;
+        if (targetType === "product") {
+          await prisma.product.update({ where: { id: data.targetId }, data: payload });
+        } else {
+          await prisma.course.update({ where: { id: data.targetId }, data: payload as any });
+        }
+        return NextResponse.json({ success: true });
+      }
+
       // ============ MISE À JOUR PRODUIT ============
       case "update-product": {
         const updated = await prisma.product.update({
