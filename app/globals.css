@@ -372,6 +372,52 @@ html.light .vendor-header-banner [class*="border-white/"] {
   border-color: rgba(255, 255, 255, 0.15) !important;
 }
 
+/* ===== En-tête de l'espace FORMATEUR : fond navy conservé en mode clair =====
+   Sans cette protection, le thème clair convertissait le bandeau en blanc alors
+   que le nom du centre et l'e-mail restent clairs → texte illisible. */
+html.light .instructor-header-banner,
+html.light .instructor-header-banner[class*="bg-[#011D46]"] {
+  background-color: #011d46 !important;
+  border-color: rgba(214, 158, 37, 0.3) !important;
+}
+html.light .instructor-header-banner [class*="bg-[#021231]"] {
+  background-color: #021231 !important;
+}
+html.light .instructor-header-banner h1 {
+  color: #ffffff !important;
+}
+html.light .instructor-header-banner p,
+html.light .instructor-header-banner [class*="text-slate-"] {
+  color: #b6c2d4 !important;
+}
+html.light .instructor-header-banner .text-white,
+html.light .instructor-header-banner span,
+html.light .instructor-header-banner strong {
+  color: #e2e8f0;
+}
+html.light .instructor-header-banner [class*="text-[#D69E25]"] {
+  color: #d69e25 !important;
+}
+html.light .instructor-header-banner [class*="border-white/"] {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+/* Badges de l'en-tête formateur : teintes lumineuses sur fond navy */
+html.light .instructor-header-banner [class*="text-emerald-"] {
+  color: #6ee7b7 !important;
+}
+html.light .instructor-header-banner [class*="bg-emerald-500/"] {
+  background-color: rgba(16, 185, 129, 0.18) !important;
+}
+html.light .instructor-header-banner [class*="border-emerald-500/"] {
+  border-color: rgba(16, 185, 129, 0.4) !important;
+}
+html.light .instructor-header-banner [class*="bg-[#D69E25]/"] {
+  background-color: rgba(214, 158, 37, 0.16) !important;
+}
+html.light .instructor-header-banner [class*="border-[#D69E25]/"] {
+  border-color: rgba(214, 158, 37, 0.4) !important;
+}
+
 /* ===== Bouton hamburger Sidebar protégé ===== */
 .sidebar-menu-btn {
   background-color: rgba(214, 158, 37, 0.2) !important;

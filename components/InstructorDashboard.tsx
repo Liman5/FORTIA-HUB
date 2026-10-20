@@ -386,7 +386,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   return (
     <div className="bg-[#021231] text-white min-h-screen pb-16 space-y-8 fortia-flat">
       {/* ===== En-tête STUDIO : identité du centre + actions ===== */}
-      <div className="bg-[#011D46] border-b border-[#D69E25]/30">
+      <div className="instructor-header-banner bg-[#011D46] border-b border-[#D69E25]/30">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-7 space-y-4">
           <button
             onClick={() => {
