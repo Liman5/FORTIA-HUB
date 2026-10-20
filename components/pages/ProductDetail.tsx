@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -15,8 +15,8 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { useCommerce, useAuth } from "@/lib/store/domains/contexts";
-
+import { useAuth, useCommerce } from "@/lib/store/domains/contexts";
+import { trackProductEvent } from "@/lib/services/track";
 export interface ProductDetailData {
   id: string;
   slug: string;
@@ -55,6 +55,11 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
 
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string>("");
+
+  // Statistique vendeur : une vue par produit et par session.
+  useEffect(() => {
+    trackProductEvent("view", product.id, (product as { storeId?: string }).storeId);
+  }, [product.id, (product as { storeId?: string }).storeId]);
 
   const isFree = product.price === 0;
   const purchased = userProfile?.purchasedProductIds || [];

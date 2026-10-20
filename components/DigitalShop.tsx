@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
+import { trackProductEvent } from "@/lib/services/track";
 import { CartItem, VendorStore, MarketplaceProduct } from "@/lib/types";
 import { OptimizedImage } from "./OptimizedImage";
 import {
@@ -339,7 +340,7 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                       </div>
 
                       <h3
-                        onClick={() => setPreviewProduct(prod)}
+                        onClick={() => { trackProductEvent("click", prod.id, (prod as { storeId?: string }).storeId); setPreviewProduct(prod); }}
                         className="font-black text-white text-xs sm:text-sm group-hover:text-[#D69E25] transition line-clamp-2 cursor-pointer leading-snug"
                       >
                         {prod.title}

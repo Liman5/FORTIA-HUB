@@ -683,6 +683,21 @@ model VendorApplication {
 
 /// Taux de commission de la plateforme (Frais FORTIA).
 /// Un taux par portée de vente ; `general` sert de repli.
+/// Statistiques produits : vue, clic, ajout au panier (voir /api/track).
+model ProductEvent {
+  id        String   @id @default(uuid())
+  productId String?  @map("product_id")
+  storeId   String?  @map("store_id")
+  /// view | click | add_to_cart
+  eventType String   @map("event_type")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([productId, createdAt])
+  @@index([storeId, createdAt])
+  @@index([eventType, createdAt])
+  @@map("product_events")
+}
+
 model CommissionRule {
   id        String   @id @default(uuid())
   /// general | digital_product | course | service | storage

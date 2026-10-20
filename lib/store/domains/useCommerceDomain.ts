@@ -26,6 +26,7 @@ import type {
   UserProfile,
 } from "@/lib/types";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
+import { trackProductEvent } from "@/lib/services/track";
 
 /** Clé de stockage local du panier : le panier survit au rechargement de /cart. */
 const CART_STORAGE_KEY = "fortia_cart";
@@ -91,6 +92,9 @@ export function useCommerceDomain({
       if (prev.some((i) => i.id === item.id)) return prev;
       return [...prev, item];
     });
+
+    // Statistiques vendeur : ajout au panier (événement anonyme).
+    trackProductEvent("add_to_cart", item.id, (item as { storeId?: string }).storeId);
   }, []);
 
   const removeFromCart = useCallback((id: string) => {
