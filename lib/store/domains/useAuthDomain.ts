@@ -100,7 +100,15 @@ export function useAuthDomain({ setNotifications }: AuthDomainDeps) {
               .then((me) => {
                 if (!mounted || !me?.success) return;
                 setMyOrders((me.orders || []) as MarketplaceOrder[]);
-                setMyNotifications((me.notifications || []) as AppNotification[]);
+                // Normalisation : la base renvoie `isRead`, l'interface attend `read`.
+                // Sans cela, une notification lue réapparaissait comme non lue.
+                setMyNotifications(
+                  (me.notifications || []).map((n: Record<string, unknown>) => ({
+                    ...n,
+                    read: n.read === true || n.isRead === true,
+                    date: String(n.date || n.createdAt || ""),
+                  })) as AppNotification[]
+                );
                 setMyKycSubmissions((me.kycSubmissions || []) as KycSubmission[]);
               })
               .catch(() => {});

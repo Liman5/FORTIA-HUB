@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
 import { notifyUser } from "@/lib/services/notifyUser";
 import { requireAdmin, normalizeRole } from "@/lib/server/requireAdmin";
+import { getCurrentUser } from "@/lib/services/authSession";
 import { actionDomain, canWriteDomain, isReadOnlyAdmin } from "@/lib/server/adminRoles";
 import {
   computeCommissionUsd,
@@ -18,6 +19,41 @@ export const dynamic = "force-dynamic";
 const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 const FROM_EMAIL = process.env.SENDER_EMAIL || "Fortia Hub <onboarding@resend.dev>";
+
+// ============================================================
+// RÉSOLUTION DES BOUTIQUES (protection contre les UUID invalides)
+// ------------------------------------------------------------
+// Le navigateur envoie parfois un slug, un nom ou la chaîne "undefined"
+// comme `storeId`. Toute requête `store.findUnique({ where: { id } })` avec
+// une valeur non-UUID faisait échouer PostgreSQL :
+//   « invalid input syntax for type uuid »
+// On résout donc TOUJOURS par id (UUID), sinon par slug, sinon par nom.
+// ============================================================
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolveStoreRef(
+  raw: unknown
+): Promise<{ id: string; name: string; slug: string; vendorId?: string | null; logo?: string | null } | null> {
+  const value = typeof raw === "string" ? raw.trim() : "";
+  if (!value || value === "undefined" || value === "null") return null;
+
+  if (UUID_PATTERN.test(value)) {
+    return prisma.store.findUnique({ where: { id: value } }).catch(() => null);
+  }
+
+  const bySlug = await prisma.store
+    .findUnique({ where: { slug: value } })
+    .catch(() => null);
+  if (bySlug) return bySlug;
+
+  return prisma.store.findFirst({ where: { name: value } }).catch(() => null);
+}
+
+/** Variante « identifiant sûr » : null si la valeur n'est pas un UUID. */
+function uuidOrNull(value: unknown): string | null {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return raw && UUID_PATTERN.test(raw) ? raw : null;
+}
 
 /**
  * POST /api/platform/write
@@ -740,8 +776,8 @@ export async function POST(req: NextRequest) {
             buyerName: data.buyerName || "",
             buyerEmail: data.buyerEmail || "",
             buyerPhone: data.buyerPhone || "",
-            buyerUserId: data.buyerUserId || undefined,
-            storeId: data.storeId || undefined,
+            buyerUserId: uuidOrNull(data.buyerUserId) || undefined,
+            storeId: (await resolveStoreRef(data.storeId))?.id || undefined,
             storeName: data.storeName || "",
             productId: data.productId || undefined,
             productTitle: data.productTitle || "",
@@ -852,6 +888,32 @@ export async function POST(req: NextRequest) {
           data: { isRead: true } as any,
         });
         return NextResponse.json({ success: true, id: updated.id });
+      }
+
+      // ============ SUPPRESSION D'UNE NOTIFICATION ============
+      case "delete-notification": {
+        // Une notification n'est supprimable que par son destinataire ;
+        // une annonce globale est seulement marquée lue (jamais effacée
+        // pour les autres utilisateurs).
+        const notification = await prisma.notification.findUnique({
+          where: { id: data.id },
+        });
+        if (!notification) {
+          return NextResponse.json({ success: true, deleted: false });
+        }
+
+        const viewer = await getCurrentUser(req).catch(() => null);
+        const isOwner = !!viewer && notification.userId === viewer.id;
+
+        if (notification.isGlobal || !isOwner) {
+          await prisma.notification
+            .update({ where: { id: data.id }, data: { isRead: true } as any })
+            .catch(() => null);
+          return NextResponse.json({ success: true, deleted: false, markedRead: true });
+        }
+
+        await prisma.notification.delete({ where: { id: data.id } });
+        return NextResponse.json({ success: true, deleted: true });
       }
 
       // ============ CRÉATION COURS ============
@@ -1113,15 +1175,15 @@ export async function POST(req: NextRequest) {
       }
 
       case "create-product": {
-        const store = data.storeId
-          ? await prisma.store.findUnique({ where: { id: data.storeId } })
-          : data.storeName
-          ? await prisma.store.findFirst({ where: { name: data.storeName } })
-          : null;
+        // Résolution SÛRE de la boutique (UUID, sinon slug, sinon nom).
+        // Évite « invalid input syntax for type uuid » à l'import d'un produit.
+        const store =
+          (await resolveStoreRef(data.storeId)) ||
+          (data.storeName ? await resolveStoreRef(data.storeName) : null);
 
         const createdProduct = await prisma.product.create({
           data: {
-            storeId: store?.id || data.storeId || undefined,
+            storeId: store?.id || undefined,
             vendorId: data.vendorId || store?.vendorId || undefined,
             storeName: data.storeName || store?.name || "FORTIA Digital Official Store",
             storeLogo: data.storeLogo || store?.logo || "",
@@ -1506,7 +1568,7 @@ export async function POST(req: NextRequest) {
       case "submit-payout": {
         const created = await prisma.payoutRequest.create({
           data: {
-            storeId: data.storeId || undefined,
+            storeId: (await resolveStoreRef(data.storeId))?.id || undefined,
             storeName: data.storeName || "",
             vendorName: data.vendorName || "",
             amountUsd: data.amountUsd || 0,
@@ -1826,7 +1888,9 @@ export async function POST(req: NextRequest) {
 
       // ============ MISE À JOUR BOUTIQUE VENDEUR (logo, bannière, infos) ============
       case "update-store": {
-        if (!data.storeId) return NextResponse.json({ error: "storeId requis" }, { status: 400 });
+        // Résolution sûre : le navigateur peut envoyer un slug ou un nom.
+        const targetStore = await resolveStoreRef(data.storeId);
+        if (!targetStore) return NextResponse.json({ error: "Boutique introuvable." }, { status: 400 });
 
         const storeData: any = {};
         if (typeof data.name === "string" && data.name) storeData.name = data.name;
@@ -1836,7 +1900,7 @@ export async function POST(req: NextRequest) {
         if (Array.isArray(data.categories)) storeData.categories = data.categories;
 
         const updated = await prisma.store.update({
-          where: { id: data.storeId },
+          where: { id: targetStore.id },
           data: storeData,
         });
         return NextResponse.json({ success: true, id: updated.id });

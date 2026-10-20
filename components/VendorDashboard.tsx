@@ -422,7 +422,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, ease: "easeOut" }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+              className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
             >
               {[
                 { label: "Chiffre d'Affaires Brut", value: `$${grossRevenueUsd}`, sub: `≈ ${Math.round(grossRevenueUsd * 600).toLocaleString()} FCFA`, badge: "100% des ventes accumulées", badgeColor: "text-emerald-400", color: "#D69E25" },
@@ -550,11 +550,11 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
                 {storeProducts.map((prod) => (
-                  <div key={prod.id} className="bg-[#011D46] border border-slate-800 rounded-3xl p-5 space-y-4 flex flex-col justify-between shadow-lg">
+                  <div key={prod.id} className="bg-[#011D46] border border-slate-800 rounded-2xl p-3 sm:p-5 space-y-3 sm:space-y-4 flex flex-col justify-between">
                     <div className="space-y-3">
-                      <div className="h-40 w-full relative overflow-hidden rounded-2xl bg-slate-900">
+                      <div className="h-28 sm:h-40 w-full relative overflow-hidden rounded-xl sm:rounded-2xl bg-slate-900">
                         {prod.image ? (
                           <img src={prod.image} alt={prod.title} className="w-full h-full object-cover" />
                         ) : (
@@ -574,10 +574,10 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                         </span>
                       </div>
 
-                      <h3 className="font-bold text-base text-white line-clamp-2">{prod.title}</h3>
-                      <p className="text-xs text-slate-300 line-clamp-2">{prod.description}</p>
+                      <h3 className="font-bold text-sm sm:text-base text-white line-clamp-2">{prod.title}</h3>
+                      <p className="hidden sm:block text-xs text-slate-300 line-clamp-2">{prod.description}</p>
                       <div className="flex items-center justify-between text-xs pt-1">
-                        <span className="text-2xl font-black text-[#D69E25]">${prod.price}</span>
+                        <span className="text-lg sm:text-2xl font-black text-[#D69E25]">${prod.price}</span>
                         <span className="text-slate-400 font-semibold">{prod.salesCount} Ventes</span>
                       </div>
                     </div>

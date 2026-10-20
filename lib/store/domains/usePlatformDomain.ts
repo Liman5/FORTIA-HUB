@@ -149,7 +149,14 @@ export function usePlatformDomain({
       // Bannières : liste TOUJOURS appliquée (une liste vide doit pouvoir
       // vider l'affichage après une suppression dans l'administration).
       if (Array.isArray(data.siteBanners)) setSiteBanners(data.siteBanners as any[]);
-      if (data.notifications?.length > 0) setNotifications(data.notifications as any);
+      if (data.notifications?.length > 0)
+        setNotifications(
+          (data.notifications as Record<string, unknown>[]).map((n) => ({
+            ...n,
+            read: n.read === true || n.isRead === true,
+            date: String(n.date || n.createdAt || ""),
+          })) as AppNotification[]
+        );
       if (data.siteContent?.length > 0) setSiteContent(data.siteContent[0] as any);
       if (data.feeConfig) setFeeConfigState(data.feeConfig as any);
       if (data.trainingCenters?.length > 0) {

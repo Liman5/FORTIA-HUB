@@ -195,7 +195,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {/* Popup réduit */}
               {isNotifOpen && (
-                <div className="absolute right-0 top-11 w-[340px] max-w-[90vw] bg-[#021231] border border-[#D69E25]/40 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden z-50">
+                <div className="absolute right-0 top-full mt-2 w-[calc(100vw-1.5rem)] max-w-[360px] bg-[#021231] border border-[#D69E25]/40 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden z-[70]">
                   {/* Header du popup */}
                   <div className="flex items-center justify-between px-4 py-3 bg-[#011D46] border-b border-[#D69E25]/30">
                     <div className="flex items-center gap-2">
@@ -217,7 +217,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
 
                   {/* Liste des 5 notifications max */}
-                  <div className="max-h-[320px] overflow-y-auto">
+                  <div className="max-h-[min(60vh,320px)] overflow-y-auto overscroll-contain">
                     {recentNotifications.length === 0 ? (
                       <div className="text-center py-8 px-6">
                         <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-3">

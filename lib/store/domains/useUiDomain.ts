@@ -37,15 +37,25 @@ export function useUiDomain() {
   // --- Actions sur les notifications ---
   const markNotificationAsRead = useCallback((id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-    apiWritePlatform("mark-notification-read", { id });
+    // Persisté en base : la notification reste lue après rechargement.
+    void apiWritePlatform("mark-notification-read", { id });
   }, []);
 
   const markAllNotificationsAsRead = useCallback(() => {
+    // Persistance de CHAQUE notification non lue (sinon elles réapparaissaient
+    // au rechargement suivant puisque seul l'état local avait changé).
+    notifications
+      .filter((n) => !n.read)
+      .forEach((n) => {
+        void apiWritePlatform("mark-notification-read", { id: n.id });
+      });
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+  }, [notifications]);
 
   const deleteNotification = useCallback((id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    // Persisté en base : la notification supprimée ne revient plus.
+    void apiWritePlatform("delete-notification", { id });
   }, []);
 
   const clearNotifications = useCallback(() => setNotifications([]), []);

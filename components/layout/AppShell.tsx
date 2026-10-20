@@ -28,8 +28,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // `/` et `/landing` : la landing marketing historique (sans navbar ni barre du bas)
   const isLandingPage = pathname === "/landing";
   // Pages où la barre de recherche de l'en-tête est MASQUÉE : parcours dédiés
-  // (espace membre, prestations de l'agence) — en-tête épuré, sans recherche.
-  const hideHeaderSearch = pathname === "/member" || pathname === "/services";
+  // (espace membre, prestations, espace vendeur, espace formateur).
+  const hideHeaderSearch =
+    pathname === "/member" ||
+    pathname === "/services" ||
+    pathname === "/vendor" ||
+    pathname === "/instructor";
   const store = useAppStore();
   const { activeTab, setActiveTab } = useActiveSection();
 

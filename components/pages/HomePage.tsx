@@ -55,24 +55,6 @@ export function buildShopTypeUrl(productType: string): string {
   return `/marketplace?type=${encodeURIComponent(productType)}`;
 }
 
-/** Bannière : images pleines uniquement (aucun texte superposé). */
-const HERO_SLIDES = [
-  {
-    id: "slide-1",
-    alt: "Apprenants en formation sur ordinateurs",
-    image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1400&q=80",
-  },
-  {
-    id: "slide-2",
-    alt: "Apprenante devant son ordinateur",
-    image: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=1400&q=80",
-  },
-  {
-    id: "slide-3",
-    alt: "Équipe en atelier numérique",
-    image: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1400&q=80",
-  },
-];
 
 /** Centres de formation affichés tant qu'aucun centre n'est enregistré. */
 const FALLBACK_CENTERS = [
@@ -154,16 +136,9 @@ function HeroBanner() {
 
     if (managed.length > 0) return managed;
 
-    // Repli (aucune bannière en base) : visuels de démonstration
-    return HERO_SLIDES.map((slide) => ({
-      id: slide.id,
-      image: slide.image,
-      alt: slide.alt,
-      link: "",
-      external: false,
-      animation: "fade",
-      interval: 6000,
-    }));
+    // Aucune bannière publiée : AUCUN visuel de démonstration (plus de fausse
+    // bannière ni de « flash » d'ancienne interface au rechargement).
+    return [] as typeof managed;
   }, [siteBanners]);
 
   /** Variantes d'animation de la bannière — réglées dans ADMIN → Bannières. */
@@ -219,6 +194,21 @@ function HeroBanner() {
   }, [index, slides]);
 
   const slide = slides[index] || slides[0];
+
+  // Aucune bannière publiée : squelette neutre aux mêmes dimensions
+  // (aucune image factice, aucun saut de mise en page, aucun flash).
+  if (!slide) {
+    return (
+      <section className="relative" aria-hidden="true">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0B1B36] via-[#011D46] to-[#021231] border border-[#D69E25]/20 h-40 sm:h-64 lg:h-80 flex items-center justify-center">
+          <span className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
+            <span className="w-4 h-4 rounded-full border-2 border-[#D69E25]/60 border-t-transparent animate-spin" />
+            Chargement de la bannière…
+          </span>
+        </div>
+      </section>
+    );
+  }
 
   const openSlide = () => {
     if (!slide?.link) return;

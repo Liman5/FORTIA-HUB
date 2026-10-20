@@ -13,6 +13,7 @@ type WriteAction =
   | "reject-vendor-app"
   | "submit-order"
   | "save-commission-rule"
+  | "delete-notification"
   | "submit-support"
   | "mark-notification-read"
   | "create-course"
