@@ -65,14 +65,23 @@ html.light [class*="bg-gradient-to-b from-[#021231]"] {
   background-image: none !important;
 }
 
-/* --- Textes clairs -> sombres, LISIBLES (sans noir pur écrasant) --- */
-html.light [class*="text-white"] {
+/* --- Textes clairs -> sombres, LISIBLES (sans noir pur écrasant) ---
+   Exceptions : en-tête vendeur et en-tête admin, qui restent sur fond navy
+   (sinon le nom de la boutique devenait invisible en mode clair). */
+html.light [class*="text-white"]:not(.vendor-header-banner *):not(.admin-header-protected *) {
   color: #1e293b !important;
 }
-html.light [class*="text-slate-100"] {
+html.light .vendor-header-banner [class*="text-white"],
+html.light .vendor-header-banner h1,
+html.light .vendor-header-banner h2,
+html.light .vendor-header-banner p,
+html.light .admin-header-protected [class*="text-white"] {
+  color: #ffffff !important;
+}
+html.light [class*="text-slate-100"]:not(.vendor-header-banner *):not(.admin-header-protected *) {
   color: #22303f !important;
 }
-html.light [class*="text-slate-200"] {
+html.light [class*="text-slate-200"]:not(.vendor-header-banner *):not(.admin-header-protected *) {
   color: #2b3a4d !important;
 }
 html.light [class*="text-slate-300"] {

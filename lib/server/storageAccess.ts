@@ -44,6 +44,19 @@ export interface ParsedKey {
   isPublic: boolean;
 }
 
+/**
+ * Un identifiant d'entité est-il un UUID ?
+ * Le navigateur envoie parfois un identifiant temporaire (« new-1792… »)
+ * quand la ressource n'existe pas encore en base. Toute requête Prisma avec
+ * une telle valeur ferait échouer PostgreSQL :
+ *   « invalid input syntax for type uuid »
+ * On ne tente donc la lecture que pour de vrais UUID.
+ */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(String(value || ""));
+}
+
 /** Valide et découpe une clé R2 de la forme `dossier/entite/fichier`. */
 export function parseStorageKey(key: string): ParsedKey | null {
   if (!key || key.includes("..") || key.startsWith("/")) return null;
@@ -109,6 +122,7 @@ export async function canReadPrivateKey(actor: StorageActor, parsed: ParsedKey):
 
     // Livrables produits : acheteur réel, vendeur du produit, ou produit gratuit
     case "product-files": {
+      if (!isUuid(parsed.entityId)) return false;
       if (actor.purchasedProductIds.includes(parsed.entityId)) return true;
       const product = await prisma.product.findUnique({
         where: { id: parsed.entityId },
@@ -121,6 +135,7 @@ export async function canReadPrivateKey(actor: StorageActor, parsed: ParsedKey):
 
     // Médias de formation : apprenant inscrit, formateur du cours, ou gratuit
     case "course-media": {
+      if (!isUuid(parsed.entityId)) return false;
       if (actor.enrolledCourseIds.includes(parsed.entityId)) return true;
       const enrollment = await prisma.courseEnrollment.findUnique({
         where: { userId_courseId: { userId: actor.userId, courseId: parsed.entityId } },
@@ -138,6 +153,7 @@ export async function canReadPrivateKey(actor: StorageActor, parsed: ParsedKey):
 
     // Attestations : le titulaire de l'attestation
     case "certificates": {
+      if (!isUuid(parsed.entityId)) return false;
       const certificate = await prisma.certificate.findUnique({
         where: { id: parsed.entityId },
         select: { userId: true, studentName: true },
@@ -165,6 +181,10 @@ export async function canWriteKey(actor: StorageActor, parsed: ParsedKey): Promi
   switch (parsed.folder) {
     case "product-images":
     case "store-images": {
+      // Boutique pas encore enregistrée (id « new-… ») : l'utilisateur connecté
+      // est autorisé à déposer ses images, comme pour une création en cours.
+      if (!isUuid(parsed.entityId)) return !!actor.userId;
+
       const store = await prisma.store.findUnique({
         where: { id: parsed.entityId },
         select: { vendorId: true, ownerEmail: true },
@@ -175,13 +195,15 @@ export async function canWriteKey(actor: StorageActor, parsed: ParsedKey): Promi
     }
 
     case "product-files": {
+      if (!isUuid(parsed.entityId)) return !!actor.userId;
+
       const product = await prisma.product.findUnique({
         where: { id: parsed.entityId },
         select: { vendorId: true, storeId: true },
       });
       if (!product) return !!actor.userId; // produit en cours de création
       if (product.vendorId && product.vendorId === actor.userId) return true;
-      if (product.storeId) {
+      if (product.storeId && isUuid(product.storeId)) {
         const store = await prisma.store.findUnique({
           where: { id: product.storeId },
           select: { vendorId: true, ownerEmail: true },
@@ -193,13 +215,15 @@ export async function canWriteKey(actor: StorageActor, parsed: ParsedKey): Promi
     }
 
     case "course-media": {
+      if (!isUuid(parsed.entityId)) return !!actor.userId;
+
       const course = await prisma.course.findUnique({
         where: { id: parsed.entityId },
         select: { instructorId: true, centerId: true },
       });
       if (!course) return !!actor.userId; // formation en cours de création
       if (course.instructorId && course.instructorId === actor.userId) return true;
-      if (course.centerId) {
+      if (course.centerId && isUuid(course.centerId)) {
         const center = await prisma.trainingCenter.findUnique({
           where: { id: course.centerId },
           select: { ownerId: true },
@@ -210,6 +234,8 @@ export async function canWriteKey(actor: StorageActor, parsed: ParsedKey): Promi
     }
 
     case "kyc-documents": {
+      if (!isUuid(parsed.entityId)) return !!actor.userId;
+
       const submission = await prisma.kycSubmission.findUnique({
         where: { id: parsed.entityId },
         select: { applicantId: true, email: true },

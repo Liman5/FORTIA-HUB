@@ -455,6 +455,9 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               ))}
             </motion.div>
 
+            {/* Statistiques réelles : vues, clics, ajouts au panier, ventes */}
+            <VendorStatsPanel storeId={(store as { id?: string } | null)?.id} />
+
             {/* Withdraw Funds Box */}
             <div className="bg-[#011D46] border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-5">
               <div className="space-y-1 text-center md:text-left">
@@ -555,9 +558,6 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               </div>
             ) : (
               <div className="space-y-4 sm:space-y-6">
-              {/* Statistiques réelles : vues, clics, ajouts au panier, ventes */}
-              <VendorStatsPanel storeId={(store as { id?: string } | null)?.id} />
-
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
                 {storeProducts.map((prod) => (
                   <div key={prod.id} className="bg-[#011D46] border border-slate-800 rounded-2xl p-3 sm:p-5 space-y-3 sm:space-y-4 flex flex-col justify-between">

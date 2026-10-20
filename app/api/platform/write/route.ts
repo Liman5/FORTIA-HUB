@@ -1177,9 +1177,17 @@ export async function POST(req: NextRequest) {
       case "create-product": {
         // Résolution SÛRE de la boutique (UUID, sinon slug, sinon nom).
         // Évite « invalid input syntax for type uuid » à l'import d'un produit.
-        const store =
+        // Dernier recours : la boutique du vendeur connecté (id « new-… » côté
+        // navigateur quand la boutique vient d'être créée).
+        let store =
           (await resolveStoreRef(data.storeId)) ||
           (data.storeName ? await resolveStoreRef(data.storeName) : null);
+
+        if (!store && data.vendorId && uuidOrNull(data.vendorId)) {
+          store = await prisma.store
+            .findFirst({ where: { vendorId: data.vendorId } })
+            .catch(() => null);
+        }
 
         const createdProduct = await prisma.product.create({
           data: {
