@@ -345,6 +345,13 @@ export interface KycSubmission {
   status: 'En attente' | 'Approuvé' | 'Rejeté';
   adminNotes?: string;
   rejectionReason?: string;
+  /** Groupes masqués (« identity,contact,document,company,files »). */
+  hiddenFields?: string;
+  /** Vrai si un code à 6 chiffres protège ce dossier (le hash n'est jamais transmis). */
+  isLocked?: boolean;
+  lockedAt?: string | null;
+  /** Colonnes de document supprimées par un administrateur. */
+  deletedDocs?: string[];
 }
 
 export interface RegistrationFeeConfig {

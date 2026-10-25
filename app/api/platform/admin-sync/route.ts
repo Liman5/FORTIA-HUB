@@ -110,7 +110,11 @@ export async function GET(req: NextRequest) {
         data: {
           marketplaceOrders,
           payoutRequests,
-          kycSubmissions,
+          // 🔐 Le hash du code de verrouillage KYC ne quitte JAMAIS le serveur.
+          kycSubmissions: kycSubmissions.map((sub) => {
+            const { lockCodeHash, ...rest } = sub as typeof sub & { lockCodeHash?: string };
+            return { ...rest, isLocked: !!lockCodeHash };
+          }),
           postPurchaseSupport,
           vendorApplications,
           serviceQuotes,

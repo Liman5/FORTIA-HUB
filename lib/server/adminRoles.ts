@@ -96,7 +96,15 @@ export const FINANCE_ACTIONS = new Set([
 ]);
 
 /** Actions d'écriture du domaine KYC. */
-export const KYC_ACTIONS = new Set(["submit-kyc", "approve-kyc", "approve-kyc-full"]);
+export const KYC_ACTIONS = new Set([
+  "submit-kyc",
+  "approve-kyc",
+  "approve-kyc-full",
+  // Masquage verrouillé par code à 6 chiffres + suppression des pièces
+  "kyc-set-lock",
+  "kyc-unlock",
+  "kyc-remove-doc",
+]);
 
 /** Domaine d'une action d'écriture (défaut : contenu). */
 export function actionDomain(action: string): AdminDomain {

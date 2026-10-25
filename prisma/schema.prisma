@@ -973,6 +973,17 @@ model KycSubmission {
   adminNotes      String         @default("") @map("admin_notes")
   rejectionReason String         @default("") @map("rejection_reason")
 
+  // ---- Masquage verrouillé par code à 6 chiffres (propre au dossier) ----
+  // hiddenFields : groupes masqués (identity,contact,document,company,files)
+  // lockCodeHash : hash bcrypt du code — JAMAIS exposé au client
+  hiddenFields     String    @default("") @map("hidden_fields")
+  lockCodeHash     String    @default("") @map("lock_code_hash")
+  lockedAt         DateTime? @map("locked_at")
+  lockAttempts     Int       @default(0) @map("lock_attempts")
+  lockBlockedUntil DateTime? @map("lock_blocked_until")
+  // Journal des pièces supprimées par un administrateur
+  deletedDocs      String[]  @default([]) @map("deleted_docs")
+
   applicant       User?          @relation(fields: [applicantId], references: [id], onDelete: Cascade)
 
   @@index([status])

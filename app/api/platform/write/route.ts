@@ -13,6 +13,18 @@ import {
   type SaleScope,
 } from "@/lib/server/commissions";
 import { invalidateResponseCache } from "@/lib/server/responseCache";
+import { deleteFromR2 } from "@/lib/services/r2Storage";
+import {
+  KYC_BLOCK_MINUTES,
+  KYC_DOC_SLOTS,
+  KYC_MAX_ATTEMPTS,
+  hashKycCode,
+  normalizeKycCode,
+  normalizeMaskGroups,
+  signKycUnlockToken,
+  validateKycCode,
+  verifyKycCode,
+} from "@/lib/server/kycLock";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +42,22 @@ const FROM_EMAIL = process.env.SENDER_EMAIL || "Fortia Hub <onboarding@resend.de
 // On résout donc TOUJOURS par id (UUID), sinon par slug, sinon par nom.
 // ============================================================
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Extrait la clé R2 d'une valeur stockée en base : soit déjà une clé
+ * (`dossier/entite/fichier.ext`), soit une URL publique R2.
+ */
+function r2KeyFromValue(value: string): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (!/^https?:\/\//i.test(raw)) return raw.replace(/^\/+/, "");
+  try {
+    const url = new URL(raw);
+    return decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+  } catch {
+    return "";
+  }
+}
 
 async function resolveStoreRef(
   raw: unknown
@@ -175,6 +203,255 @@ export async function POST(req: NextRequest) {
           data: { status: "Approuve" } as any,
         });
         return NextResponse.json({ success: true, id: updated.id });
+      }
+
+      // ============ MASQUAGE VERROUILLÉ D'UN DOSSIER KYC (admin) ============
+      // Le code secret à 6 chiffres est PROPRE À CE DOSSIER : il est défini
+      // lors du premier masquage, puis exigé pour le modifier ou le retirer.
+      case "kyc-set-lock": {
+        const actor = await requireAdmin(req).catch(() => null);
+        if (!actor) {
+          return NextResponse.json({ error: "Session administrateur requise." }, { status: 401 });
+        }
+        const kycId = String(data.kycId || "");
+        if (!UUID_PATTERN.test(kycId)) {
+          return NextResponse.json({ error: "Dossier KYC invalide." }, { status: 400 });
+        }
+        const sub = await prisma.kycSubmission.findUnique({ where: { id: kycId } });
+        if (!sub) {
+          return NextResponse.json({ error: "Dossier KYC introuvable." }, { status: 404 });
+        }
+
+        const groups = normalizeMaskGroups(data.fields);
+        const storedHash = String(sub.lockCodeHash || "");
+
+        // ---- Retrait complet du masquage (aucun groupe sélectionné) ----
+        if (groups.length === 0) {
+          if (storedHash) {
+            const current = normalizeKycCode(data.currentCode ?? data.code);
+            const ok = await verifyKycCode(current, storedHash);
+            if (!ok) {
+              return NextResponse.json(
+                { error: "Code actuel incorrect : le masquage ne peut pas être retiré." },
+                { status: 403 }
+              );
+            }
+          }
+          await prisma.kycSubmission.update({
+            where: { id: kycId },
+            data: {
+              hiddenFields: "",
+              lockCodeHash: "",
+              lockedAt: null,
+              lockAttempts: 0,
+              lockBlockedUntil: null,
+            },
+          });
+          return NextResponse.json({
+            success: true,
+            removed: true,
+            hiddenFields: "",
+            message: "Masquage retiré : le dossier est de nouveau entièrement visible.",
+          });
+        }
+
+        // ---- Masquage déjà verrouillé → code actuel obligatoire ----
+        if (storedHash) {
+          const current = normalizeKycCode(data.currentCode ?? data.code);
+          const ok = await verifyKycCode(current, storedHash);
+          if (!ok) {
+            return NextResponse.json(
+              { error: "Code actuel incorrect : impossible de modifier le masquage." },
+              { status: 403 }
+            );
+          }
+          const updated = await prisma.kycSubmission.update({
+            where: { id: kycId },
+            data: { hiddenFields: groups.join(","), lockedAt: new Date() },
+          });
+          return NextResponse.json({
+            success: true,
+            hiddenFields: updated.hiddenFields,
+            message: "Masquage mis à jour.",
+          });
+        }
+
+        // ---- Premier masquage → le code à 6 chiffres est défini ici ----
+        const code = normalizeKycCode(data.code);
+        const invalid = validateKycCode(code);
+        if (invalid) {
+          return NextResponse.json({ error: invalid }, { status: 400 });
+        }
+        const updated = await prisma.kycSubmission.update({
+          where: { id: kycId },
+          data: {
+            hiddenFields: groups.join(","),
+            lockCodeHash: await hashKycCode(code),
+            lockedAt: new Date(),
+            lockAttempts: 0,
+            lockBlockedUntil: null,
+          },
+        });
+        return NextResponse.json({
+          success: true,
+          hiddenFields: updated.hiddenFields,
+          message: "Informations masquées et protégées par votre code à 6 chiffres.",
+        });
+      }
+
+      // ============ DÉVERROUILLAGE TEMPORAIRE D'UN DOSSIER (admin) ============
+      // Vérifie le code du dossier et délivre un jeton de 15 minutes : la
+      // révélation ne vaut que pour la session en cours, le masquage reste
+      // actif en base pour les autres administrateurs.
+      case "kyc-unlock": {
+        const actor = await requireAdmin(req).catch(() => null);
+        if (!actor) {
+          return NextResponse.json({ error: "Session administrateur requise." }, { status: 401 });
+        }
+        const kycId = String(data.kycId || "");
+        if (!UUID_PATTERN.test(kycId)) {
+          return NextResponse.json({ error: "Dossier KYC invalide." }, { status: 400 });
+        }
+        const sub = await prisma.kycSubmission.findUnique({ where: { id: kycId } });
+        if (!sub) {
+          return NextResponse.json({ error: "Dossier KYC introuvable." }, { status: 404 });
+        }
+
+        const storedHash = String(sub.lockCodeHash || "");
+        if (!storedHash) {
+          const issued = await signKycUnlockToken(kycId);
+          return NextResponse.json({
+            success: true,
+            token: issued.token,
+            expiresAt: issued.expiresAt,
+            hiddenFields: "",
+            message: "Aucun masquage sur ce dossier.",
+          });
+        }
+
+        // Blocage temporaire après trop d'échecs
+        const blockedUntil = sub.lockBlockedUntil ? new Date(sub.lockBlockedUntil).getTime() : 0;
+        if (blockedUntil > Date.now()) {
+          const minutes = Math.max(1, Math.ceil((blockedUntil - Date.now()) / 60000));
+          return NextResponse.json(
+            {
+              error: `Trop de tentatives : réessayez dans ${minutes} minute(s).`,
+              blockedUntil: new Date(blockedUntil).toISOString(),
+            },
+            { status: 429 }
+          );
+        }
+
+        const code = normalizeKycCode(data.code);
+        if (code.length !== 6) {
+          return NextResponse.json(
+            { error: "Saisissez les 6 chiffres de votre code secret." },
+            { status: 400 }
+          );
+        }
+
+        const ok = await verifyKycCode(code, storedHash);
+        if (!ok) {
+          const attempts = sub.lockAttempts + 1;
+          const reached = attempts >= KYC_MAX_ATTEMPTS;
+          await prisma.kycSubmission.update({
+            where: { id: kycId },
+            data: {
+              lockAttempts: reached ? 0 : attempts,
+              lockBlockedUntil: reached ? new Date(Date.now() + KYC_BLOCK_MINUTES * 60000) : null,
+            },
+          });
+          return NextResponse.json(
+            {
+              error: reached
+                ? `Code incorrect. Dossier bloqué ${KYC_BLOCK_MINUTES} minutes.`
+                : `Code incorrect. ${KYC_MAX_ATTEMPTS - attempts} tentative(s) restante(s).`,
+              attemptsLeft: reached ? 0 : KYC_MAX_ATTEMPTS - attempts,
+            },
+            { status: 401 }
+          );
+        }
+
+        await prisma.kycSubmission.update({
+          where: { id: kycId },
+          data: { lockAttempts: 0, lockBlockedUntil: null },
+        });
+        const issued = await signKycUnlockToken(kycId);
+        return NextResponse.json({
+          success: true,
+          token: issued.token,
+          expiresAt: issued.expiresAt,
+          hiddenFields: sub.hiddenFields || "",
+          message: "Dossier déverrouillé pour cette session.",
+        });
+      }
+
+      // ============ SUPPRESSION D'UNE PIÈCE KYC (admin) ============
+      // Le fichier est retiré du stockage (bucket privé) et la référence
+      // est effacée en base. Si le dossier est verrouillé, le code à
+      // 6 chiffres est exigé : on ne supprime pas une preuve en aveugle.
+      case "kyc-remove-doc": {
+        const actor = await requireAdmin(req).catch(() => null);
+        if (!actor) {
+          return NextResponse.json({ error: "Session administrateur requise." }, { status: 401 });
+        }
+        const kycId = String(data.kycId || "");
+        const slot = String(data.slot || "");
+        if (!UUID_PATTERN.test(kycId)) {
+          return NextResponse.json({ error: "Dossier KYC invalide." }, { status: 400 });
+        }
+        if (!(KYC_DOC_SLOTS as readonly string[]).includes(slot)) {
+          return NextResponse.json({ error: "Document ciblé inconnu." }, { status: 400 });
+        }
+        const sub = await prisma.kycSubmission.findUnique({ where: { id: kycId } });
+        if (!sub) {
+          return NextResponse.json({ error: "Dossier KYC introuvable." }, { status: 404 });
+        }
+
+        const storedHash = String(sub.lockCodeHash || "");
+        if (storedHash) {
+          const ok = await verifyKycCode(normalizeKycCode(data.code), storedHash);
+          if (!ok) {
+            return NextResponse.json(
+              { error: "Code à 6 chiffres requis (ou incorrect) : suppression refusée." },
+              { status: 403 }
+            );
+          }
+        }
+
+        const record = sub as unknown as Record<string, string | undefined>;
+        const currentValue = String(record[slot] || "");
+        if (!currentValue) {
+          return NextResponse.json({
+            success: true,
+            alreadyEmpty: true,
+            message: "Aucun fichier à supprimer.",
+          });
+        }
+
+        // 1. Retirer le fichier du stockage R2 (bucket privé)
+        const key = r2KeyFromValue(currentValue);
+        if (key && key.includes("/") && !key.includes("..")) {
+          try {
+            await deleteFromR2(key);
+          } catch (error: any) {
+            console.warn("[KYC] Suppression R2 impossible:", error?.message);
+          }
+        }
+
+        // 2. Effacer la référence en base et journaliser la suppression
+        const deletedDocs = Array.from(new Set([...(sub.deletedDocs || []), slot]));
+        await prisma.kycSubmission.update({
+          where: { id: kycId },
+          data: { [slot]: "", deletedDocs } as any,
+        });
+
+        return NextResponse.json({
+          success: true,
+          slot,
+          deletedDocs,
+          message: "Pièce supprimée définitivement.",
+        });
       }
 
       // ============ APPROBATION KYC COMPLÈTE (admin) → création du profil public ============
