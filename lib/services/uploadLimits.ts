@@ -71,7 +71,7 @@ export const BUCKET_KINDS: Record<string, UploadKind[]> = {
   "product-images": ["image"],
   "blog-images": ["image"],
   "site-media": ["image"],
-  "kyc-documents": ["kyc"],
+  "kyc-documents": ["image", "document"],
   "product-files": ["document", "archive", "video"],
   "course-media": ["video", "document", "archive"],
 };
@@ -89,6 +89,25 @@ export function isPrivateBucket(bucket: string): boolean {
   return PRIVATE_BUCKETS.has(String(bucket || ""));
 }
 
+/**
+ * Plafond PROPRE à un dossier (prime sur celui de la catégorie).
+ * Les pièces d'identité restent limitées à 10 Mo, même s'il s'agit d'un
+ * document PDF (catégorie « document » limitée à 50 Mo ailleurs).
+ */
+const FOLDER_MAX_BYTES: Record<string, number> = {
+  "kyc-documents": UPLOAD_LIMITS.kyc.maxBytes,
+};
+
+/** Formats réellement acceptés quand le dossier est plus restrictif. */
+const FOLDER_FORMATS: Record<string, string> = {
+  "kyc-documents": "PDF, JPG, PNG, WEBP",
+};
+
+/** Extensions autorisées par dossier restrictif (garde-fou côté navigateur). */
+const FOLDER_EXTENSIONS: Record<string, string[]> = {
+  "kyc-documents": ["pdf", "jpg", "jpeg", "png", "webp", "heic"],
+};
+
 /** Extension → type MIME (indispensable pour les fichiers sans type détecté). */
 const EXTENSION_MIME: Record<string, string> = {
   jpg: "image/jpeg",
@@ -98,6 +117,8 @@ const EXTENSION_MIME: Record<string, string> = {
   avif: "image/avif",
   gif: "image/gif",
   svg: "image/svg+xml",
+  heic: "image/heic",
+  heif: "image/heif",
   pdf: "application/pdf",
   zip: "application/zip",
   rar: "application/vnd.rar",
@@ -186,15 +207,26 @@ export interface UploadCheck {
 export function checkUploadFile(file: File, bucket?: string): UploadCheck {
   const kinds =
     (bucket && BUCKET_KINDS[bucket]) || (["image", "document", "archive", "video"] as UploadKind[]);
-  const acceptedFormats = kinds.map((k) => UPLOAD_LIMITS[k].formats).join(" · ");
+  const acceptedFormats =
+    (bucket && FOLDER_FORMATS[bucket]) || kinds.map((k) => UPLOAD_LIMITS[k].formats).join(" · ");
 
   if (!file || file.size <= 0) {
     return { ok: false, error: "Le fichier est vide : sélectionnez un fichier valide." };
   }
 
+  // Extension autorisée pour ce dossier ? (ex. KYC : pdf/jpg/png/webp/heic)
+  const allowedExtensions = bucket ? FOLDER_EXTENSIONS[bucket] : undefined;
+  const extension = fileExtension(file.name);
+  if (allowedExtensions && !allowedExtensions.includes(extension)) {
+    return {
+      ok: false,
+      error: `Format « .${extension || "inconnu"} » non accepté ici. Formats acceptés : ${acceptedFormats}.`,
+    };
+  }
+
   const kind = detectUploadKind(file);
   if (!kind) {
-    const ext = fileExtension(file.name) || "inconnu";
+    const ext = extension || "inconnu";
     return {
       ok: false,
       error: `Format « .${ext} » non pris en charge ici. Formats acceptés : ${acceptedFormats}.`,
@@ -209,21 +241,31 @@ export function checkUploadFile(file: File, bucket?: string): UploadCheck {
     };
   }
 
+  // Plafond : le plus contraignant entre la catégorie et le dossier.
   const limit = UPLOAD_LIMITS[kind];
-  if (file.size > limit.maxBytes) {
+  const folderMax = bucket ? FOLDER_MAX_BYTES[bucket] : undefined;
+  const maxBytes = folderMax ? Math.min(limit.maxBytes, folderMax) : limit.maxBytes;
+
+  if (file.size > maxBytes) {
     return {
       ok: false,
       kind,
-      maxBytes: limit.maxBytes,
-      error: `« ${file.name} » pèse ${formatBytes(file.size)} : la limite est de ${limit.label} pour ${limit.name === "image" ? "une image" : `un ${limit.name}`}.`,
+      maxBytes,
+      error: `« ${file.name} » pèse ${formatBytes(file.size)} : la limite est de ${formatBytes(maxBytes)} pour ${limit.name === "image" ? "une image" : `un ${limit.name}`}.`,
     };
   }
 
-  return { ok: true, kind, maxBytes: limit.maxBytes };
+  return { ok: true, kind, maxBytes };
 }
 
 /** Résumé lisible des limites d'un dossier (« JPG… · 10 Mo max »). */
 export function uploadHintForBucket(bucket: string): string {
+  const folderMax = FOLDER_MAX_BYTES[bucket];
+  const folderFormats = FOLDER_FORMATS[bucket];
+  if (folderMax && folderFormats) {
+    return `${folderFormats} · ${formatBytes(folderMax)} max`;
+  }
+
   const kinds = BUCKET_KINDS[bucket] || [];
   if (kinds.length === 0) return "";
   if (kinds.length === 1) {
@@ -235,6 +277,10 @@ export function uploadHintForBucket(bucket: string): string {
 
 /** Attribut `accept` pour un dossier donné. */
 export function acceptForBucket(bucket: string): string {
+  if (bucket === "kyc-documents") {
+    return "application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif";
+  }
+
   const kinds = BUCKET_KINDS[bucket] || [];
   if (kinds.length === 0) {
     return Array.from(

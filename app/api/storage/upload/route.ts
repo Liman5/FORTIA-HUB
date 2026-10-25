@@ -49,6 +49,8 @@ const BUCKET_MIME_TYPES: Record<string, string[]> = {
     "image/jpeg",
     "image/png",
     "image/webp",
+    "image/heic",
+    "image/heif",
     "application/pdf",
   ],
   [R2_BUCKETS.STORE_IMAGES]: [

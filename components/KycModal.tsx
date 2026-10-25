@@ -606,6 +606,10 @@ export const KycModal: React.FC<KycModalProps> = ({
                 <span className="text-[10px] text-rose-600 font-bold">Recto + verso + photo de vous</span>
               </div>
 
+              <p className="text-[10px] text-slate-500 font-semibold">
+                Formats acceptés : PDF, JPG, PNG, WEBP (HEIC accepté) · 10 Mo max par fichier
+              </p>
+
               {/* Erreur d'envoi : cause réelle, visible (jamais un simple « erreur ») */}
               {uploadError && (
                 <div className="flex items-start gap-2 bg-red-50 border border-red-300 text-red-700 p-3 rounded-xl text-[11px] font-semibold">
