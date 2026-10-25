@@ -19,7 +19,7 @@ import {
 } from "@/lib/services/twoFactor";
 import { notifyUser } from "@/lib/services/notifyUser";
 import { isRetryableDbError, withDbRetry } from "@/lib/server/dbRetry";
-import { clientIp, rateLimit } from "@/lib/server/rateLimit";
+import { clientIp, rateLimitPersistent } from "@/lib/server/rateLimit";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
     const guardedActions = ["login", "register", "verify-otp", "send-otp"];
     if (guardedActions.includes(String(body?.action))) {
       const isLogin = body.action === "login";
-      const wait = rateLimit(
+      const wait = await rateLimitPersistent(
         `${body.action}:${ip}`,
         isLogin ? 10 : 8,
         isLogin ? 5 * 60 * 1000 : 10 * 60 * 1000

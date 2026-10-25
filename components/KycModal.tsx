@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { RegistrationFeeConfig, KycSubmission } from '../types';
 import { uploadFileToR2 } from '../lib/services/clientUpload';
+import { CountrySelect } from './CountrySelect';
 import { 
   ShieldCheck, 
   CheckCircle2, 
@@ -27,6 +28,65 @@ interface KycModalProps {
   onSubmitKyc: (kyc: KycSubmission) => void;
   userId?: string;
 }
+
+/**
+ * Zone d'ajout d'une photo ou d'un document : deux choix clairs —
+ * « Fichier » (galerie, PDF accepté) ou « Photo » (appareil photo du
+ * téléphone, capture directe). Le second est indispensable sur mobile.
+ */
+const KycUploadField: React.FC<{
+  label: string;
+  help?: string;
+  value: string | null;
+  fileName: string;
+  onPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  cameraFacing?: "user" | "environment";
+  accept?: string;
+}> = ({
+  label,
+  help,
+  value,
+  fileName,
+  onPick,
+  cameraFacing = "environment",
+  accept = "image/*,.pdf",
+}) => (
+  <div>
+    <label className="block text-[11px] font-bold text-slate-700 mb-1">{label}</label>
+    {help && <p className="text-[10px] text-slate-500 mb-1.5 leading-snug">{help}</p>}
+
+    <div
+      className={`p-3 border-2 border-dashed rounded-xl transition ${
+        value ? "border-emerald-500 bg-emerald-50/50" : "border-slate-300 bg-white"
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-2 min-w-0">
+        <span className={`text-xs font-semibold truncate flex-1 ${value ? "text-emerald-800" : "text-slate-600"}`}>
+          {fileName || "Aucune photo ajoutée pour le moment"}
+        </span>
+        {value && (
+          <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded shrink-0">
+            Ajouté ✓
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="flex items-center justify-center gap-1.5 text-[11px] font-bold bg-[#021231] text-[#D69E25] px-2 py-2 rounded-lg cursor-pointer hover:bg-[#011D46] transition">
+          <Upload className="w-3.5 h-3.5 shrink-0" />
+          <span>Choisir un fichier</span>
+          <input type="file" accept={accept} onChange={onPick} className="hidden" />
+        </label>
+
+        <label className="flex items-center justify-center gap-1.5 text-[11px] font-bold bg-white border border-slate-300 text-slate-700 px-2 py-2 rounded-lg cursor-pointer hover:bg-slate-100 transition">
+          <Camera className="w-3.5 h-3.5 shrink-0" />
+          <span>Prendre une photo</span>
+          <input type="file" accept="image/*" capture={cameraFacing} onChange={onPick} className="hidden" />
+        </label>
+      </div>
+    </div>
+  </div>
+);
 
 export const KycModal: React.FC<KycModalProps> = ({
   isOpen,
@@ -233,20 +293,21 @@ export const KycModal: React.FC<KycModalProps> = ({
             <div className="space-y-2 border-b border-slate-100 pb-4">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold">
                 <ShieldCheck className="w-4 h-4 text-amber-600" />
-                <span>Certification KYC & Attribution de Badge Officiel</span>
+                <span>Vérification d'identité (KYC)</span>
               </div>
               <h2 className="text-2xl font-black text-[#021231]">
-                Vérification d'Identité Stricte
+                Faisons connaissance
               </h2>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Renseignez scrupuleusement l'ensemble des informations d'identité ci-dessous. Le système effectue un <strong>contrôle automatique rigoureux</strong> avant transmission à l'équipe technique.
+                Remplissez ce formulaire en quelques minutes pour obtenir votre badge vérifié.
+                Vos informations restent confidentielles et servent uniquement à confirmer votre identité.
               </p>
             </div>
 
             {/* Category Selector */}
             <div className="space-y-2">
               <label className="block text-xs font-black text-[#021231] uppercase tracking-wider">
-                1. Choisissez votre Statut / Catégorie *
+                1. Vous êtes… *
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
@@ -321,7 +382,7 @@ export const KycModal: React.FC<KycModalProps> = ({
               <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                 <UserCheck className="w-4 h-4 text-[#D69E25]" />
                 <h3 className="font-black text-xs text-[#021231] uppercase tracking-wider">
-                  2. Informations Personnelles du Représentant / Titulaire *
+                  2. Vos informations personnelles *
                 </h3>
               </div>
 
@@ -329,7 +390,7 @@ export const KycModal: React.FC<KycModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Nom de famille *
+                    Nom *
                   </label>
                   <input
                     type="text"
@@ -343,7 +404,7 @@ export const KycModal: React.FC<KycModalProps> = ({
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Prénom *
+                    Prénom(s) *
                   </label>
                   <input
                     type="text"
@@ -360,7 +421,7 @@ export const KycModal: React.FC<KycModalProps> = ({
               {accountType === 'enterprise' && (
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Rôle / Titre dans l'entreprise *
+                    Votre fonction dans l'entreprise *
                   </label>
                   <select
                     value={repRole}
@@ -380,7 +441,7 @@ export const KycModal: React.FC<KycModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Adresse Email *
+                    Adresse e-mail *
                   </label>
                   <input
                     type="email"
@@ -394,7 +455,7 @@ export const KycModal: React.FC<KycModalProps> = ({
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Téléphone direct (avec indicatif) *
+                    Téléphone (avec l'indicatif du pays) *
                   </label>
                   <input
                     type="tel"
@@ -413,29 +474,16 @@ export const KycModal: React.FC<KycModalProps> = ({
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
                     Pays *
                   </label>
-                  <select
+                  <CountrySelect
                     value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs bg-white text-[#021231] focus:outline-none focus:ring-2 focus:ring-[#D69E25]"
-                  >
-                    <option value="Sénégal">Sénégal</option>
-                    <option value="Togo">Togo</option>
-                    <option value="Côte d'Ivoire">Côte d'Ivoire</option>
-                    <option value="Bénin">Bénin</option>
-                    <option value="Mali">Mali</option>
-                    <option value="Burkina Faso">Burkina Faso</option>
-                    <option value="Cameroun">Cameroun</option>
-
-                    <option value="Gabon">Gabon</option>
-                    <option value="Guinée">Guinée</option>
-                    <option value="France">France</option>
-                    <option value="Autre">Autre International</option>
-                  </select>
+                    onChange={setCountry}
+                    required
+                  />
                 </div>
 
                 <div className="sm:col-span-2">
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Adresse physique complète *
+                    Votre adresse complète *
                   </label>
                   <input
                     type="text"
@@ -456,14 +504,14 @@ export const KycModal: React.FC<KycModalProps> = ({
                 <div className="flex items-center gap-2 border-b border-amber-200 pb-2">
                   <Building2 className="w-4 h-4 text-amber-700" />
                   <h3 className="font-black text-xs text-[#021231] uppercase tracking-wider">
-                    3. Informations de la Société / Entreprise *
+                    3. Votre entreprise *
                   </h3>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Raison Sociale (Nom officiel de l'entreprise) *
+                      Nom officiel de l'entreprise *
                     </label>
                     <input
                       type="text"
@@ -497,7 +545,7 @@ export const KycModal: React.FC<KycModalProps> = ({
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    N° Registre du Commerce (RCCM / NINEA / IFU / SIRET) *
+                    Numéro d'immatriculation (RCCM, NINEA, IFU ou SIRET) *
                   </label>
                   <input
                     type="text"
@@ -510,28 +558,14 @@ export const KycModal: React.FC<KycModalProps> = ({
                 </div>
 
                 {/* Company Document Upload */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Scan Officiel du Registre du Commerce ou Statuts (PDF/PNG) *
-                  </label>
-                  <label className="flex items-center justify-between p-3 border-2 border-dashed border-amber-300 bg-white rounded-xl cursor-pointer hover:bg-amber-50/50 transition">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-amber-600" />
-                      <span className="text-xs font-semibold text-slate-700">
-                        {companyDocName ? `Fichier : ${companyDocName}` : "Joindre le Registre du Commerce / NINEA"}
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-2.5 py-1 rounded">
-                      Parcourir...
-                    </span>
-                    <input
-                      type="file"
-                      accept=".pdf,image/*"
-                      onChange={(e) => handleFileUpload(e, setCompanyDocFile, setCompanyDocName)}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
+                <KycUploadField
+                  label="Registre du commerce ou statuts (photo ou PDF) *"
+                  help="Une photo lisible du document suffit : pas besoin de scanner."
+                  value={companyDocFile}
+                  fileName={companyDocName}
+                  onPick={(e) => handleFileUpload(e, setCompanyDocFile, setCompanyDocName)}
+                  accept=".pdf,image/*"
+                />
               </div>
             )}
 
@@ -541,17 +575,17 @@ export const KycModal: React.FC<KycModalProps> = ({
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-[#D69E25]" />
                   <h3 className="font-black text-xs text-[#021231] uppercase tracking-wider">
-                    {accountType === 'enterprise' ? '4.' : '3.'} Pièce d'Identité & Photos Obligatoires *
+                    {accountType === 'enterprise' ? '4.' : '3.'} Vos papiers d'identité et vos photos *
                   </h3>
                 </div>
-                <span className="text-[10px] text-rose-600 font-bold">Recto + Verso + Selfie requis</span>
+                <span className="text-[10px] text-rose-600 font-bold">Recto + verso + photo de vous</span>
               </div>
 
               {/* Doc Type & Number */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Type de Pièce d'Identité *
+                    Quel document avez-vous ? *
                   </label>
                   <select
                     value={documentType}
@@ -566,7 +600,7 @@ export const KycModal: React.FC<KycModalProps> = ({
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Numéro de la Pièce *
+                    Numéro du document *
                   </label>
                   <input
                     type="text"
@@ -583,7 +617,7 @@ export const KycModal: React.FC<KycModalProps> = ({
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Date d'expiration de la pièce * (Strictement en cours de validité)</span>
+                  <span>Date d'expiration du document *</span>
                 </label>
                 <input
                   type="date"
@@ -594,94 +628,45 @@ export const KycModal: React.FC<KycModalProps> = ({
                 />
               </div>
 
-              {/* Upload 1: Photo RECTO */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  1. Photo RECTO de la Pièce d'Identité *
-                </label>
-                <label className={`flex items-center justify-between p-3 border-2 border-dashed rounded-xl cursor-pointer transition ${
-                  idRectoFile ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-300 bg-white hover:bg-slate-100'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    <Camera className="w-4 h-4 text-[#D69E25]" />
-                    <span className="text-xs font-semibold text-slate-700">
-                      {idRectName ? `Recto chargé : ${idRectName}` : "Joindre la photo RECTO"}
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-bold bg-[#021231] text-[#D69E25] px-2.5 py-1 rounded">
-                    {idRectoFile ? "Fichier Chargé ✓" : "Charger RECTO"}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={(e) => handleFileUpload(e, setIdRectoFile, setIdRectName)}
-                    className="hidden"
-                  />
-                </label>
-              </div>
+              {/* Photo du recto */}
+              <KycUploadField
+                label="1. Photo du recto (face avant) *"
+                help="Le côté de la pièce avec votre photo et vos nom/prénom."
+                value={idRectoFile}
+                fileName={idRectName}
+                onPick={(e) => handleFileUpload(e, setIdRectoFile, setIdRectName)}
+              />
 
-              {/* Upload 2: Photo VERSO */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  2. Photo VERSO de la Pièce d'Identité *
-                </label>
-                <label className={`flex items-center justify-between p-3 border-2 border-dashed rounded-xl cursor-pointer transition ${
-                  idVersoFile ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-300 bg-white hover:bg-slate-100'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    <Camera className="w-4 h-4 text-[#D69E25]" />
-                    <span className="text-xs font-semibold text-slate-700">
-                      {idVersoName ? `Verso chargé : ${idVersoName}` : "Joindre la photo VERSO"}
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-bold bg-[#021231] text-[#D69E25] px-2.5 py-1 rounded">
-                    {idVersoFile ? "Fichier Chargé ✓" : "Charger VERSO"}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={(e) => handleFileUpload(e, setIdVersoFile, setIdVersoName)}
-                    className="hidden"
-                  />
-                </label>
-              </div>
+              {/* Photo du verso */}
+              <KycUploadField
+                label="2. Photo du verso (face arrière) *"
+                help="Le côté avec la bande de lecture ou le numéro du document."
+                value={idVersoFile}
+                fileName={idVersoName}
+                onPick={(e) => handleFileUpload(e, setIdVersoFile, setIdVersoName)}
+              />
 
-              {/* Upload 3: Photo SELFIE avec la pièce */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  3. Photo Selfie tenant la Pièce d'Identité près du visage *
-                </label>
-                <label className={`flex items-center justify-between p-3 border-2 border-dashed rounded-xl cursor-pointer transition ${
-                  selfieFile ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-300 bg-white hover:bg-slate-100'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-[#D69E25]" />
-                    <span className="text-xs font-semibold text-slate-700">
-                      {selfieName ? `Selfie chargé : ${selfieName}` : "Joindre la photo Selfie"}
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-bold bg-[#021231] text-[#D69E25] px-2.5 py-1 rounded">
-                    {selfieFile ? "Fichier Chargé ✓" : "Charger SELFIE"}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, setSelfieFile, setSelfieName)}
-                    className="hidden"
-                  />
-                </label>
-              </div>
+              {/* Selfie */}
+              <KycUploadField
+                label="3. Une photo de vous tenant la pièce *"
+                help="Tenez votre pièce près de votre visage, bien éclairé, sans chapeau ni masque."
+                value={selfieFile}
+                fileName={selfieName}
+                onPick={(e) => handleFileUpload(e, setSelfieFile, setSelfieName)}
+                cameraFacing="user"
+                accept="image/*"
+              />
 
             </div>
 
             {/* Fee summary */}
             <div className="bg-[#021231] text-white rounded-2xl p-4 space-y-2 border border-[#D69E25]/40 shadow-inner">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold">Frais de Contrôle Administratif & Activation</span>
+                <span className="font-bold">Frais de vérification du dossier</span>
                 <span className="font-black text-[#D69E25] text-sm">{feeUsd}$ ({feeFcfa.toLocaleString()} FCFA)</span>
               </div>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                Règlement par Wave, Orange Money ou Crypto USDT lors de l'attribution du Badge Certifié.
+                Le paiement (Wave, Orange Money ou USDT) se fait après validation de votre dossier.
               </p>
             </div>
 
@@ -691,7 +676,7 @@ export const KycModal: React.FC<KycModalProps> = ({
               className="w-full py-4 rounded-xl bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-black text-xs sm:text-sm hover:brightness-110 transition flex items-center justify-center gap-2 shadow-xl cursor-pointer"
             >
               <ShieldCheck className="w-5 h-5" />
-              <span>Soumettre le Dossier pour Contrôle Stricte</span>
+              <span>Envoyer mon dossier</span>
             </button>
 
           </form>

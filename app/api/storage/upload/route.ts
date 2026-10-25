@@ -8,6 +8,7 @@ import {
 import { getStorageActor, parseStorageKey, canWriteKey } from "@/lib/server/storageAccess";
 import { requireAdmin } from "@/lib/server/requireAdmin";
 import { isReadOnlyAdmin } from "@/lib/server/adminRoles";
+import { recordStorageObject } from "@/lib/server/storageInventory";
 
 export const dynamic = "force-dynamic";
 
@@ -206,6 +207,15 @@ export async function POST(req: NextRequest) {
       fileType || "application/octet-stream",
       isPublic
     );
+
+    // Inventaire de maintenance (fichiers envoyés mais jamais enregistrés).
+    await recordStorageObject({
+      key: result.key,
+      folder: validatedBucket,
+      entityId,
+      size: file.size,
+      contentType: fileType || "application/octet-stream",
+    });
 
     return NextResponse.json({
       success: true,

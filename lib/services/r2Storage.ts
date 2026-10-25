@@ -310,6 +310,47 @@ export async function listR2Objects(prefix = ""): Promise<string[]> {
   return (result.Contents || []).map((obj) => obj.Key || "");
 }
 
+export interface R2ObjectInfo {
+  key: string;
+  size: number;
+  lastModified: Date | null;
+}
+
+/**
+ * Liste détaillée (clé + taille + date) des objets d'un dossier, avec
+ * pagination complète. Utilisée par le job de maintenance pour ne supprimer
+ * que des fichiers réellement anciens.
+ */
+export async function listR2ObjectsDetailed(prefix = ""): Promise<R2ObjectInfo[]> {
+  const bucket = bucketForKey(prefix);
+  const objects: R2ObjectInfo[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const result = await clientForBucket(bucket).send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        MaxKeys: 1000,
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    for (const obj of result.Contents || []) {
+      if (!obj.Key) continue;
+      objects.push({
+        key: obj.Key,
+        size: obj.Size || 0,
+        lastModified: obj.LastModified || null,
+      });
+    }
+
+    continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return objects;
+}
+
 // ============================================================
 // DOSSIERS FORTIA HUB
 // ============================================================

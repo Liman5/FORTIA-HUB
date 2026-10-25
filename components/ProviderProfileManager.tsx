@@ -7,6 +7,7 @@ import {
   UserProfile,
 } from "@/lib/types";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
+import { CountrySelect } from "@/components/CountrySelect";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
 import {
   User,
@@ -376,10 +377,9 @@ export const ProviderProfileManager: React.FC<ProviderProfileManagerProps> = ({
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">Pays</label>
-                <input
-                  type="text"
+                <CountrySelect
                   value={enCountry}
-                  onChange={(e) => setEnCountry(e.target.value)}
+                  onChange={setEnCountry}
                   className="w-full bg-[#021231] border border-slate-700 text-sm rounded-xl p-3 text-white focus:outline-none focus:border-[#D69E25]"
                 />
               </div>

@@ -19,6 +19,28 @@
   img {
     content-visibility: auto;
   }
+
+  /* ============================================================
+     AUCUN DÉFILEMENT HORIZONTAL
+     Les fenêtres superposées (produit, KYC, paiement…) contiennent
+     parfois des contenus larges (aperçus, tableaux, longues URL) qui
+     faisaient apparaître une barre de défilement horizontale.
+     On replie ces contenus : la modale reste dans l'écran.
+     ============================================================ */
+  .fixed.inset-0 {
+    max-width: 100vw;
+  }
+
+  .fixed.inset-0 > div {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* Longues chaînes (e-mails, clés, URL) : coupées proprement. */
+  .break-long {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }
 
 /* ===== MODE NUIT : PAGE D'ACCUEIL (cartes blanches → navy) =====

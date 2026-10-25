@@ -12,6 +12,7 @@ import {
   parseStorageKey,
   canWriteKey,
 } from "@/lib/server/storageAccess";
+import { recordStorageObject } from "@/lib/server/storageInventory";
 
 export const dynamic = "force-dynamic";
 
@@ -219,6 +220,10 @@ export async function POST(req: NextRequest) {
     const uploadUrl = await getPresignedUploadUrl(key, contentType, 900);
     // Aucune URL publique pour un dossier privé (KYC, livrables, vidéos)
     const publicUrl = isPublicFolder(folder) ? getPublicObjectUrl(key) : "";
+
+    // Inventaire de maintenance : permet de détecter plus tard les fichiers
+    // envoyés mais jamais enregistrés en base (suppression après 24 h).
+    await recordStorageObject({ key, folder, entityId, size, contentType });
 
     return NextResponse.json({
       success: true,

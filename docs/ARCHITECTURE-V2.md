@@ -477,7 +477,42 @@ applicatif**.
 | Service worker en développement | **0 worker, 0 cache applicatif** (profils navigateur vérifiés) |
 | Fichiers temporaires / de test | **aucun** (scripts et captures supprimés après usage) |
 
-## 22. Reste à faire (prochaines étapes)
+## 22. Durcissement avant production (stockage, débit, formulaires)
+
+### 22.1 Job de maintenance `/api/cron/maintenance`
+
+| Élément | Détail |
+|---|---|
+| Déclenchement | **Vercel Cron** quotidien (`vercel.json`, 03:00 UTC) ou appel manuel |
+| Sécurité | `Authorization: Bearer <CRON_SECRET>` (ou `x-cron-secret`) ; sans secret configuré → **503** |
+| Mode | **Simulation par défaut** ; suppression uniquement avec `?apply=1` |
+| Âge minimal | **24 h** imposées (`minAgeHours` borné entre 24 h et 90 jours) |
+| Stockage | `storage_objects` (inventaire écrit à chaque présignature) comparé à **toutes les références en base**, colonnes découvertes via `information_schema` → aucun fichier référencé n'est supprimé |
+| Débit | purge des `rate_limit_counters` expirés depuis plus de 24 h |
+
+```bash
+# Simulation (aucune suppression)
+curl -H "Authorization: Bearer $CRON_SECRET" \
+     https://fortia-hub.com/api/cron/maintenance
+
+# Application réelle
+curl -H "Authorization: Bearer $CRON_SECRET" \
+     "https://fortia-hub.com/api/cron/maintenance?apply=1"
+```
+
+Mesures locales : sans secret **401**, avec secret **200**, simulation `orphanCount: 1` détecté sans suppression (`deletedCount: 0`), **45 colonnes** de référence analysées.
+
+### 22.2 Limitation de débit partagée
+
+`rateLimitPersistent()` écrit dans `rate_limit_counters` (une ligne par IP + action), avec repli automatique sur le compteur mémoire si la base est indisponible. Corrige une faiblesse du serverless : chaque instance avait jusqu'ici son propre compteur.
+
+### 22.3 Formulaires
+
+- **KYC** : textes simplifiés (tutoiement des étapes : « Vous êtes… », « Vos informations personnelles », « Vos papiers et vos photos »), et **appareil photo autorisé** (`capture="environment"` pour les documents, `capture="user"` pour la photo de soi).
+- **Pays** : référentiel unique `lib/data/countries.ts` (**198 pays**, noms FR + indicatif) utilisé par `CountrySelect` (KYC, profil prestataire).
+- **Défilement horizontal** : les modales ne créent plus de barre horizontale (`.fixed.inset-0 > div { overflow-x: hidden }`).
+
+## 23. Reste à faire (prochaines étapes)
 
 | Étape | Contenu |
 |---|---|

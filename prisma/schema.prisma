@@ -1276,3 +1276,49 @@ model PlatformConfig {
 
   @@map("platform_config")
 }
+
+// ============================================================
+// MAINTENANCE — Inventaire du stockage R2
+// ------------------------------------------------------------
+// Chaque fichier envoyé sur R2 est enregistré ici dès la présignature.
+// Le job de maintenance compare cet inventaire aux références réellement
+// présentes en base : un fichier sans référence et âgé de plus de 24 h
+// est un « orphelin » supprimable (mode simulation par défaut).
+// ============================================================
+model StorageObject {
+  id          String    @id @default(uuid())
+  /** Clé R2 complète : `dossier/entité/fichier`. */
+  key         String    @unique
+  /** Premier segment de la clé (dossier logique). */
+  folder      String    @default("")
+  entityId    String    @default("") @map("entity_id")
+  /** Taille en octets (max 2 Go : suffisant pour nos limites). */
+  size        Int       @default(0)
+  contentType String    @default("") @map("content_type")
+  /** pending | confirmed | deleted */
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([folder])
+  @@map("storage_objects")
+}
+
+// ============================================================
+// MAINTENANCE — Compteurs de limitation de débit (multi-instances)
+// ------------------------------------------------------------
+// Remplace/complète le compteur mémoire : indispensable en serverless où
+// chaque instance possède sa propre mémoire. Les lignes expirées sont
+// purgées par le job de maintenance.
+// ============================================================
+model RateLimitCounter {
+  key       String   @id
+  count     Int      @default(0)
+  resetAt   DateTime @map("reset_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([resetAt])
+  @@map("rate_limit_counters")
+}
