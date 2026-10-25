@@ -131,15 +131,18 @@ export const KycModal: React.FC<KycModalProps> = ({
   const [isRejected, setIsRejected] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  // Envoi des documents : ces états DOIVENT rester avant le `return null`
+  // ci-dessous, sinon les hooks changent d'ordre à l'ouverture/fermeture
+  // de la modale (React error #310).
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
   const feeUsd = accountType === 'freelance' ? feeConfig.freelanceFeeUsd : feeConfig.enterpriseFeeUsd;
   const feeFcfa = accountType === 'freelance' ? feeConfig.freelanceFeeFcfa : feeConfig.enterpriseFeeFcfa;
 
   // Envoi d'un document : message d'erreur VISIBLE (cause réelle), jamais muet.
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadingField, setUploadingField] = useState<string | null>(null);
-
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     field: string,
