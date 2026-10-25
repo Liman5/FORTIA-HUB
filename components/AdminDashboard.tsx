@@ -118,33 +118,51 @@ interface AdminDashboardProps {
   onSuspendCourse?: (courseId: string) => void;
 }
 
-// Affiche les documents KYC depuis R2 (URL signée)
+// Affiche les documents KYC depuis R2 (URL signée) — visualisation avant approbation
 function KycDocumentViewer({ url, label }: { url?: string; label: string }) {
   const [signedUrl, setSignedUrl] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(!!url);
+  const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    let cancelled = false;
+    setError(null);
+
     if (!url) {
       setSignedUrl(null);
       setLoading(false);
       return;
     }
-    // Si c'est déjà une URL publique (https://), on l'affiche directement
+    // Ancienne valeur : URL publique déjà exploitable
     if (url.startsWith("http")) {
       setSignedUrl(url);
       setLoading(false);
       return;
     }
-    // Sinon c'est une clé R2 -> générer une URL signée
+
+    // Clé R2 privée → URL signée (l'admin est autorisé par son jeton)
+    setLoading(true);
     getSignedUrl(url).then((res) => {
-      setSignedUrl(res.success && res.url ? res.url : null);
+      if (cancelled) return;
+      if (res.success && res.url) {
+        setSignedUrl(res.url);
+      } else {
+        setSignedUrl(null);
+        setError(res.error || "Fichier inaccessible.");
+      }
       setLoading(false);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
+
+  const isPdf = /\.pdf(\?|$)/i.test(String(url || "")) || /\.pdf(\?|$)/i.test(String(signedUrl || ""));
 
   if (!url) {
     return (
-      <div className="bg-[#011D46] p-3 rounded-xl border border-slate-800 min-h-[100px] flex items-center justify-center">
+      <div className="bg-[#011D46] p-3 rounded-xl border border-slate-800 min-h-[120px] flex items-center justify-center">
         <p className="text-[10px] text-slate-500 italic">{label} : non fourni</p>
       </div>
     );
@@ -153,21 +171,38 @@ function KycDocumentViewer({ url, label }: { url?: string; label: string }) {
   return (
     <div className="bg-[#011D46] p-3 rounded-xl border border-slate-800">
       <span className="text-[10px] text-slate-400 font-bold uppercase block mb-2">{label}</span>
+
       {loading ? (
-        <div className="flex items-center justify-center min-h-[80px] text-[10px] text-slate-500">
-          <Clock className="w-4 h-4 mr-1.5 animate-spin" /> Chargement...
+        <div className="flex items-center justify-center min-h-[110px] text-[10px] text-slate-400">
+          <Clock className="w-4 h-4 mr-1.5 animate-spin" /> Chargement du document…
         </div>
       ) : signedUrl ? (
-        <a href={signedUrl} target="_blank" rel="noopener noreferrer" className="block">
-          <img
-            src={signedUrl}
-            alt={label}
-            className="w-full h-36 object-cover rounded-lg border border-slate-700 hover:opacity-80 transition cursor-pointer"
-          />
-        </a>
+        isPdf ? (
+          <a
+            href={signedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center justify-center gap-1 min-h-[110px] rounded-lg border border-slate-700 bg-slate-900/40 text-[11px] font-bold text-[#D69E25] hover:border-[#D69E25]/60 transition"
+          >
+            <span className="text-lg">📄</span>
+            Ouvrir le PDF
+          </a>
+        ) : (
+          <a href={signedUrl} target="_blank" rel="noopener noreferrer" className="block group">
+            <img
+              src={signedUrl}
+              alt={label}
+              className="w-full h-44 object-contain rounded-lg border border-slate-700 bg-slate-950/60 group-hover:opacity-80 transition"
+            />
+            <span className="mt-1.5 block text-[10px] font-bold text-[#D69E25] text-center">
+              Cliquer pour agrandir ↗
+            </span>
+          </a>
+        )
       ) : (
-        <div className="flex items-center justify-center min-h-[80px] text-[10px] text-red-400">
-          <XCircle className="w-4 h-4 mr-1.5" /> Fichier inaccessible
+        <div className="flex flex-col items-center justify-center gap-1 min-h-[110px] text-[10px] text-red-400 text-center px-1">
+          <XCircle className="w-4 h-4" />
+          <span>{error || "Fichier inaccessible"}</span>
         </div>
       )}
     </div>
@@ -1370,6 +1405,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="text-[10px] text-slate-400 font-bold uppercase block">Date d'expiration</span>
                     <span className="text-sm font-bold text-white">{selectedKyc.idExpirationDate || "—"}</span>
                   </div>
+                </div>
+
+                {/* Documents joints : visibles AVANT d'approuver le dossier */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4 border-t border-slate-800">
+                  <KycDocumentViewer url={selectedKyc.idRectoUrl} label="Pièce — Recto" />
+                  <KycDocumentViewer url={selectedKyc.idVersoUrl} label="Pièce — Verso" />
+                  <KycDocumentViewer url={selectedKyc.selfieUrl} label="Photo de la personne" />
                 </div>
               </div>
 

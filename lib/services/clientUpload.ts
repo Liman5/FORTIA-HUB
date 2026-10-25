@@ -52,6 +52,20 @@ function readAdminToken(): string {
 }
 
 /**
+ * En-têtes communs des appels au stockage. Le jeton administrateur est
+ * envoyé quand il existe : sans lui, les routes de lecture privée
+ * (`/api/storage/signed-url`) refusent l'accès — l'admin ne pouvait donc
+ * pas visualiser les pièces d'identité KYC.
+ */
+function storageAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const token = readAdminToken();
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/**
  * Téléverse un fichier vers Cloudflare R2.
  *
  * Voie PRINCIPALE : URL PUT **présignée** → le fichier va directement du
@@ -300,7 +314,7 @@ export async function resolveStorageUrl(value: string): Promise<string> {
   try {
     const res = await fetch("/api/storage/signed-url", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: storageAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ key }),
     });
     const json = await res.json().catch(() => ({}));
@@ -322,7 +336,7 @@ export async function deleteFileFromR2(key: string): Promise<{ success: boolean;
   try {
     const res = await fetch("/api/storage/delete", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: storageAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ key: normalizedKey }),
     });
 
@@ -351,7 +365,7 @@ export async function getSignedUrl(
   try {
     const res = await fetch("/api/storage/signed-url", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: storageAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ key, expiresInSeconds }),
     });
 
