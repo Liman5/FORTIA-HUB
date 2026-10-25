@@ -76,6 +76,19 @@ export const BUCKET_KINDS: Record<string, UploadKind[]> = {
   "course-media": ["video", "document", "archive"],
 };
 
+/**
+ * Dossiers PRIVÉS : les fichiers ne sont jamais exposés publiquement.
+ * Pour eux, la voie d'upload classique (via le serveur) est privilégiée :
+ * elle ne dépend pas de la règle CORS du bucket privé — cause fréquente
+ * d'échec des documents d'identité (KYC).
+ */
+const PRIVATE_BUCKETS = new Set(["kyc-documents", "product-files", "course-media"]);
+
+/** Ce dossier est-il privé ? */
+export function isPrivateBucket(bucket: string): boolean {
+  return PRIVATE_BUCKETS.has(String(bucket || ""));
+}
+
 /** Extension → type MIME (indispensable pour les fichiers sans type détecté). */
 const EXTENSION_MIME: Record<string, string> = {
   jpg: "image/jpeg",

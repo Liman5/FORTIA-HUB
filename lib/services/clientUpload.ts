@@ -1,6 +1,7 @@
 "use client";
 
-import { MB, checkUploadFile, contentTypeFor, formatBytes } from "./uploadLimits";
+import { MB, checkUploadFile, contentTypeFor, formatBytes, isPrivateBucket } from "./uploadLimits";
+import { compressImageFile } from "./imageCompression";
 
 // ============================================================
 // FORTIA HUB — Utilitaires client d'upload vers Cloudflare R2
@@ -71,24 +72,58 @@ export async function uploadFileToR2(
   entityId: string,
   isPublic = false
 ): Promise<UploadResult> {
-  // 1. Contrôle immédiat (format + taille) : message précis, aucune requête.
-  const check = checkUploadFile(file, bucket);
-  if (!check.ok) return uploadFailure(file, check.error || "Fichier non valide.");
+  const initial = checkUploadFile(file, bucket);
+  if (!initial.ok) return uploadFailure(file, initial.error || "Fichier non valide.");
 
-  // 2. Voie directe présignée (aucune limite côté application).
-  const contentType = contentTypeFor(file);
-  const direct = await uploadPresigned(file, bucket, entityId, contentType);
-  if (direct.success) return direct;
+  // 1. Photos volumineuses (téléphone) : compression avant l'envoi.
+  //    Les documents d'identité doivent rester parfaitement lisibles :
+  //    1600 px suffisent très largement (poids ≈ 300-600 Ko).
+  const prepared =
+    initial.kind === "image"
+      ? await compressImageFile(
+          file,
+          bucket === "kyc-documents"
+            ? { maxDimension: 1600, quality: 0.82, skipUnderBytes: 700_000 }
+            : { maxDimension: 1920, quality: 0.85, skipUnderBytes: 1_200_000 }
+        )
+      : file;
 
-  // 3. Repli classique : seulement si le fichier est assez léger.
-  if (file.size <= LEGACY_MAX_BYTES) {
-    const legacy = await uploadLegacy(file, bucket, entityId, isPublic);
-    return legacy.success
-      ? legacy
-      : uploadFailure(file, direct.error || legacy.error || "Échec de l'importation.");
+  const check = checkUploadFile(prepared, bucket);
+  if (!check.ok) return uploadFailure(prepared, check.error || "Fichier non valide.");
+
+  const contentType = contentTypeFor(prepared);
+
+  // 2. Dossiers PRIVÉS (KYC, livrables, vidéos) : on privilégie la voie
+  //    classique (serveur → R2), qui ne dépend PAS de la règle CORS du
+  //    bucket privé. C'est elle qui faisait défaut sur les documents KYC.
+  if (isPrivateBucket(bucket) && prepared.size <= LEGACY_MAX_BYTES) {
+    const legacy = await uploadLegacy(prepared, bucket, entityId, isPublic);
+    if (legacy.success) return legacy;
+
+    const direct = await uploadPresigned(prepared, bucket, entityId, contentType);
+    if (direct.success) return direct;
+
+    return uploadFailure(
+      prepared,
+      direct.error || legacy.error || "Échec de l'importation du document."
+    );
   }
 
-  return uploadFailure(file, direct.error || "Échec du téléversement direct vers R2.");
+  // 3. Voie directe présignée (aucune limite côté application).
+  const direct = await uploadPresigned(prepared, bucket, entityId, contentType);
+  if (direct.success) return direct;
+
+  // 4. Repli classique : seulement si le fichier est assez léger.
+  if (prepared.size <= LEGACY_MAX_BYTES) {
+    const legacy = await uploadLegacy(prepared, bucket, entityId, isPublic);
+    if (legacy.success) return legacy;
+    return uploadFailure(
+      prepared,
+      direct.error || legacy.error || "Échec de l'importation."
+    );
+  }
+
+  return uploadFailure(prepared, direct.error || "Échec du téléversement direct vers R2.");
 }
 
 /** PUT direct via URL présignée : aucune limite de taille côté Next.js. */

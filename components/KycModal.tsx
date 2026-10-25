@@ -136,25 +136,47 @@ export const KycModal: React.FC<KycModalProps> = ({
   const feeUsd = accountType === 'freelance' ? feeConfig.freelanceFeeUsd : feeConfig.enterpriseFeeUsd;
   const feeFcfa = accountType === 'freelance' ? feeConfig.freelanceFeeFcfa : feeConfig.enterpriseFeeFcfa;
 
-  // File Upload Handler Helper
-  const handleFileUpload = (
+  // Envoi d'un document : message d'erreur VISIBLE (cause réelle), jamais muet.
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
+
+  const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
+    field: string,
     setFileState: (val: string | null) => void,
     setNameState: (val: string) => void
   ) => {
-    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
-    setNameState(file.name + " (envoi...)");
-    const entityId = "kyc-" + Date.now();
-    uploadFileToR2(file, "kyc-documents", entityId, false).then((result) => {
+
+    setUploadError(null);
+    setUploadingField(field);
+    setNameState("Envoi en cours…");
+
+    try {
+      const entityId = "kyc-" + Date.now();
+      const result = await uploadFileToR2(file, "kyc-documents", entityId, false);
+
       if (result.success) {
         setFileState(result.url);
-        setNameState(file.name + " ✓");
+        setNameState(file.name + " ✓ ajouté");
       } else {
-        setNameState(file.name + " (erreur)");
         setFileState(null);
+        setNameState("");
+        setUploadError(
+          result.error ||
+            "L'envoi du document a échoué. Vérifiez votre connexion puis réessayez."
+        );
       }
-    });
+    } catch (error: any) {
+      setFileState(null);
+      setNameState("");
+      setUploadError(error?.message || "L'envoi du document a échoué.");
+    } finally {
+      setUploadingField(null);
+      if (input) input.value = "";
+    }
   };
 
   // Strict Automated Validation Engine
@@ -563,7 +585,7 @@ export const KycModal: React.FC<KycModalProps> = ({
                   help="Une photo lisible du document suffit : pas besoin de scanner."
                   value={companyDocFile}
                   fileName={companyDocName}
-                  onPick={(e) => handleFileUpload(e, setCompanyDocFile, setCompanyDocName)}
+                  onPick={(e) => handleFileUpload(e, "entreprise", setCompanyDocFile, setCompanyDocName)}
                   accept=".pdf,image/*"
                 />
               </div>
@@ -580,6 +602,29 @@ export const KycModal: React.FC<KycModalProps> = ({
                 </div>
                 <span className="text-[10px] text-rose-600 font-bold">Recto + verso + photo de vous</span>
               </div>
+
+              {/* Erreur d'envoi : cause réelle, visible (jamais un simple « erreur ») */}
+              {uploadError && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-300 text-red-700 p-3 rounded-xl text-[11px] font-semibold">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span className="flex-1 break-long">{uploadError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setUploadError(null)}
+                    className="text-red-500 hover:text-red-800 font-bold shrink-0"
+                    aria-label="Fermer le message"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {uploadingField && (
+                <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 border-2 border-[#D69E25] border-t-transparent rounded-full animate-spin" />
+                  Envoi du document en cours…
+                </p>
+              )}
 
               {/* Doc Type & Number */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -634,7 +679,7 @@ export const KycModal: React.FC<KycModalProps> = ({
                 help="Le côté de la pièce avec votre photo et vos nom/prénom."
                 value={idRectoFile}
                 fileName={idRectName}
-                onPick={(e) => handleFileUpload(e, setIdRectoFile, setIdRectName)}
+                onPick={(e) => handleFileUpload(e, "recto", setIdRectoFile, setIdRectName)}
               />
 
               {/* Photo du verso */}
@@ -643,7 +688,7 @@ export const KycModal: React.FC<KycModalProps> = ({
                 help="Le côté avec la bande de lecture ou le numéro du document."
                 value={idVersoFile}
                 fileName={idVersoName}
-                onPick={(e) => handleFileUpload(e, setIdVersoFile, setIdVersoName)}
+                onPick={(e) => handleFileUpload(e, "verso", setIdVersoFile, setIdVersoName)}
               />
 
               {/* Selfie */}
@@ -652,7 +697,7 @@ export const KycModal: React.FC<KycModalProps> = ({
                 help="Tenez votre pièce près de votre visage, bien éclairé, sans chapeau ni masque."
                 value={selfieFile}
                 fileName={selfieName}
-                onPick={(e) => handleFileUpload(e, setSelfieFile, setSelfieName)}
+                onPick={(e) => handleFileUpload(e, "selfie", setSelfieFile, setSelfieName)}
                 cameraFacing="user"
                 accept="image/*"
               />
