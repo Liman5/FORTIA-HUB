@@ -146,7 +146,11 @@ export async function POST(req: NextRequest) {
     }
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: "Fichier trop volumineux (max 50 Mo)" },
+        {
+          error: `Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1).replace(".", ",")} Mo). Maximum 50 Mo par la voie classique : utilisez l'import direct.`,
+          maxBytes: MAX_FILE_SIZE,
+          maxLabel: "50 Mo",
+        },
         { status: 413 }
       );
     }

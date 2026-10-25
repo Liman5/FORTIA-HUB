@@ -15,12 +15,39 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/** Taille maximale par type de dossier. */
-const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024; // 2 Go (vidéos de formation)
-const MAX_DOCUMENT_SIZE = 200 * 1024 * 1024; // 200 Mo (livrables produits)
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 Mo (images)
+/** 1 Mo en octets (référence commune aux limites ci-dessous). */
+const MB_SIZE = 1024 * 1024;
 
-/** Types MIME autorisés par dossier. */
+/**
+ * Plafonds par NATURE de fichier — identiques à `lib/services/uploadLimits.ts`
+ * (source unique côté client). L'interface affiche exactement ces valeurs.
+ */
+const MAX_VIDEO_SIZE = 500 * MB_SIZE; // 500 Mo — vidéos (formation, livrables)
+const MAX_ARCHIVE_SIZE = 100 * MB_SIZE; // 100 Mo — ZIP / RAR / 7Z
+const MAX_DOCUMENT_SIZE = 50 * MB_SIZE; // 50 Mo — PDF, bureautique, texte
+const MAX_IMAGE_SIZE = 10 * MB_SIZE; // 10 Mo — images
+const MAX_KYC_SIZE = 10 * MB_SIZE; // 10 Mo — pièces d'identité
+
+/** Plafond correspondant au type MIME réellement envoyé. */
+function typeMaxSize(contentType: string): number {
+  if (contentType.startsWith("video/")) return MAX_VIDEO_SIZE;
+  if (contentType.startsWith("image/")) return MAX_IMAGE_SIZE;
+  if (contentType.startsWith("audio/")) return MAX_DOCUMENT_SIZE;
+  if (
+    [
+      "application/zip",
+      "application/x-zip-compressed",
+      "application/x-rar-compressed",
+      "application/vnd.rar",
+      "application/x-7z-compressed",
+    ].includes(contentType)
+  ) {
+    return MAX_ARCHIVE_SIZE;
+  }
+  return MAX_DOCUMENT_SIZE;
+}
+
+/** Types MIME autorisés par dossier + plafond absolu du dossier. */
 const ALLOWED_MIME: Record<string, { types: Set<string>; maxSize: number }> = {
   [R2_BUCKETS.COURSE_MEDIA]: {
     types: new Set([
@@ -33,6 +60,11 @@ const ALLOWED_MIME: Record<string, { types: Set<string>; maxSize: number }> = {
       "video/x-msvideo",
       "application/pdf",
       "application/zip",
+      "application/x-zip-compressed",
+      "application/x-rar-compressed",
+      "application/vnd.rar",
+      "application/x-7z-compressed",
+      "application/octet-stream",
     ]),
     maxSize: MAX_VIDEO_SIZE,
   },
@@ -42,6 +74,9 @@ const ALLOWED_MIME: Record<string, { types: Set<string>; maxSize: number }> = {
       "application/zip",
       "application/x-zip-compressed",
       "application/epub+zip",
+      "application/x-rar-compressed",
+      "application/vnd.rar",
+      "application/x-7z-compressed",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "application/vnd.ms-excel",
@@ -50,9 +85,13 @@ const ALLOWED_MIME: Record<string, { types: Set<string>; maxSize: number }> = {
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       "text/plain",
       "text/csv",
+      "text/markdown",
+      "video/mp4",
+      "video/quicktime",
+      "video/webm",
       "application/octet-stream",
     ]),
-    maxSize: MAX_DOCUMENT_SIZE,
+    maxSize: MAX_VIDEO_SIZE,
   },
   [R2_BUCKETS.KYC_DOCUMENTS]: {
     types: new Set([
@@ -62,7 +101,7 @@ const ALLOWED_MIME: Record<string, { types: Set<string>; maxSize: number }> = {
       "image/heic",
       "application/pdf",
     ]),
-    maxSize: MAX_DOCUMENT_SIZE,
+    maxSize: MAX_KYC_SIZE,
   },
   [R2_BUCKETS.STORE_IMAGES]: {
     types: new Set(["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"]),
@@ -77,8 +116,16 @@ const ALLOWED_MIME: Record<string, { types: Set<string>; maxSize: number }> = {
     maxSize: MAX_IMAGE_SIZE,
   },
   [R2_BUCKETS.SITE_MEDIA]: {
-    types: new Set(["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"]),
-    maxSize: MAX_IMAGE_SIZE,
+    types: new Set([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/avif",
+      "image/gif",
+      "audio/mpeg",
+      "audio/wav",
+    ]),
+    maxSize: MAX_DOCUMENT_SIZE,
   },
 };
 
@@ -129,9 +176,19 @@ export async function POST(req: NextRequest) {
     if (size <= 0) {
       return NextResponse.json({ error: "Taille du fichier invalide" }, { status: 400 });
     }
-    if (size > rules.maxSize) {
+
+    // Plafond effectif = le plus contraignant entre la nature du fichier et
+    // le dossier cible (ex. une image reste limitée à 10 Mo, même dans un
+    // dossier qui accepte aussi des vidéos).
+    const effectiveMax = Math.min(rules.maxSize, typeMaxSize(contentType));
+    if (size > effectiveMax) {
+      const maxLabel = `${Math.round(effectiveMax / MB_SIZE)} Mo`;
       return NextResponse.json(
-        { error: `Fichier trop volumineux (max ${Math.round(rules.maxSize / 1024 / 1024)} Mo).` },
+        {
+          error: `Fichier trop volumineux : ${(size / MB_SIZE).toFixed(1).replace(".", ",")} Mo. Maximum ${maxLabel} pour ce type de fichier.`,
+          maxBytes: effectiveMax,
+          maxLabel,
+        },
         { status: 413 }
       );
     }

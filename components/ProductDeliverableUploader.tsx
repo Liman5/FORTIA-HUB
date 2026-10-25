@@ -2,7 +2,8 @@
 
 import React, { useRef, useState } from 'react';
 import { Upload, FileText, Video, FileArchive, File, Trash2, Plus, Check, Link as LinkIcon, AlertCircle, FileSpreadsheet, HardDriveDownload, Loader2 } from 'lucide-react';
-import { uploadFileToR2, deleteFileFromR2, type ClientBucketName } from '../lib/services/clientUpload';
+import { uploadFileToR2, deleteFileFromR2, storageUrlToKey, type ClientBucketName } from '../lib/services/clientUpload';
+import { acceptForBucket, checkUploadFile, uploadHintForBucket } from '../lib/services/uploadLimits';
 
 export interface DeliverableFile {
   id: string;
@@ -36,6 +37,7 @@ export const ProductDeliverableUploader: React.FC<ProductDeliverableUploaderProp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
 
   const formatFileBytes = (bytes: number): string => {
     if (bytes === 0) return '0 Octets';
@@ -66,10 +68,19 @@ export const ProductDeliverableUploader: React.FC<ProductDeliverableUploaderProp
     const selectedFiles = e.target.files;
     if (!selectedFiles || selectedFiles.length === 0) return;
 
+    setErrors([]);
     setUploading(true);
     const uploadedFiles: DeliverableFile[] = [];
+    const problems: string[] = [];
 
     for (const file of Array.from(selectedFiles)) {
+      // Contrôle local immédiat : format + limite de taille du dossier
+      const check = checkUploadFile(file, bucket);
+      if (!check.ok) {
+        problems.push(check.error || `« ${file.name} » refusé.`);
+        continue;
+      }
+
       const result = await uploadFileToR2(file, bucket, entityId);
       if (result.success) {
         uploadedFiles.push({
@@ -77,15 +88,18 @@ export const ProductDeliverableUploader: React.FC<ProductDeliverableUploaderProp
           name: file.name,
           size: formatFileBytes(file.size),
           type: file.type || file.name.split('.').pop() || 'document',
-          dataUrl: result.url // URL R2 du fichier livrable privé
+          dataUrl: result.url // URL R2 (publique) ou clé R2 (fichier privé)
         });
       } else {
-        alert(result.error || `Erreur lors de l\'importation de ${file.name} sur FORTIA HUB`);
+        problems.push(result.error || `Erreur lors de l'importation de ${file.name}.`);
       }
     }
 
     if (uploadedFiles.length > 0) {
       onFilesChange([...files, ...uploadedFiles]);
+    }
+    if (problems.length > 0) {
+      setErrors(problems);
     }
 
     setUploading(false);
@@ -94,9 +108,9 @@ export const ProductDeliverableUploader: React.FC<ProductDeliverableUploaderProp
 
   const removeFile = (id: string) => {
     const fileToRemove = files.find(f => f.id === id);
-    // Si le fichier a une URL R2 (dataUrl), on tente de le supprimer
-    if (fileToRemove?.dataUrl && fileToRemove.dataUrl.includes('storage.fortia-hub.com')) {
-      const key = fileToRemove.dataUrl.replace('https://storage.fortia-hub.com/', '');
+    // Le fichier a été déposé sur R2 (URL publique ou clé privée) : on le supprime.
+    const key = fileToRemove?.dataUrl ? storageUrlToKey(fileToRemove.dataUrl) : '';
+    if (key) {
       deleteFileFromR2(key).catch(() => {});
     }
     onFilesChange(files.filter(f => f.id !== id));
@@ -140,9 +154,37 @@ export const ProductDeliverableUploader: React.FC<ProductDeliverableUploaderProp
         type="file"
         ref={fileInputRef}
         onChange={handleFileSelect}
+        accept={acceptForBucket(bucket)}
         multiple
         className="hidden"
       />
+
+      {/* Refus explicites (format ou taille) : jamais d'erreur 413 muette */}
+      {errors.length > 0 && (
+        <div className="space-y-1.5 bg-red-500/10 border border-red-500/40 p-3 rounded-xl">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-bold text-red-300 flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4" />
+              {errors.length} fichier{errors.length > 1 ? 's' : ''} refusé{errors.length > 1 ? 's' : ''}
+            </p>
+            <button
+              type="button"
+              onClick={() => setErrors([])}
+              className="text-red-300/70 hover:text-white text-xs font-bold"
+              aria-label="Fermer les messages"
+            >
+              ✕
+            </button>
+          </div>
+          <ul className="space-y-1">
+            {errors.map((message, index) => (
+              <li key={index} className="text-[11px] text-red-200/90 leading-snug">
+                • {message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Upload Dropzone */}
       <div
@@ -183,8 +225,11 @@ export const ProductDeliverableUploader: React.FC<ProductDeliverableUploaderProp
           <p className="text-[11px] text-slate-400 mt-1">
             Format attendu : <span className="text-amber-300 font-semibold">{getAcceptedFormatsHint()}</span>
           </p>
+          <p className="text-[10px] text-slate-400 mt-1">
+            Limites : <span className="text-amber-300 font-semibold">{uploadHintForBucket(bucket)}</span>
+          </p>
           <p className="text-[10px] text-slate-500 mt-0.5">
-            Vous pouvez sélectionner un ou plusieurs fichiers simultanément (.pdf, .mp4, .zip, etc.)
+            Sélection multiple possible. Les fichiers sont déposés directement sur le stockage sécurisé (aucune limite de formulaire).
           </p>
         </div>
 

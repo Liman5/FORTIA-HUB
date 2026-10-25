@@ -3,6 +3,7 @@
 import React, { useRef, useState } from 'react';
 import { Upload, Image as ImageIcon, Check, Ratio, Trash2, AlertCircle, Loader2 } from 'lucide-react';
 import { uploadFileToR2, type ClientBucketName } from '../lib/services/clientUpload';
+import { acceptForBucket, uploadHintForBucket } from '../lib/services/uploadLimits';
 
 interface ProductImageUploaderProps {
   coverImage: string;
@@ -30,25 +31,23 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
   const bannerFileRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleCoverFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      alert('Veuillez sélectionner un fichier image valide (PNG, JPG, WEBP).');
-      return;
-    }
 
+    setError(null);
     setUploadingCover(true);
     try {
       const result = await uploadFileToR2(file, bucket, entityId, isPublic);
       if (result.success) {
         onCoverChange(result.url);
       } else {
-        alert(result.error || 'Erreur lors de l\'importation sur FORTIA HUB.');
+        setError(result.error || "Erreur lors de l'importation sur FORTIA HUB.");
       }
     } catch (err: any) {
-      alert(err?.message || 'Erreur lors de l\'importation sur FORTIA HUB.');
+      setError(err?.message || "Erreur lors de l'importation sur FORTIA HUB.");
     } finally {
       setUploadingCover(false);
       if (coverFileRef.current) coverFileRef.current.value = '';
@@ -58,21 +57,18 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
   const handleBannerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      alert('Veuillez sélectionner un fichier image valide (PNG, JPG, WEBP).');
-      return;
-    }
 
+    setError(null);
     setUploadingBanner(true);
     try {
       const result = await uploadFileToR2(file, bucket, entityId, isPublic);
       if (result.success) {
         onBannerChange(result.url);
       } else {
-        alert(result.error || 'Erreur lors de l\'importation sur FORTIA HUB.');
+        setError(result.error || "Erreur lors de l'importation sur FORTIA HUB.");
       }
     } catch (err: any) {
-      alert(err?.message || 'Erreur lors de l\'importation sur FORTIA HUB.');
+      setError(err?.message || "Erreur lors de l'importation sur FORTIA HUB.");
     } finally {
       setUploadingBanner(false);
       if (bannerFileRef.current) bannerFileRef.current.value = '';
@@ -81,7 +77,23 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
 
   return (
     <div className="space-y-6 bg-[#021231]/90 p-5 rounded-2xl border border-slate-700/80 shadow-xl">
-      
+
+      {/* Message d'erreur (format ou taille) : explicite, sans 413 opaque */}
+      {error && (
+        <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/40 text-red-300 p-3 rounded-xl text-[11px] font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span className="flex-1">{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-red-300/70 hover:text-white font-bold shrink-0"
+            aria-label="Fermer le message"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* SECTION 1: COVER IMAGE UPLOAD (COUVERTURE OBLIGATOIRE) */}
       <div className="space-y-3">
         <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
@@ -107,7 +119,7 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
           type="file"
           ref={coverFileRef}
           onChange={handleCoverFileUpload}
-          accept="image/*"
+          accept={acceptForBucket(bucket)}
           className="hidden"
         />
 
@@ -134,7 +146,7 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
               {uploadingCover ? 'Importation en cours...' : coverImage ? 'Changer le fichier de couverture' : 'Importer le fichier de couverture'}
             </p>
             <p className="text-[10px] text-slate-400 mt-1">
-              Glissez-déposez ou cliquez pour choisir • PNG, JPG, WEBP (Dimensions recommandées 800×600 px)
+              Glissez-déposez ou cliquez pour choisir • {uploadHintForBucket(bucket)} • Dimensions recommandées 800×600 px
             </p>
           </div>
         </div>
@@ -194,7 +206,7 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
           type="file"
           ref={bannerFileRef}
           onChange={handleBannerFileUpload}
-          accept="image/*"
+          accept={acceptForBucket(bucket)}
           className="hidden"
         />
 
@@ -221,7 +233,7 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
               {uploadingBanner ? 'Importation en cours...' : bannerImage ? 'Changer le fichier de bannière' : 'Importer la bannière panoramique'}
             </p>
             <p className="text-[10px] text-slate-400 mt-1">
-              Format panoramique 16:9 recommandé (ex. 1200×400 px) • PNG, JPG, WEBP
+              Format panoramique 16:9 recommandé (ex. 1200×400 px) • {uploadHintForBucket(bucket)}
             </p>
           </div>
         </div>

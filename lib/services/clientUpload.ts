@@ -1,5 +1,7 @@
 "use client";
 
+import { MB, checkUploadFile, contentTypeFor, formatBytes } from "./uploadLimits";
+
 // ============================================================
 // FORTIA HUB — Utilitaires client d'upload vers Cloudflare R2
 // Description : Envoie les fichiers du navigateur vers l'API Next.js
@@ -24,8 +26,40 @@ export interface UploadResult {
   error?: string;
 }
 
+/** Limite de la voie classique : au-delà, le corps de la requête serait
+ *  rejeté (413) par la fonction serverless. */
+const LEGACY_MAX_BYTES = 3.5 * MB;
+
+function uploadFailure(file: File, message: string): UploadResult {
+  return {
+    success: false,
+    key: "",
+    url: "",
+    fileName: file.name,
+    size: file.size,
+    contentType: file.type,
+    error: message,
+  };
+}
+
+function readAdminToken(): string {
+  try {
+    return localStorage.getItem("fortia_admin_token") || "";
+  } catch {
+    return "";
+  }
+}
+
 /**
- * Upload un fichier vers Cloudflare R2 via l'API Next.js.
+ * Téléverse un fichier vers Cloudflare R2.
+ *
+ * Voie PRINCIPALE : URL PUT **présignée** → le fichier va directement du
+ * navigateur vers R2, sans traverser la fonction serverless. Il n'y a donc
+ * plus aucune limite de corps de requête : fin des erreurs 413.
+ *
+ * Repli sur la voie classique (`/api/storage/upload`) uniquement pour les
+ * petits fichiers (≤ 3,5 Mo) si la présignature est indisponible.
+ *
  * @param file     Le fichier à uploader (File object)
  * @param bucket   Bucket R2 cible
  * @param entityId ID de l'entité (produit, boutique, cours, soumission KYC, article)
@@ -37,6 +71,111 @@ export async function uploadFileToR2(
   entityId: string,
   isPublic = false
 ): Promise<UploadResult> {
+  // 1. Contrôle immédiat (format + taille) : message précis, aucune requête.
+  const check = checkUploadFile(file, bucket);
+  if (!check.ok) return uploadFailure(file, check.error || "Fichier non valide.");
+
+  // 2. Voie directe présignée (aucune limite côté application).
+  const contentType = contentTypeFor(file);
+  const direct = await uploadPresigned(file, bucket, entityId, contentType);
+  if (direct.success) return direct;
+
+  // 3. Repli classique : seulement si le fichier est assez léger.
+  if (file.size <= LEGACY_MAX_BYTES) {
+    const legacy = await uploadLegacy(file, bucket, entityId, isPublic);
+    return legacy.success
+      ? legacy
+      : uploadFailure(file, direct.error || legacy.error || "Échec de l'importation.");
+  }
+
+  return uploadFailure(file, direct.error || "Échec du téléversement direct vers R2.");
+}
+
+/** PUT direct via URL présignée : aucune limite de taille côté Next.js. */
+async function uploadPresigned(
+  file: File,
+  bucket: ClientBucketName,
+  entityId: string,
+  contentType: string
+): Promise<UploadResult> {
+  const token = readAdminToken();
+  let res: Response;
+
+  try {
+    res = await fetch("/api/storage/presign-upload", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        folder: bucket,
+        fileName: file.name,
+        contentType,
+        entityId,
+        size: file.size,
+      }),
+    });
+  } catch {
+    return uploadFailure(file, "Connexion au serveur impossible : vérifiez votre réseau puis réessayez.");
+  }
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok || !data?.uploadUrl) {
+    if (res.status === 401 || res.status === 403) {
+      return uploadFailure(
+        file,
+        "Session requise ou expirée : reconnectez-vous (membre, vendeur, formateur ou administration), puis relancez l'importation."
+      );
+    }
+    if (res.status === 413 || res.status === 415) {
+      return uploadFailure(
+        file,
+        data?.error || "Fichier trop volumineux ou format refusé pour cet espace."
+      );
+    }
+    return uploadFailure(
+      file,
+      data?.error || `Préparation de l'importation impossible (code ${res.status}).`
+    );
+  }
+
+  try {
+    await putFileWithProgress(data.uploadUrl, file, contentType);
+  } catch (error: any) {
+    const detail = String(error?.message || "");
+    if (detail.includes("403")) {
+      return uploadFailure(
+        file,
+        "Le stockage R2 a refusé l'écriture (lien expiré). Relancez l'importation."
+      );
+    }
+    return uploadFailure(
+      file,
+      "Dépôt vers R2 interrompu (réseau ou autorisation CORS du bucket). Réessayez ; si cela persiste, contactez le support."
+    );
+  }
+
+  // Dossier privé → aucune URL publique : on conserve la CLÉ (résolue en URL
+  // signée à la lecture). Dossier public → URL permanente.
+  return {
+    success: true,
+    key: data.key,
+    url: data.publicUrl || data.key,
+    fileName: file.name,
+    size: file.size,
+    contentType,
+  };
+}
+
+/** Voie classique (le fichier traverse l'API Next.js) : petits fichiers seulement. */
+async function uploadLegacy(
+  file: File,
+  bucket: ClientBucketName,
+  entityId: string,
+  isPublic: boolean
+): Promise<UploadResult> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("bucket", bucket);
@@ -44,22 +183,14 @@ export async function uploadFileToR2(
   formData.append("isPublic", String(isPublic));
 
   try {
-    // Jeton de session admin (s'il existe) : indispensable pour téléverser
-    // dans les dossiers ÉDITORIAUX réservés à l'administration (`site-media`).
-    let adminToken = "";
-    try {
-      adminToken = localStorage.getItem("fortia_admin_token") || "";
-    } catch {
-      adminToken = "";
-    }
-
+    const token = readAdminToken();
     const res = await fetch("/api/storage/upload", {
       method: "POST",
       body: formData,
-      headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
 
-    // Réponse serveur pas toujours JSON (413 / HTML / texte) → parsing sûr
+    // Réponse pas toujours JSON (413 / HTML / texte) → parsing sûr
     const rawText = await res.text();
     let data: any = null;
     try {
@@ -69,45 +200,34 @@ export async function uploadFileToR2(
     }
 
     if (!res.ok || !data) {
-      // 401 / 403 : l'écriture éditoriale exige une session ADMINISTRATEUR
-      // valide (le serveur ne fait jamais confiance au drapeau du navigateur).
+      if (res.status === 413) {
+        return uploadFailure(
+          file,
+          `Fichier trop volumineux pour la voie classique (${formatBytes(file.size)}). Le dépôt direct vers R2 a échoué : réduisez la taille ou réessayez.`
+        );
+      }
       const authIssue =
         res.status === 401 || res.status === 403
-          ? "Session administrateur requise ou expirée : reconnectez-vous à l'espace d'administration, puis relancez l'importation."
+          ? "Session requise ou expirée : reconnectez-vous puis relancez l'importation."
           : "";
       const detail =
         authIssue ||
         data?.error ||
         (rawText && rawText.length < 300 ? rawText : "Erreur lors de l'upload");
-      return {
-        success: false,
-        key: "",
-        url: "",
-        fileName: file.name,
-        size: file.size,
-        contentType: file.type,
-        error: detail,
-      };
+      return uploadFailure(file, detail);
     }
 
     return {
       success: true,
       key: data.key,
-      url: data.url,
-      fileName: data.fileName,
-      size: data.size,
-      contentType: data.contentType,
+      // Un dossier privé n'expose aucune URL : la clé sert de référence.
+      url: data.url || data.key,
+      fileName: data.fileName || file.name,
+      size: data.size ?? file.size,
+      contentType: data.contentType || file.type,
     };
   } catch (error: any) {
-    return {
-      success: false,
-      key: "",
-      url: "",
-      fileName: file.name,
-      size: file.size,
-      contentType: file.type,
-      error: error?.message || "Erreur réseau lors de l'upload",
-    };
+    return uploadFailure(file, error?.message || "Erreur réseau lors de l'upload");
   }
 }
 
