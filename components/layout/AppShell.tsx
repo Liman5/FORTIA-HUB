@@ -66,6 +66,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setVendorApplicationModalOpen,
     feeConfig,
     submitKyc,
+    myKycSubmissions,
+    kycSubmissions,
     submitVendorApplication,
     addToCart,
     rateCourse,
@@ -81,6 +83,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Derive cart count and vendor email
   const cartCount = cartItems.length;
+
+  /**
+   * Dernière demande KYC de l'utilisateur connecté.
+   * Sert à afficher le SUIVI (statut) dans la modale au lieu de reproposer
+   * un formulaire quand le dossier est déjà en cours de traitement.
+   */
+  const myKycSubmission = (() => {
+    const list =
+      (myKycSubmissions && myKycSubmissions.length > 0 ? myKycSubmissions : kycSubmissions) || [];
+    const email = (userProfile?.email || "").toLowerCase();
+    return (
+      list.find(
+        (k) =>
+          (k.applicantId && userProfile?.id && k.applicantId === userProfile.id) ||
+          (!!email && !!k.email && k.email.toLowerCase() === email)
+      ) || null
+    );
+  })();
 
   const router = useRouter();
 
@@ -365,6 +385,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         feeConfig={feeConfig}
         onSubmitKyc={submitKyc}
         userId={userProfile?.id}
+        existingSubmission={myKycSubmission}
       />
 
       {/* Vendor Application Modal */}

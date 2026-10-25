@@ -4,12 +4,12 @@ import React, { useState } from 'react';
 import { RegistrationFeeConfig, KycSubmission } from '../types';
 import { uploadFileToR2 } from '../lib/services/clientUpload';
 import { CountrySelect } from './CountrySelect';
-import { 
-  ShieldCheck, 
-  CheckCircle2, 
-  Upload, 
-  X, 
-  FileText, 
+import {
+  ShieldCheck,
+  CheckCircle2,
+  Upload,
+  X,
+  FileText,
   AlertTriangle,
   XCircle,
   Building2,
@@ -18,7 +18,8 @@ import {
   Lock,
   Camera,
   Check,
-  Info
+  Info,
+  Clock
 } from 'lucide-react';
 
 interface KycModalProps {
@@ -27,6 +28,12 @@ interface KycModalProps {
   feeConfig: RegistrationFeeConfig;
   onSubmitKyc: (kyc: KycSubmission) => void;
   userId?: string;
+  /**
+   * Dernière demande KYC de l'utilisateur. Si elle est « En attente »,
+   * la modale affiche le SUIVI du dossier (statut, étapes) au lieu de
+   * reproposer un formulaire de nouvelle soumission.
+   */
+  existingSubmission?: KycSubmission | null;
 }
 
 /**
@@ -93,7 +100,8 @@ export const KycModal: React.FC<KycModalProps> = ({
   onClose,
   feeConfig,
   onSubmitKyc,
-  userId
+  userId,
+  existingSubmission = null
 }) => {
   const [accountType, setAccountType] = useState<'freelance' | 'enterprise'>('freelance');
 
@@ -137,10 +145,25 @@ export const KycModal: React.FC<KycModalProps> = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
 
+  // Permet de revenir volontairement au formulaire depuis l'écran de suivi
+  // (utile après un rejet : « Corriger mon dossier »).
+  const [forceForm, setForceForm] = useState(false);
+
   if (!isOpen) return null;
 
   const feeUsd = accountType === 'freelance' ? feeConfig.freelanceFeeUsd : feeConfig.enterpriseFeeUsd;
   const feeFcfa = accountType === 'freelance' ? feeConfig.freelanceFeeFcfa : feeConfig.enterpriseFeeFcfa;
+
+  /* ----- Statut de la demande existante (suivi au lieu du formulaire) ----- */
+  const submissionStatus = String(existingSubmission?.status || "");
+  const submissionPending =
+    submissionStatus === "En attente" || submissionStatus === "En_attente";
+  const submissionRejected =
+    submissionStatus === "Rejeté" || submissionStatus === "Rejete";
+  const submissionApproved =
+    submissionStatus === "Approuvé" || submissionStatus === "Approuve";
+  const showTracking =
+    !!existingSubmission && !forceForm && (submissionPending || submissionApproved);
 
   // Envoi d'un document : message d'erreur VISIBLE (cause réelle), jamais muet.
   const handleFileUpload = async (
@@ -311,8 +334,126 @@ export const KycModal: React.FC<KycModalProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        {!isSuccess ? (
+        {/* ===== SUIVI DU DOSSIER : déjà soumis (en attente ou validé) ===== */}
+        {!isSuccess && showTracking && (
+          <div className="space-y-6">
+            <div className="space-y-2 border-b border-slate-100 pb-4">
+              <div
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                  submissionApproved
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                    : "bg-amber-100 text-amber-900 border-amber-300"
+                }`}
+              >
+                {submissionApproved ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                ) : (
+                  <Clock className="w-4 h-4 text-amber-600" />
+                )}
+                <span>{submissionApproved ? "Dossier validé" : "Dossier en cours de vérification"}</span>
+              </div>
+
+              <h2 className="text-2xl font-black text-[#021231]">
+                {submissionApproved
+                  ? "Votre identité est vérifiée"
+                  : "Votre demande KYC est en cours de traitement"}
+              </h2>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {submissionApproved
+                  ? "Votre badge vérifié est actif : vous pouvez publier vos produits, formations et services."
+                  : "Notre équipe examine votre dossier. Vous recevrez une notification dès la décision : aucune nouvelle soumission n'est nécessaire."}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 text-[11px] font-bold text-slate-600">
+                <span>Référence du dossier</span>
+                <span className="font-mono text-[#021231]">
+                  {existingSubmission?.id ? existingSubmission.id.slice(0, 8) : "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-[11px] font-bold text-slate-600">
+                <span>Envoyé le</span>
+                <span className="text-[#021231]">{existingSubmission?.submittedAt || "—"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-[11px] font-bold text-slate-600">
+                <span>Type de compte</span>
+                <span className="text-[#021231]">
+                  {existingSubmission?.applicantType === "enterprise"
+                    ? "Entreprise"
+                    : "Particulier / Freelance"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-[11px] font-bold text-slate-600">
+                <span>Document</span>
+                <span className="text-[#021231] text-right break-long">
+                  {existingSubmission?.documentType || "—"}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] font-black uppercase tracking-wider text-[#021231]">Étapes</p>
+
+              <div className="flex items-start gap-2 text-xs">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span className="text-slate-700">
+                  <strong>Dossier reçu</strong> — vos informations et vos pièces sont enregistrées.
+                </span>
+              </div>
+
+              <div className="flex items-start gap-2 text-xs">
+                {submissionApproved ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                )}
+                <span className="text-slate-700">
+                  <strong>Vérification</strong> — contrôle de la pièce d'identité et des documents.
+                </span>
+              </div>
+
+              <div className="flex items-start gap-2 text-xs">
+                {submissionApproved ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <span className="w-4 h-4 rounded-full border-2 border-slate-300 shrink-0 mt-0.5" />
+                )}
+                <span className="text-slate-700">
+                  <strong>Décision</strong> — vous êtes notifié par e-mail et dans l'application.
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-3 rounded-xl bg-[#021231] text-[#D69E25] font-black text-xs hover:bg-[#011D46] transition"
+            >
+              Fermer
+            </button>
+          </div>
+        )}
+
+        {!isSuccess && !showTracking ? (
           <form onSubmit={handleValidateAndSubmit} className="space-y-6">
+
+            {/* Dossier précédent refusé : motif + invitation à corriger */}
+            {submissionRejected && (
+              <div className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-3 text-[11px] text-red-700">
+                <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-black">Votre précédente demande a été rejetée.</p>
+                  {existingSubmission?.adminNotes ? (
+                    <p className="font-semibold">Motif : {existingSubmission.adminNotes}</p>
+                  ) : null}
+                  <p className="font-semibold">
+                    Corrigez les éléments concernés puis renvoyez votre dossier ci-dessous.
+                  </p>
+                </div>
+              </div>
+            )}
             
             {/* Modal Title Banner */}
             <div className="space-y-2 border-b border-slate-100 pb-4">
