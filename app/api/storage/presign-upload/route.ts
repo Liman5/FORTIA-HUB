@@ -4,6 +4,7 @@ import {
   getPresignedUploadUrl,
   getPublicObjectUrl,
   isPublicFolder,
+  isPrivateBucketConfigured,
   isAllowedFolder,
   R2_BUCKETS,
 } from "@/lib/services/r2Storage";
@@ -168,6 +169,19 @@ export async function POST(req: NextRequest) {
     }
     if (!isAllowedFolder(folder)) {
       return NextResponse.json({ error: `Dossier '${folder}' non autorisé.` }, { status: 400 });
+    }
+
+    // Dossier privé : le bucket privé doit exister, sinon refus (échec fermé).
+    if (!isPublicFolder(folder) && !isPrivateBucketConfigured()) {
+      return NextResponse.json(
+        {
+          error:
+            "Stockage privé non configuré (CLOUDFLARE_PRIVATE_BUCKET_NAME manquant) : " +
+            "importation de documents confidentiels désactivée.",
+          code: "PRIVATE_BUCKET_MISSING",
+        },
+        { status: 503 }
+      );
     }
 
     const rules = ALLOWED_MIME[folder];

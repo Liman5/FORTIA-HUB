@@ -135,9 +135,29 @@ export function bucketForKey(key: string): string {
   return R2_PRIVATE_BUCKET || R2_PUBLIC_BUCKET;
 }
 
-/** Le bucket privé est-il configuré ? */
+/**
+ * Le bucket privé est-il configuré ?
+ */
 export function isPrivateBucketConfigured(): boolean {
   return !!R2_PRIVATE_BUCKET;
+}
+
+/**
+ * Écriture dans un dossier privé alors que le bucket privé n'est pas
+ * configuré : on REFUSE (échec fermé) au lieu d'écrire silencieusement les
+ * pièces d'identité / livrables dans le bucket PUBLIC.
+ *
+ * Avant, `bucketForKey()` retombait sur le bucket public : les documents KYC
+ * se retrouvaient lisibles par n'importe qui via l'URL publique.
+ */
+export function assertPrivateBucketConfigured(): void {
+  if (!R2_PRIVATE_BUCKET) {
+    throw new Error(
+      "Stockage privé non configuré : renseignez CLOUDFLARE_PRIVATE_BUCKET_NAME " +
+        "(et de préférence CLOUDFLARE_PRIVATE_BUCKET_ACCESS_KEY / _SECRET_KEY). " +
+        "Aucun document confidentiel ne sera écrit dans le bucket public."
+    );
+  }
 }
 
 export function getBucketNames(): { publicBucket: string; privateBucket: string } {
@@ -203,6 +223,10 @@ export async function uploadToR2(
   const key = buildR2Key(bucket, entityId, fileName);
   const targetBucket = bucketForKey(key);
   const publiclyReadable = isPublicFolder(bucket) && isPublic;
+
+  // Écriture d'un fichier confidentiel (KYC, livrables, vidéos) : le bucket
+  // privé est OBLIGATOIRE. Sinon on refuse (protection des données).
+  if (!isPublicFolder(bucket)) assertPrivateBucketConfigured();
 
   await clientForBucket(targetBucket).send(
     new PutObjectCommand({
@@ -273,6 +297,9 @@ export async function getPresignedUploadUrl(
   contentType: string,
   expiresInSeconds = 900
 ): Promise<string> {
+  // Une URL PUT présignée pour un dossier privé exige le bucket privé.
+  if (isPrivateKey(key)) assertPrivateBucketConfigured();
+
   const bucket = bucketForKey(key);
   const command = new PutObjectCommand({
     Bucket: bucket,

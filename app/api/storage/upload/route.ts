@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   uploadToR2,
   isPublicFolder,
+  isPrivateBucketConfigured,
   R2_BUCKETS,
   type R2BucketName,
 } from "@/lib/services/r2Storage";
@@ -146,6 +147,20 @@ export async function POST(req: NextRequest) {
     const validatedBucket = bucket as R2BucketName;
     if (!entityId) {
       return NextResponse.json({ error: "entityId manquant" }, { status: 400 });
+    }
+
+    // Dossier confidentiel (KYC, livrables, vidéos) : bucket privé obligatoire.
+    // Sinon les fichiers atterriraient dans le bucket PUBLIC.
+    if (!isPublicFolder(validatedBucket) && !isPrivateBucketConfigured()) {
+      return NextResponse.json(
+        {
+          error:
+            "Stockage privé non configuré (CLOUDFLARE_PRIVATE_BUCKET_NAME manquant) : " +
+            "l'importation de documents confidentiels est désactivée pour éviter toute fuite.",
+          code: "PRIVATE_BUCKET_MISSING",
+        },
+        { status: 503 }
+      );
     }
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
