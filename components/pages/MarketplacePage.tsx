@@ -24,10 +24,28 @@ export function MarketplacePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
     const { setVendorApplicationModalOpen, setKycModalOpen, searchQuery, setSearchQuery } = useUi();
-  const { isAdmin, isUserLoggedIn, feeConfig } = useAuth();
-  const { marketplaceProducts, stores, deleteProduct, updateProduct, selectedStore, freelances, enterprises } = useMarketplace();
+  const { isAdmin, isUserLoggedIn, feeConfig, userProfile } = useAuth();
+  const { marketplaceProducts, stores, deleteProduct, updateProduct, selectedStore, freelances, enterprises, vendorApplications } = useMarketplace();
   const { addToCart, orderService } = useCommerce();
   const { platformLoaded } = useAppStore();
+
+  /* ----- Statut réel du compte : boutons d'inscription masqués si déjà validé ----- */
+  const myEmail = (userProfile?.email || "").toLowerCase();
+  const myStores = myEmail
+    ? stores.filter((s) => (s.ownerEmail || "").toLowerCase() === myEmail)
+    : [];
+  const hasApprovedStore = myStores.some((s) => s.status === "active");
+  const hasPendingStore = myStores.some((s) => s.status === "pending");
+  const hasPendingApplication = (vendorApplications || []).some(
+    (a) => (a.email || "").toLowerCase() === myEmail && a.status === "En attente"
+  );
+  // Bouton « Ouvrir ma Boutique » : masqué si boutique validée/en attente ou
+  // candidature en cours ; il RÉAPPARAÎT si la candidature a été rejetée.
+  const hideVendorCta = !!myEmail && (hasApprovedStore || hasPendingStore || hasPendingApplication);
+  const kycVerified =
+    userProfile?.kycStatus === "approuve" ||
+    userProfile?.badge === "green" ||
+    userProfile?.badge === "gold";
 
   const [activeSection, setActiveSection] = useState<"shop" | "freelance" | "enterprise">("shop");
 
@@ -185,6 +203,7 @@ export function MarketplacePage() {
             onEditProduct={updateProduct}
             onOpenStore={handleOpenStore}
             onOpenVendorApplication={handleOpenVendorApplication}
+            hideVendorCta={hideVendorCta}
             onClearSearch={() => setSearchQuery("")}
             onSearchChange={setSearchQuery}
             initialFilter={typeParam}
@@ -199,6 +218,7 @@ export function MarketplacePage() {
             feeConfig={feeConfig}
             onOpenKycModal={handleOpenKyc}
             onOrderService={orderService}
+            hideKycCta={kycVerified}
           />
         )}
 
@@ -208,6 +228,7 @@ export function MarketplacePage() {
             enterprises={enterprises}
             feeConfig={feeConfig}
             onOpenKycModal={handleOpenKyc}
+            hideKycCta={kycVerified}
           />
         )}
       </div>

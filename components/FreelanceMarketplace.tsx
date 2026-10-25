@@ -24,6 +24,8 @@ interface FreelanceMarketplaceProps {
   freelances: FreelanceProfile[];
   feeConfig: RegistrationFeeConfig;
   onOpenKycModal: () => void;
+  /** Masque l'appel à soumettre un dossier KYC (compte déjà vérifié). */
+  hideKycCta?: boolean;
   onOrderService: (service: FreelanceService, freelance: FreelanceProfile) => void;
 }
 
@@ -31,6 +33,7 @@ export const FreelanceMarketplace: React.FC<FreelanceMarketplaceProps> = ({
   freelances,
   feeConfig: _feeConfig,
   onOpenKycModal,
+  hideKycCta = false,
   onOrderService
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -118,14 +121,16 @@ export const FreelanceMarketplace: React.FC<FreelanceMarketplaceProps> = ({
             </span>
           </div>
 
-          <button
-            onClick={onOpenKycModal}
+          {!hideKycCta && (
+            <button
+              onClick={onOpenKycModal}
             className="group relative inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 bg-[length:200%_auto] hover:bg-right text-white font-black text-xs uppercase tracking-wider hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg shadow-emerald-500/20 overflow-hidden"
           >
             <span className="absolute inset-0 bg-white/15 opacity-0 group-hover:opacity-100 group-hover:animate-shine transition-opacity" />
             <PlusCircle className="w-3.5 h-3.5" />
             Soumettre Profil & KYC
-          </button>
+            </button>
+          )}
         </div>
 
         {/* Filters & Search Bar */}

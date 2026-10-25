@@ -28,7 +28,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#021231",
+  // ⚠️ `themeColor` n'est VOLONTAIREMENT plus déclaré ici : Next.js réinjecte
+  // ses métadonnées à chaque navigation, ce qui écrasait la couleur choisie
+  // par l'utilisateur (la barre d'état du téléphone redevenait navy).
+  // La balise <meta name="theme-color"> est désormais gérée exclusivement par
+  // `ThemeProvider` (mode clair #E8EDF3 / mode nuit #021231).
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

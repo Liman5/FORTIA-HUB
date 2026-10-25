@@ -8,8 +8,14 @@ import { EnterpriseDirectory } from "@/components/EnterpriseDirectory";
 export function EnterprisesPage() {
   const router = useRouter();
     const { setKycModalOpen } = useUi();
-  const { feeConfig, isUserLoggedIn } = useAuth();
+  const { feeConfig, isUserLoggedIn, userProfile } = useAuth();
   const { enterprises } = useMarketplace();
+
+  // Compte déjà vérifié (badge / KYC validé) : plus d'appel à soumettre un KYC.
+  const kycVerified =
+    userProfile?.kycStatus === "approuve" ||
+    userProfile?.badge === "green" ||
+    userProfile?.badge === "gold";
 
   const handleOpenKyc = () => {
     if (!isUserLoggedIn) {
@@ -25,6 +31,7 @@ export function EnterprisesPage() {
       enterprises={enterprises}
       feeConfig={feeConfig}
       onOpenKycModal={handleOpenKyc}
+      hideKycCta={kycVerified}
     />
   );
 }

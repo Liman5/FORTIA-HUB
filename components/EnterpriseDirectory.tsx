@@ -24,12 +24,15 @@ interface EnterpriseDirectoryProps {
   enterprises: EnterpriseProfile[];
   feeConfig: RegistrationFeeConfig;
   onOpenKycModal: () => void;
+  /** Masque l'appel à soumettre un dossier KYC (compte déjà vérifié). */
+  hideKycCta?: boolean;
 }
 
 export const EnterpriseDirectory: React.FC<EnterpriseDirectoryProps> = ({
   enterprises,
   feeConfig,
-  onOpenKycModal
+  onOpenKycModal,
+  hideKycCta = false
 }) => {
   const [selectedEnterprise, setSelectedEnterprise] = useState<EnterpriseProfile | null>(null);
 
@@ -79,6 +82,7 @@ export const EnterpriseDirectory: React.FC<EnterpriseDirectoryProps> = ({
           </div>
 
           {/* CTA Card */}
+          {!hideKycCta && (
           <motion.div
             whileHover={{ scale: 1.02 }}
             className="relative bg-white/[0.03] border border-[#D69E25]/40 p-6 rounded-2xl text-center space-y-4 shrink-0 w-full md:w-80 shadow-lg backdrop-blur-xl"
@@ -102,6 +106,7 @@ export const EnterpriseDirectory: React.FC<EnterpriseDirectoryProps> = ({
               Demande de Validation & Badge Doré
             </button>
           </motion.div>
+          )}
         </motion.div>
 
         {/* Stats strip */}

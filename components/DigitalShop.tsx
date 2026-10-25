@@ -30,6 +30,12 @@ interface DigitalShopProps {
   onEditProduct?: (product: MarketplaceProduct) => void;
   onOpenStore?: (store: VendorStore) => void;
   onOpenVendorApplication?: () => void;
+  /**
+   * Masque le bouton « Ouvrir ma Boutique » : boutique déjà approuvée,
+   * en attente, ou candidature en cours. Le bouton réapparaît si la
+   * candidature a été rejetée (le vendeur peut la soumettre à nouveau).
+   */
+  hideVendorCta?: boolean;
   onClearSearch?: () => void;
   onSearchChange?: (query: string) => void;
   /** Filtre de type de produit appliqué à l'ouverture (URL ?type=…). */
@@ -49,6 +55,7 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
   onEditProduct,
   onOpenStore,
   onOpenVendorApplication,
+  hideVendorCta = false,
   onClearSearch,
   onSearchChange,
   initialFilter,
@@ -130,14 +137,16 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
               </button>
             )}
           </div>
-          <button
-            onClick={onOpenVendorApplication}
-            className="group relative inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#D69E25] via-[#F6E05E] to-[#AB6F10] bg-[length:200%_auto] hover:bg-right text-[#021231] font-black text-xs uppercase tracking-wider hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg shadow-[#D69E25]/30 overflow-hidden"
-          >
-            <span className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 group-hover:animate-shine transition-opacity" />
-            <Plus className="w-3.5 h-3.5" />
-            Ouvrir ma Boutique
-          </button>
+          {!hideVendorCta && (
+            <button
+              onClick={onOpenVendorApplication}
+              className="group relative inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#D69E25] via-[#F6E05E] to-[#AB6F10] bg-[length:200%_auto] hover:bg-right text-[#021231] font-black text-xs uppercase tracking-wider hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg shadow-[#D69E25]/30 overflow-hidden"
+            >
+              <span className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 group-hover:animate-shine transition-opacity" />
+              <Plus className="w-3.5 h-3.5" />
+              Ouvrir ma Boutique
+            </button>
+          )}
         </div>
 
         {/* STORES CAROUSEL */}
