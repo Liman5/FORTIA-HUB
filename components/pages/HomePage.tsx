@@ -21,7 +21,7 @@ import {
   Download,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store/AppStore";
-import { useCatalog, useMarketplace, useUi } from "@/lib/store/domains/contexts";
+import { useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { COURSE_CATEGORY_FAMILIES, sortByPopularity } from "@/lib/data/courseCategories";
 import { OptimizedImage } from "@/components/OptimizedImage";
@@ -665,7 +665,6 @@ function ResourcesGrid({
    ================================================================== */
 export function HomePage() {
   const router = useRouter();
-  const { setSelectedCourseForPlayer } = useUi();
   const { marketplaceProducts } = useMarketplace();
   const { courses, trainingCenters } = useCatalog();
   const { platformLoaded } = useAppStore();
@@ -782,7 +781,9 @@ export function HomePage() {
                 <CourseCard
                   key={course.id}
                   course={course}
-                  onOpen={() => setSelectedCourseForPlayer(course)}
+                  onOpen={() =>
+                    router.push(`/course/${encodeURIComponent(String((course as { slug?: string }).slug || course.id))}`)
+                  }
                   isFavorite={favorites.includes(course.id)}
                   onToggleFavorite={() => toggleFavorite(course.id)}
                 />

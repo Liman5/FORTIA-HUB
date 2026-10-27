@@ -99,7 +99,9 @@ export function AcademyPage() {
       <div id="academy-courses" className="pt-6">
         <CourseCatalog
           courses={courses}
-          onSelectCourse={(course) => setSelectedCourseForPlayer(course)}
+          onSelectCourse={(course) =>
+            router.push(`/course/${encodeURIComponent(String((course as { slug?: string }).slug || course.id))}`)
+          }
           onAddToCart={addToCart}
           onRateCourse={(courseId, rating) => rateCourse(courseId, rating)}
           searchQuery={searchQuery}

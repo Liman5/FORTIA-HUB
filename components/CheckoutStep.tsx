@@ -109,9 +109,18 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
     [cartItems]
   );
 
+  /** Le panier ne contient-il QUE des formations ? (commande de formation) */
+  const isCourseOrder = useMemo(
+    () => cartItems.length > 0 && cartItems.every((item) => item.type === "course"),
+    [cartItems]
+  );
+
+  /** Portée de la vente : pilote le taux de commission ET l'accès délivré. */
+  const saleScope = isServiceOrder ? "service" : isCourseOrder ? "course" : "digital_product";
+
   /** Commission du panier (type « service » ou « produit numérique », puis général). */
   const commission = useMemo(() => {
-    const scope = isServiceOrder ? "service" : "digital_product";
+    const scope = saleScope;
     const scoped =
       commissionRules.find((r) => r.scope === scope) ||
       commissionRules.find((r) => r.scope === "general");
@@ -124,7 +133,7 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
       commissionUsd: Math.round(commissionUsd * 100) / 100,
       vendorUsd: Math.round((amount - commissionUsd) * 100) / 100,
     };
-  }, [commissionRules, totalAmountUsd, isServiceOrder]);
+  }, [commissionRules, totalAmountUsd, saleScope]);
 
   const handleProcessPayment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,13 +175,15 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
         storeId: isServiceOrder ? undefined : realProduct?.storeId || realStore?.id || undefined,
         storeName: isServiceOrder
           ? "Services FORTIA HUB"
-          : realProduct?.storeName || realStore?.name || "Marketplace FORTIA HUB",
+          : isCourseOrder
+            ? "Académie FORTIA HUB"
+            : realProduct?.storeName || realStore?.name || "Marketplace FORTIA HUB",
         productId: realProduct?.id || firstItem.id,
         productTitle: realProduct?.title || firstItem.title,
         amountUsd: totalAmountUsd,
         platformCommissionUsd: commission.commissionUsd,
         vendorEarningsUsd: commission.vendorUsd,
-        saleScope: isServiceOrder ? "service" : "digital_product",
+        saleScope,
         paymentGateway: selectedGateway,
         transactionRef: ref,
         status: "Payé",

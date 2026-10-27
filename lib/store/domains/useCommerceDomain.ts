@@ -106,24 +106,43 @@ export function useCommerceDomain({
   // --- Validation d'un paiement : commande + historique d'achat ---
   const handlePaymentSuccess = useCallback(
     (order: MarketplaceOrder) => {
+      // Les articles sont lus AVANT de vider le panier : une formation payée
+      // doit ouvrir son accès immédiatement (et être enregistrée côté serveur).
+      const paidItems = [...cartItems];
+      const paidCourseIds = paidItems.filter((item) => item.type === "course").map((item) => item.id);
+      const paidProductIds = paidItems.filter((item) => item.type === "product").map((item) => item.id);
+
       setMarketplaceOrders((prev) => [order, ...prev]);
       setCartItems([]);
 
       if (isUserLoggedIn && userProfile) {
-        const productId = order.productId;
+        const purchased = Array.from(
+          new Set([
+            ...(userProfile.purchasedProductIds || []),
+            ...paidProductIds,
+            ...(paidCourseIds.length === 0 && paidProductIds.length === 0 && order.productId ? [order.productId] : []),
+          ])
+        );
+        const enrolled = Array.from(
+          new Set([...(userProfile.enrolledCourseIds || []), ...paidCourseIds])
+        );
+        const progress: Record<string, number> = { ...((userProfile.courseProgress as Record<string, number>) || {}) };
+        for (const id of paidCourseIds) {
+          if (typeof progress[id] !== "number") progress[id] = 0;
+        }
+
         const updatedProfile: UserProfile = {
           ...userProfile,
-          purchasedProductIds:
-            productId && !(userProfile.purchasedProductIds || []).includes(productId)
-              ? [...(userProfile.purchasedProductIds || []), productId]
-              : userProfile.purchasedProductIds || [],
+          enrolledCourseIds: enrolled,
+          courseProgress: progress,
+          purchasedProductIds: purchased,
           paymentHistory: [
             {
               id: `pay-${Date.now()}`,
               date: new Date().toISOString().split("T")[0],
               amount: order.amountUsd,
               method: order.paymentGateway,
-              items: [order.productTitle],
+              items: paidItems.length > 0 ? paidItems.map((item) => item.title) : [order.productTitle],
               status: "Validé",
             },
             ...(userProfile.paymentHistory || []),
@@ -148,6 +167,8 @@ export function useCommerceDomain({
         amountUsd: order.amountUsd || 0,
         platformCommissionUsd: order.platformCommissionUsd || 0,
         vendorEarningsUsd: order.vendorEarningsUsd || 0,
+        courseIds: paidCourseIds,
+        productIds: paidProductIds.length > 0 ? paidProductIds : order.productId ? [order.productId] : [],
         saleScope: order.saleScope || "digital_product",
         paymentGateway: order.paymentGateway || "Wave API",
         transactionRef: order.transactionRef || "",
@@ -160,7 +181,7 @@ export function useCommerceDomain({
         }
       });
     },
-    [isUserLoggedIn, userProfile, setMarketplaceOrders, setUserProfile]
+    [isUserLoggedIn, userProfile, setMarketplaceOrders, setUserProfile, cartItems, setCartItems]
   );
 
   // --- Commander un service freelance (passe par le panier) ---

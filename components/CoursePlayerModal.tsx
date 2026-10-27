@@ -898,13 +898,13 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                 </h4>
 
                 <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
-                  {course.chapters.map((chapter, idx) => (
-                    <div key={chapter.id} className="space-y-2">
+                  {chapters.map((chapter, idx) => (
+                    <div key={chapter.id || idx} className="space-y-2">
                       <p className="text-xs font-extrabold text-[#021231]">
                         {chapter.title}
                       </p>
                       <div className="space-y-1">
-                        {chapter.lessons.map((lesson) => {
+                        {(chapter.lessons || []).map((lesson) => {
                           const isCurrent = currentLesson?.id === lesson.id;
                           const isDone = completedLessonIds.includes(lesson.id);
                           return (
@@ -947,7 +947,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
               </div>
 
               <div className="space-y-4">
-                {course.quiz.map((q, qi) => {
+                {(course.quiz || []).map((q, qi) => {
                   const isCurrent = qi === currentQuizIndex;
                   const isPast = qi < currentQuizIndex;
                   if (isCurrent || quizSubmitted || isPast) {

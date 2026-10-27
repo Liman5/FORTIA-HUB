@@ -1067,6 +1067,77 @@ export async function POST(req: NextRequest) {
           } as any,
         });
 
+        // ===== ACCÈS AUX FORMATIONS ACHETÉES (source de vérité : le serveur) =====
+        // Un paiement de formation doit ouvrir l'accès : la formation est
+        // ajoutée au compte de l'acheteur (enrolled_course_ids + inscription),
+        // sinon la commande était enregistrée mais le lecteur restait verrouillé.
+        const rawCourseIds = Array.isArray(data.courseIds) ? data.courseIds : [];
+        const rawProductIds = Array.isArray(data.productIds) ? data.productIds : [];
+        const courseIds = rawCourseIds.map((v: unknown) => String(v || "")).filter((v: string) => UUID_PATTERN.test(v));
+        const productIds = rawProductIds.map((v: unknown) => String(v || "")).filter((v: string) => UUID_PATTERN.test(v));
+
+        let buyer: { id: string; enrolledCourseIds: string[]; purchasedProductIds: string[]; courseProgress: unknown } | null =
+          null;
+        const buyerId = uuidOrNull(data.buyerUserId);
+        try {
+          if (buyerId) buyer = await prisma.user.findUnique({ where: { id: buyerId } });
+          if (!buyer && data.buyerEmail) {
+            buyer = await prisma.user.findFirst({
+              where: { email: { equals: String(data.buyerEmail), mode: "insensitive" } },
+            });
+          }
+        } catch (error) {
+          console.warn("[ORDER] Acheteur introuvable:", error);
+        }
+
+        let grantedCourseIds: string[] = [];
+        if (buyer && (courseIds.length > 0 || productIds.length > 0)) {
+          const enrolled = Array.from(new Set([...(buyer.enrolledCourseIds || []), ...courseIds]));
+          const purchased = Array.from(new Set([...(buyer.purchasedProductIds || []), ...productIds]));
+          const progress = {
+            ...((buyer.courseProgress as Record<string, number> | null) || {}),
+          };
+          for (const id of courseIds) {
+            if (typeof progress[id] !== "number") progress[id] = 0;
+          }
+
+          try {
+            await prisma.user.update({
+              where: { id: buyer.id },
+              data: {
+                enrolledCourseIds: enrolled,
+                purchasedProductIds: purchased,
+                courseProgress: progress,
+              },
+            });
+            // Inscription officielle (une seule par formation et par membre)
+            for (const courseId of courseIds) {
+              await prisma.courseEnrollment
+                .upsert({
+                  where: { userId_courseId: { userId: buyer.id, courseId } },
+                  create: { userId: buyer.id, courseId },
+                  update: {},
+                })
+                .catch(() => null);
+            }
+            grantedCourseIds = courseIds;
+
+            for (const courseId of courseIds) {
+              const course = await prisma.course
+                .findUnique({ where: { id: courseId }, select: { title: true } })
+                .catch(() => null);
+              await notifyUser(buyer.id, {
+                title: "Formation débloquée 🎓",
+                message: `Paiement confirmé : « ${course?.title || "votre formation"} » est maintenant accessible dans Ma Bibliothèque.`,
+                type: "success",
+                linkTab: "library",
+              }).catch(() => null);
+            }
+          } catch (error) {
+            console.error("[ORDER] Activation de l'accès impossible:", error);
+          }
+        }
+
         // ===== Notifications de vente (vendeur + diffusion admin/globale) =====
         try {
           if (created.storeId) {
@@ -1111,6 +1182,7 @@ export async function POST(req: NextRequest) {
           commissionUsd,
           vendorUsd,
           commissionRule,
+          enrolledCourseIds: grantedCourseIds,
         });
       }
 

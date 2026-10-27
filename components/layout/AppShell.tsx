@@ -141,6 +141,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       categoryLabel: playerCourse.categoryLabel,
     });
     setSelectedCourseForPlayer(null);
+    // Un seul chemin d'achat : le panier, avec l'étape paiement déjà ouverte.
+    router.push("/cart?payer=1");
   };
 
   // Progression déjà enregistrée + délivrance de l'attestation (compte membre)
