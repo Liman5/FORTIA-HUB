@@ -424,6 +424,14 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                 <h3 className="text-lg font-black text-white">{previewProduct.title}</h3>
                 <p className="text-xs text-slate-300 leading-relaxed">{previewProduct.description}</p>
 
+                {/* Accès à la fiche complète (le bouton « Voir » des cartes a été retiré) */}
+                <a
+                  href={`/product/${encodeURIComponent(String((previewProduct as { slug?: string }).slug || previewProduct.id))}`}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#D69E25] hover:underline"
+                >
+                  Voir la fiche complète →
+                </a>
+
                 <div className="space-y-2 bg-white/[0.04] p-4 rounded-xl border border-white/10">
                   <p className="text-xs font-bold text-[#D69E25]">Inclus :</p>
                   {previewProduct.features &&
