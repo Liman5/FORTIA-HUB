@@ -7,11 +7,11 @@ import { useAuth, useCatalog, useMarketplace, useUi } from "@/lib/store/domains/
 import { useActiveSection } from "@/lib/store/useActiveSection";
 import { MemberDashboard } from "@/components/MemberDashboard";
 import { ProviderProfileManager } from "@/components/ProviderProfileManager";
-import { Lock, Building2 } from "lucide-react";
+import { Lock, Building2, ShieldCheck, ArrowRight } from "lucide-react";
 
 export function MemberPage({ initialTab }: { initialTab?: "settings" | "payments" }) {
   const { isKycModalOpen, setKycModalOpen, setSelectedCourseForPlayer } = useUi();
-  const { isUserLoggedIn, userProfile, sessionChecking, kycSubmissions, myKycSubmissions, myOrders, logoutUser, loginUser } = useAuth();
+  const { isUserLoggedIn, userProfile, sessionChecking, kycSubmissions, myKycSubmissions, myOrders, isAdmin, logoutUser, loginUser } = useAuth();
   const { marketplaceProducts, stores, marketplaceOrders, freelances, enterprises } = useMarketplace();
   const { courses, trainingCenters, ensureCoursesByIds } = useCatalog();
   const { refreshPlatformData } = useAppStore();
@@ -136,6 +136,33 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "payments
             >
               <Building2 className="w-4 h-4" />
               <span>{kycRejected ? "Resoumettre un Dossier KYC" : "Suivre ma Demande KYC"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Accès administrateur : affiché UNIQUEMENT pour un compte admin */}
+      {isAdmin && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-[#D69E25]/45 bg-[#011D46]/80 px-4 py-3">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <span className="w-10 h-10 rounded-xl bg-[#D69E25]/15 border border-[#D69E25]/40 text-[#D69E25] flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-black text-white">Accès administrateur</p>
+                <p className="text-[11px] text-slate-300">
+                  Votre compte dispose des droits d&apos;administration FORTIA HUB.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => router.push("/admin")}
+              className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-[#D69E25] px-4 py-2.5 text-[11px] font-black uppercase tracking-wide text-[#021231] hover:bg-[#E8B44A] transition"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Ouvrir l&apos;administration
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
