@@ -20,7 +20,8 @@ import {
   Download, 
   Lock,
   ChevronRight,
-  UserCheck
+  UserCheck,
+  Star
 } from 'lucide-react';
 
 interface CoursePlayerModalProps {
@@ -130,6 +131,17 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const [offlineCode, setOfflineCode] = useState("");
   const [localVideoUrl, setLocalVideoUrl] = useState<{ url: string; revoke: () => void } | null>(null);
+
+  // ---- Notation de la formation (une note par membre, depuis le lecteur) ----
+  const [myCourseRating, setMyCourseRating] = useState(0);
+  const [rateFeedback, setRateFeedback] = useState("");
+
+  const rateCourseStars = (stars: number) => {
+    if (!onRateCourse) return;
+    setMyCourseRating(stars);
+    onRateCourse(course.id, stars);
+    setRateFeedback("Merci ! Votre note a été enregistrée.");
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -447,10 +459,10 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
             {/* Programme (lecture seule) */}
             <div className="rounded-2xl border border-slate-200 p-4 space-y-3 bg-slate-50">
               <p className="font-black text-xs text-[#021231] uppercase tracking-wider">Programme de la formation</p>
-              {course.chapters.length === 0 ? (
+              {chapters.length === 0 ? (
                 <p className="text-xs text-slate-500 italic">Contenu en préparation…</p>
               ) : (
-                course.chapters.map((ch, ci) => (
+                chapters.map((ch, ci) => (
                   <div key={ch.id || ci} className="space-y-1">
                     <p className="text-xs font-extrabold text-slate-700">{ch.title}</p>
                     <div className="space-y-1">
@@ -495,6 +507,38 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Notation de la formation (membre connecté) */}
+            {hasAccess && onRateCourse && (
+              <div className="hidden sm:flex flex-col items-end gap-0.5">
+                <div className="flex items-center gap-0.5" aria-label="Noter cette formation">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => rateCourseStars(star)}
+                      title={`Donner ${star} étoile${star > 1 ? "s" : ""}`}
+                      aria-label={`Donner ${star} étoile${star > 1 ? "s" : ""}`}
+                      className="p-0.5 transition hover:scale-125"
+                    >
+                      <Star
+                        className={`w-4 h-4 ${
+                          star <= (myCourseRating || Math.round(Number(course.rating) || 0))
+                            ? "text-[#D69E25] fill-[#D69E25]"
+                            : "text-slate-500"
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[9px] font-bold text-slate-400">
+                  {rateFeedback ||
+                    (Number(course.reviewsCount) > 0
+                      ? `${Number(course.rating).toFixed(1)} / 5 · ${course.reviewsCount} avis`
+                      : "Notez cette formation")}
+                </span>
+              </div>
+            )}
+
             {/* Completion Progress Badge */}
             <div className="hidden sm:flex items-center gap-2 bg-[#011D46] px-3 py-1.5 rounded-lg border border-[#D69E25]/30 text-xs">
               <span className="text-slate-300">Progression :</span>

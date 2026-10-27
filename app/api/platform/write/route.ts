@@ -2253,6 +2253,73 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, id: course.id });
       }
 
+      // ============ NOTATION D'UN PRODUIT (membre connecté) ============
+      // Une seule note par membre et par produit ; la moyenne et le nombre
+      // d'avis sont recalculés puis stockés sur le produit.
+      case "rate-product": {
+        const productId = String(data.productId || "");
+        if (!UUID_PATTERN.test(productId)) {
+          return NextResponse.json({ error: "Produit invalide." }, { status: 400 });
+        }
+        const product = await prisma.product.findUnique({ where: { id: productId } });
+        if (!product) {
+          return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
+        }
+
+        const viewer = await getCurrentUser(req).catch(() => null);
+        const rawUserId = String(data.userId || "");
+        const userId = viewer?.id || (UUID_PATTERN.test(rawUserId) ? rawUserId : "");
+        if (!userId) {
+          return NextResponse.json(
+            { error: "Connectez-vous pour noter ce produit." },
+            { status: 401 }
+          );
+        }
+
+        const clampedRating = Math.max(1, Math.min(5, Math.round(Number(data.rating))));
+        if (!Number.isFinite(clampedRating)) {
+          return NextResponse.json({ error: "Note invalide (1 à 5)." }, { status: 400 });
+        }
+
+        const existing = await prisma.productReview.findFirst({
+          where: { productId, userId },
+        });
+        if (existing) {
+          return NextResponse.json({
+            success: true,
+            alreadyRated: true,
+            rating: Number(product.rating) || 0,
+            reviewsCount: product.reviewsCount || 0,
+            message: "Vous avez déjà noté ce produit.",
+          });
+        }
+
+        await prisma.productReview.create({
+          data: { productId, userId, rating: clampedRating },
+        });
+
+        const agg = await prisma.productReview.aggregate({
+          _avg: { rating: true },
+          _count: { id: true },
+          where: { productId },
+        });
+        const newRating = Number((agg._avg.rating || 0).toFixed(1));
+        const newCount = agg._count.id;
+
+        await prisma.product.update({
+          where: { id: productId },
+          data: { rating: newRating, reviewsCount: newCount },
+        });
+
+        return NextResponse.json({
+          success: true,
+          alreadyRated: false,
+          rating: newRating,
+          reviewsCount: newCount,
+          message: "Merci, votre note a été enregistrée.",
+        });
+      }
+
       // ============ NOTATION COURS ============
       case "rate-course": {
         const { courseId, userId, rating } = data;

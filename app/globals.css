@@ -474,6 +474,20 @@ html.light .instructor-header-banner [class*="border-[#D69E25]/"] {
   border-color: rgba(214, 158, 37, 0.4) !important;
 }
 
+/* ===== Visuel produit : image entière et lisible dans les deux thèmes =====
+   Le thème clair convertit les fonds navy en blanc : sans cette règle, un
+   visuel clair se fondait dans le fond et paraissait absent. */
+.product-visual {
+  background-color: #0b1f3a !important;
+}
+html.light .product-visual {
+  background-color: #e9eef5 !important;
+}
+.product-visual img {
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+}
+
 /* ===== Bouton hamburger Sidebar protégé ===== */
 .sidebar-menu-btn {
   background-color: rgba(214, 158, 37, 0.2) !important;

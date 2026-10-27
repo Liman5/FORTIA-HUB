@@ -34,6 +34,7 @@ type WriteAction =
   | "admin-add-instructor"
   | "update-training-center-config"
   | "rate-course"
+  | "rate-product"
   | "create-service"
   | "update-service"
   | "delete-service"

@@ -68,7 +68,14 @@ export function useUiDomain() {
    */
   useEffect(() => {
     const course = selectedCourseForPlayer as (Course & { isLite?: boolean }) | null;
-    if (!course || !course.isLite) return;
+    if (!course) return;
+    // Le catalogue et l'accueil transportent une version allégée (sans
+    // chapitres ni leçons). On récupère donc le détail complet dès que les
+    // chapitres sont absents — sinon le lecteur plantait sur
+    // « Cannot read properties of undefined (reading 'length') ».
+    const hasChapters = Array.isArray((course as any).chapters) && (course as any).chapters.length > 0;
+    if (!course.isLite && hasChapters) return;
+    if ((course as any).detailLoaded) return;
 
     let cancelled = false;
     (async () => {
@@ -77,7 +84,7 @@ export function useUiDomain() {
       setSelectedCourseForPlayer((prev) => {
         const current = prev as (Course & { isLite?: boolean }) | null;
         if (!current || current.id !== course.id) return prev;
-        return { ...current, ...detail } as Course;
+        return { ...current, ...detail, detailLoaded: true } as Course & { detailLoaded?: boolean };
       });
     })();
 

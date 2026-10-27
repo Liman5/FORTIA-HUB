@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useAuth, useCommerce } from "@/lib/store/domains/contexts";
 import { trackProductEvent } from "@/lib/services/track";
+import { apiWritePlatform } from "@/lib/services/platformWrite";
 export interface ProductDetailData {
   id: string;
   slug: string;
@@ -55,6 +56,38 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
 
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string>("");
+
+  // ---- Notation du produit (une note par membre) ----
+  const [ratingValue, setRatingValue] = useState(Number(product.rating) || 0);
+  const [reviewsCountValue, setReviewsCountValue] = useState(Number(product.reviewsCount) || 0);
+  const [myRating, setMyRating] = useState(0);
+  const [ratingBusy, setRatingBusy] = useState(false);
+  const [ratingMsg, setRatingMsg] = useState("");
+
+  const submitRating = async (stars: number) => {
+    if (ratingBusy) return;
+    if (!isUserLoggedIn) {
+      router.push("/login");
+      return;
+    }
+    setRatingBusy(true);
+    setRatingMsg("");
+    setMyRating(stars);
+    const res = await apiWritePlatform("rate-product", {
+      productId: product.id,
+      userId: userProfile?.id,
+      rating: stars,
+    });
+    setRatingBusy(false);
+    if (res.success) {
+      if (typeof (res as any).rating === "number") setRatingValue((res as any).rating);
+      if (typeof (res as any).reviewsCount === "number") setReviewsCountValue((res as any).reviewsCount);
+      setRatingMsg(res.message || "Merci, votre note a été enregistrée.");
+    } else {
+      setMyRating(0);
+      setRatingMsg(res.error || "Note non enregistrée. Réessayez.");
+    }
+  };
 
   // Statistique vendeur : une vue par produit et par session.
   useEffect(() => {
@@ -128,12 +161,12 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Visuel */}
           <div className="space-y-3">
-            <div className="rounded-3xl overflow-hidden border border-[#D69E25]/30 bg-[#011D46] aspect-video">
+            <div className="rounded-3xl overflow-hidden border border-[#D69E25]/30 bg-[#011D46] aspect-video product-visual">
               {product.bannerImage || product.image ? (
                 <img
                   src={product.bannerImage || product.image}
                   alt={product.title}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain p-2"
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">
@@ -169,13 +202,50 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
                   {product.storeName}
                 </p>
               )}
-              {/* Note affichée uniquement si des avis réels existent */}
-              {product.reviewsCount > 0 && (
-                <p className="text-xs text-slate-300 inline-flex items-center gap-1.5">
-                  <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                  {product.rating.toFixed(1)} ({product.reviewsCount} avis)
+              {/* Notation : moyenne réelle + étoiles cliquables (un vote par membre) */}
+              <div className="rounded-2xl border border-[#D69E25]/30 bg-[#011D46]/60 product-rating-card px-3 py-2.5 space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                    {reviewsCountValue > 0 ? (
+                      <span>
+                        <b className="text-white">{ratingValue.toFixed(1)}</b> / 5
+                        <span className="text-slate-400"> ({reviewsCountValue} avis)</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">Aucun avis pour le moment</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-0.5" aria-label="Noter ce produit">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => submitRating(star)}
+                        disabled={ratingBusy}
+                        title={`Donner ${star} étoile${star > 1 ? "s" : ""}`}
+                        aria-label={`Donner ${star} étoile${star > 1 ? "s" : ""}`}
+                        className="p-0.5 transition hover:scale-125 disabled:opacity-50"
+                      >
+                        <Star
+                          className={`w-5 h-5 ${
+                            star <= (myRating || Math.round(ratingValue))
+                              ? "text-[#D69E25] fill-[#D69E25]"
+                              : "text-slate-500"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  {ratingMsg
+                    ? ratingMsg
+                    : isUserLoggedIn
+                      ? "Touchez les étoiles pour noter ce produit."
+                      : "Connectez-vous pour noter ce produit."}
                 </p>
-              )}
+              </div>
             </div>
 
             <div className="flex items-end gap-3 flex-wrap">
@@ -198,9 +268,9 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
               <p className="text-sm text-slate-300 leading-relaxed">{product.description}</p>
             )}
 
-            {product.features.length > 0 && (
+            {(product.features || []).length > 0 && (
               <ul className="space-y-2">
-                {product.features.map((feature, index) => (
+                {(product.features || []).map((feature, index) => (
                   <li key={index} className="flex items-start gap-2 text-xs text-slate-300">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                     <span>{feature}</span>

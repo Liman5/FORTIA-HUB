@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
 import { motion } from "motion/react";
 import { trackProductEvent } from "@/lib/services/track";
 import { CartItem, VendorStore, MarketplaceProduct } from "@/lib/types";
@@ -16,7 +15,6 @@ import {
   Star,
   Search,
   X,
-  Eye,
 } from "lucide-react";
 
 interface DigitalShopProps {
@@ -372,14 +370,6 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                         </span>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <Link
-                          href={`/product/${encodeURIComponent(prod.slug)}`}
-                          className="p-2 rounded-lg border border-white/20 text-slate-300 hover:text-[#D69E25] hover:border-[#D69E25]/60 transition"
-                          title="Voir la fiche produit"
-                          aria-label="Voir la fiche produit"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </Link>
                         <button
                           onClick={() =>
                             onAddToCart({ id: prod.id, type: "product", title: prod.title, price: prod.price, image: prod.image, categoryLabel: prod.typeLabel })
