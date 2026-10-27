@@ -297,7 +297,7 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-[#021231] via-transparent to-transparent opacity-70" />
 
-                    <span className="absolute top-2 left-2 bg-[#021231]/85 backdrop-blur-md text-[#D69E25] border border-[#D69E25]/40 text-[8px] sm:text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wide shadow-lg whitespace-nowrap">
+                    <span className="product-type-badge absolute top-2 left-2 text-[8px] sm:text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wide whitespace-nowrap">
                       {prod.typeLabel}
                     </span>
                     {prod.isPopular && !isAdmin && (

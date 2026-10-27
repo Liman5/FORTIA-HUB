@@ -24,10 +24,12 @@ import { ProductDeliverableUploader, DeliverableFile } from './ProductDeliverabl
 import { AdminInstructorsPanel } from './AdminInstructorsPanel';
 import { AdminServicesPanel } from './AdminServicesPanel';
 import { CommissionRatesPanel } from './admin/CommissionRatesPanel';
+import { CategorySelect, REFERENCE_COURSE_CATEGORIES, REFERENCE_PRODUCT_CATEGORIES } from './CategorySelect';
 import { enhanceTitle, enhanceDescription, enhanceFeatures } from '../utils/aiEnhancer';
 import { getSignedUrl } from '../lib/services/clientUpload';
 import { apiWritePlatform } from '../lib/services/platformWrite';
 import { useAppStore } from '@/lib/store/AppStore';
+import { useCatalog } from '@/lib/store/domains/contexts';
 import { SuccessConfirmationModal } from './SuccessConfirmationModal';
 import { 
   ShieldCheck, 
@@ -327,6 +329,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // centre et de voir le résultat immédiatement (sans rechargement).
   const { setTrainingCenters, refreshPlatformData, loadAdminData } = useAppStore();
   const [activeTab, setActiveTab] = useState<'stats' | 'site_content' | 'courses' | 'products' | 'services' | 'quotes' | 'kyc' | 'fees' | 'marketplace' | 'support' | 'instructors'>(initialTab);
+
+  // Toutes les catégories (base de données + référentiel) pour les formulaires
+  const { courseCategories } = useCatalog();
+  const categoryOptions = useMemo(() => {
+    const fromDb = (courseCategories || []).map((item: any) => ({
+      code: String(item.code || item.id || ''),
+      label: String(item.label || item.name || item.code || ''),
+    }));
+    const seen = new Set<string>();
+    return [...fromDb, ...REFERENCE_COURSE_CATEGORIES].filter((option) => {
+      if (!option.code || seen.has(option.code)) return false;
+      seen.add(option.code);
+      return true;
+    });
+  }, [courseCategories]);
   const [selectedKyc, setSelectedKyc] = useState<KycSubmission | null>(null);
 
   // ---- Verrouillage des dossiers KYC (masquage + code à 6 chiffres) ----
@@ -483,6 +500,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editCourseTitle, setEditCourseTitle] = useState('');
   const [editCourseCategory, setEditCourseCategory] = useState<any>('crypto');
+  const [editCourseCategoryLabel, setEditCourseCategoryLabel] = useState<string>('Cryptomonnaie & Blockchain');
   const [editCoursePrice, setEditCoursePrice] = useState(0);
   const [editCourseLevel, setEditCourseLevel] = useState('Tous niveaux');
   const [editCourseDuration, setEditCourseDuration] = useState(10);
@@ -493,6 +511,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditingCourse(course);
     setEditCourseTitle(course.title);
     setEditCourseCategory(course.category);
+    setEditCourseCategoryLabel(String((course as { categoryLabel?: string }).categoryLabel || course.category || ''));
     setEditCoursePrice(course.price);
     setEditCourseLevel(course.level || 'Tous niveaux');
     setEditCourseDuration(course.durationHours || 10);
@@ -507,7 +526,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       ...editingCourse,
       title: editCourseTitle,
       category: editCourseCategory,
-      categoryLabel: String(editCourseCategory).toUpperCase(),
+      categoryLabel: editCourseCategoryLabel || String(editCourseCategory).toUpperCase(),
       price: Number(editCoursePrice),
       level: editCourseLevel as any,
       durationHours: Number(editCourseDuration),
@@ -566,6 +585,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newCourseTitle, setNewCourseTitle] = useState('');
   const [newCoursePrice, setNewCoursePrice] = useState(79);
   const [newCourseCategory, setNewCourseCategory] = useState<string>('crypto');
+  const [newCourseCategoryLabel, setNewCourseCategoryLabel] = useState<string>('Cryptomonnaie & Blockchain');
 
   const handleSaveFees = (e: React.FormEvent) => {
     e.preventDefault();
@@ -588,7 +608,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       title: newCourseTitle,
       slug: newCourseTitle.toLowerCase().replace(/\s+/g, '-'),
       category: newCourseCategory as any,
-      categoryLabel: newCourseCategory.toUpperCase(),
+      categoryLabel: newCourseCategoryLabel || newCourseCategory,
       description: 'Formation personnalisée ajoutée depuis le panneau d\'administration de FORTIA HUB.',
       fullDescription: 'Programme certifiant complet rédigé par les formateurs agréés.',
       level: 'Tous niveaux',
@@ -627,6 +647,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [adminNewProdEntityId, setAdminNewProdEntityId] = useState(`admin-new-${Date.now()}`);
   const [newProdTitle, setNewProdTitle] = useState('');
   const [newProdType, setNewProdType] = useState<any>('ebook');
+  const [newProdTypeLabel, setNewProdTypeLabel] = useState<string>('eBook PDF');
   const [newProdPrice, setNewProdPrice] = useState(29);
   const [newProdDesc, setNewProdDesc] = useState('');
   const [newProdFormat, setNewProdFormat] = useState('PDF');
@@ -687,7 +708,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       id: `p-custom-${Date.now()}`,
       title: newProdTitle,
       type: newProdType,
-      typeLabel: TYPE_LABELS[newProdType] || 'Ressource Numérique',
+      typeLabel: newProdTypeLabel || TYPE_LABELS[newProdType] || 'Ressource Numérique',
       description: newProdDesc || 'Ressource numérique d\'excellence prête au téléchargement instantané.',
       price: Number(newProdPrice),
       originalPrice: Number(newProdPrice) * 1.5,
@@ -2393,18 +2414,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 <div>
                   <label className="text-xs text-slate-300 block mb-1">Catégorie</label>
-                  <select
+                  <CategorySelect
                     value={newCourseCategory}
-                    onChange={(e) => setNewCourseCategory(e.target.value as any)}
-                    className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-2.5 text-white"
-                  >
-                    <option value="crypto">Cryptomonnaie</option>
-                    <option value="ai">Intelligence Artificielle</option>
-                    <option value="canva">Canva</option>
-                    <option value="capcut">CapCut</option>
-                    <option value="marketing">Marketing Digital</option>
-                    <option value="entrepreneurship">Entrepreneuriat</option>
-                  </select>
+                    labelValue={newCourseCategoryLabel}
+                    categories={categoryOptions}
+                    onChange={(code, label) => {
+                      setNewCourseCategory(code);
+                      setNewCourseCategoryLabel(label);
+                    }}
+                  />
                 </div>
 
                 <div>
@@ -2505,21 +2523,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs text-slate-300 block mb-1 font-bold">Type / Catégorie</label>
-                        <select
-                          value={newProdType}
-                          onChange={(e) => setNewProdType(e.target.value)}
-                          className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-2.5 text-white"
-                        >
-                          <option value="ebook">eBook PDF</option>
-                          <option value="canva_template">Modèle Canva Pro</option>
-                          <option value="ai_prompts">Pack Prompts IA</option>
-                          <option value="whitepaper">White Paper PDF</option>
-                          <option value="business_plan">Business Plan</option>
-                          <option value="contract">Contrat Type</option>
-                          <option value="pitch_deck">Pitch Deck</option>
-                          <option value="premium_pack">Pack Premium</option>
-                          <option value="course">Formation Vidéo (MP4)</option>
-                        </select>
+                        <CategorySelect
+                          value={String(newProdType || '')}
+                          labelValue={newProdTypeLabel}
+                          categories={REFERENCE_PRODUCT_CATEGORIES}
+                          onChange={(code, label) => {
+                            setNewProdType(code);
+                            setNewProdTypeLabel(label);
+                          }}
+                          customPlaceholder="Ex : Modèle de CV, Pack de polices…"
+                        />
                       </div>
 
                       <div>
@@ -2808,18 +2821,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">Catégorie</label>
-                    <select
-                      value={editCourseCategory}
-                      onChange={(e) => setEditCourseCategory(e.target.value)}
+                    <CategorySelect
+                      value={String(editCourseCategory || '')}
+                      labelValue={editCourseCategoryLabel}
+                      categories={categoryOptions}
+                      onChange={(code, label) => {
+                        setEditCourseCategory(code);
+                        setEditCourseCategoryLabel(label);
+                      }}
                       className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white focus:outline-none focus:border-[#D69E25]"
-                    >
-                      <option value="crypto">Cryptomonnaie & Trading</option>
-                      <option value="ai">Intelligence Artificielle</option>
-                      <option value="canva">Canva Design</option>
-                      <option value="capcut">CapCut Video</option>
-                      <option value="marketing">Marketing Digital</option>
-                      <option value="entrepreneurship">Entrepreneuriat</option>
-                    </select>
+                      inputClassName="w-full mt-2 bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white"
+                    />
                   </div>
 
                   <div>

@@ -29,6 +29,8 @@ import {
   Info,
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
+import { CategorySelect, REFERENCE_COURSE_CATEGORIES } from "@/components/CategorySelect";
+import { useCatalog } from "@/lib/store/domains/contexts";
 import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2, resolveStorageUrl } from "@/lib/services/clientUpload";
 import { hashSecret } from "@/lib/services/offlineVideo";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
@@ -84,6 +86,20 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   // New course form
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("ai");
+  const [categoryLabel, setCategoryLabel] = useState("Intelligence Artificielle");
+  const { courseCategories } = useCatalog();
+  const categoryOptions = React.useMemo(() => {
+    const fromDb = (courseCategories || []).map((item: any) => ({
+      code: String(item.code || item.id || ""),
+      label: String(item.label || item.name || item.code || ""),
+    }));
+    const seen = new Set<string>();
+    return [...fromDb, ...REFERENCE_COURSE_CATEGORIES].filter((option) => {
+      if (!option.code || seen.has(option.code)) return false;
+      seen.add(option.code);
+      return true;
+    });
+  }, [courseCategories]);
   const [price, setPrice] = useState(25);
   const [description, setDescription] = useState("");
   const [image, setImage] = useState("");
@@ -775,6 +791,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                             setEditingCourse(c);
                             setTitle(c.title);
                             setCategory(String(c.category || (c as any).categoryId || "ai"));
+    setCategoryLabel(String(c.categoryLabel || c.category || "Intelligence Artificielle"));
                             setPrice(c.price || 25);
                             setDescription(c.description || "");
                             setImage(c.image || "");
@@ -841,6 +858,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       setEditingCourse(c);
                       setTitle(c.title);
                       setCategory(String(c.category || (c as any).categoryId || "ai"));
+    setCategoryLabel(String(c.categoryLabel || c.category || "Intelligence Artificielle"));
                       setPrice(c.price || 25);
                       setDescription(c.description || "");
                       setImage(c.image || "");
@@ -897,14 +915,17 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-slate-300 block mb-1">Catégorie</label>
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white">
-                  <option value="ai">Intelligence Artificielle</option>
-                  <option value="crypto">Cryptomonnaie</option>
-                  <option value="canva">Canva</option>
-                  <option value="marketing">Marketing Digital</option>
-                  <option value="dev_web">Développement Web</option>
-                  <option value="entrepreneurship">Entrepreneuriat</option>
-                </select>
+                <CategorySelect
+                  value={category}
+                  labelValue={categoryLabel}
+                  categories={categoryOptions}
+                  onChange={(code, label) => {
+                    setCategory(code);
+                    setCategoryLabel(label);
+                  }}
+                  className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white"
+                  inputClassName="w-full mt-2 bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white"
+                />
               </div>
               <div>
                 <label className="text-xs text-slate-300 block mb-1">Prix ($ US) *</label>
@@ -1458,7 +1479,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   onUpdateCourse(editingCourseId, {
                     title,
                     category: category as any,
-                    categoryLabel: category,
+                    categoryLabel: categoryLabel || category,
                     description,
                     fullDescription: description,
                     durationHours,
@@ -1497,7 +1518,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                     instructorId: center.ownerId,
                     centerId: center.id,
                     category: category as any,
-                    categoryLabel: category,
+                    categoryLabel: categoryLabel || category,
                     description,
                     fullDescription: description,
                     level: level as any,

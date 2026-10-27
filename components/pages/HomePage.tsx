@@ -577,7 +577,7 @@ function ProductCard({
       <div className="relative h-28 bg-slate-100">
         <Thumb src={product.image} alt={product.title} className="w-full h-full" />
         {product.typeLabel && (
-          <span className="absolute top-2 left-2 bg-white/90 backdrop-blur text-[#0B1B36] border border-slate-200 text-[9px] font-black px-2 py-0.5 rounded-full max-w-[80%] truncate">
+          <span className="product-type-badge absolute top-2 left-2 text-[9px] font-black px-2 py-0.5 rounded-full max-w-[80%] truncate">
             {product.typeLabel}
           </span>
         )}

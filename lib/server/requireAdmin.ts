@@ -98,6 +98,46 @@ export async function requireAdmin(req: NextRequest): Promise<AdminContext | nul
     };
   }
 
+  // 3) Reconnaissance PAR L'EMAIL : un compte utilisateur (rôle « buyer »,
+  // « freelance »…) dont l'adresse figure parmi les comptes administrateurs
+  // actifs — ou dans la liste blanche ADMIN_EMAILS — obtient les droits.
+  // Sans cela, un administrateur créé dans `admin_users` mais dont le compte
+  // membre garde un autre rôle voyait « accès refusé » partout.
+  if (user?.email) {
+    const email = String(user.email).trim().toLowerCase();
+
+    const allowlist = String(process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
+    if (allowlist.includes(email)) {
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: "superadmin",
+        via: "user_role",
+      };
+    }
+
+    try {
+      const adminByEmail = await prisma.adminUser.findFirst({
+        where: { email: { equals: email, mode: "insensitive" }, isActive: true },
+      });
+      if (adminByEmail) {
+        return {
+          id: adminByEmail.id,
+          email: adminByEmail.email,
+          name: adminByEmail.name,
+          role: adminByEmail.role,
+          via: "admin_user",
+        };
+      }
+    } catch {
+      // base momentanément indisponible → on reste fermé
+    }
+  }
+
   return null;
 }
 

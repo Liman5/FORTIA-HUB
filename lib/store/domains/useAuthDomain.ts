@@ -179,8 +179,22 @@ export function useAuthDomain({ setNotifications }: AuthDomainDeps) {
     }
 
     verifyAdmin();
+
+    // Ré-évaluation : après une connexion administrateur (autre onglet/formulaire)
+    // ou un retour sur l'application, le drapeau est réactualisé sans rechargement.
+    const refreshAdmin = () => {
+      void verifyAdmin();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void verifyAdmin();
+    };
+    window.addEventListener("focus", refreshAdmin);
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       mounted = false;
+      window.removeEventListener("focus", refreshAdmin);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
