@@ -78,64 +78,74 @@ export function isSuperAdminRole(role?: unknown): boolean {
  * n'est ni un administrateur authentifié, ni un utilisateur de rôle `admin`.
  */
 export async function requireAdmin(req: NextRequest): Promise<AdminContext | null> {
-  // 1) Token admin (Authorization: Bearer …)
-  const authHeader = req.headers.get("authorization") || "";
-  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  if (bearer) {
-    const admin = await getAdminFromToken(bearer);
-    if (admin) return admin;
-  }
+  // ⚠️ ORDRE IMPORTANT (sécurité) : la SESSION UTILISATEUR (cookie) est
+  // examinée EN PREMIER. Un jeton administrateur resté dans le navigateur
+  // (localStorage) ne doit JAMAIS donner les droits à un compte membre qui
+  // n'est pas administrateur : sinon, après une connexion admin sur le même
+  // appareil, n'importe quel compte voyait le bouton d'administration.
+  const user = await getCurrentUser(req).catch(() => null);
 
-  // 2) Utilisateur connecté avec un rôle d'administration (source de vérité : la base)
-  const user = await getCurrentUser(req);
-  if (user && isAdminRole(user.accountType)) {
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: String(user.accountType),
-      via: "user_role",
-    };
-  }
+  if (user) {
+    const email = String(user.email || "").trim().toLowerCase();
 
-  // 3) Reconnaissance PAR L'EMAIL : un compte utilisateur (rôle « buyer »,
-  // « freelance »…) dont l'adresse figure parmi les comptes administrateurs
-  // actifs — ou dans la liste blanche ADMIN_EMAILS — obtient les droits.
-  // Sans cela, un administrateur créé dans `admin_users` mais dont le compte
-  // membre garde un autre rôle voyait « accès refusé » partout.
-  if (user?.email) {
-    const email = String(user.email).trim().toLowerCase();
-
-    const allowlist = String(process.env.ADMIN_EMAILS || "")
-      .split(",")
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean);
-    if (allowlist.includes(email)) {
+    // a) Rôle d'administration porté par le compte
+    if (isAdminRole(user.accountType)) {
       return {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: "superadmin",
+        role: String(user.accountType),
         via: "user_role",
       };
     }
 
-    try {
-      const adminByEmail = await prisma.adminUser.findFirst({
-        where: { email: { equals: email, mode: "insensitive" }, isActive: true },
-      });
-      if (adminByEmail) {
+    // b) Reconnaissance PAR L'EMAIL : l'adresse figure parmi les comptes
+    //    administrateurs actifs, ou dans la liste blanche ADMIN_EMAILS.
+    if (email) {
+      const allowlist = String(process.env.ADMIN_EMAILS || "")
+        .split(",")
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean);
+
+      if (allowlist.includes(email)) {
         return {
-          id: adminByEmail.id,
-          email: adminByEmail.email,
-          name: adminByEmail.name,
-          role: adminByEmail.role,
-          via: "admin_user",
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: "superadmin",
+          via: "user_role",
         };
       }
-    } catch {
-      // base momentanément indisponible → on reste fermé
+
+      try {
+        const adminByEmail = await prisma.adminUser.findFirst({
+          where: { email: { equals: email, mode: "insensitive" }, isActive: true },
+        });
+        if (adminByEmail) {
+          return {
+            id: adminByEmail.id,
+            email: adminByEmail.email,
+            name: adminByEmail.name,
+            role: adminByEmail.role,
+            via: "admin_user",
+          };
+        }
+      } catch {
+        // base momentanément indisponible → on reste fermé
+      }
     }
+
+    // Compte connecté NON administrateur : refus, même si un jeton admin traîne.
+    return null;
+  }
+
+  // Aucune session utilisateur : seul le jeton de session admin (Bearer) est
+  // accepté (connexion effectuée depuis /admin).
+  const authHeader = req.headers.get("authorization") || "";
+  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  if (bearer) {
+    const admin = await getAdminFromToken(bearer).catch(() => null);
+    if (admin) return admin;
   }
 
   return null;

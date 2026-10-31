@@ -141,8 +141,9 @@ export function MemberPage({ initialTab }: { initialTab?: "settings" | "payments
         </div>
       )}
 
-      {/* Accès administrateur : affiché UNIQUEMENT pour un compte admin */}
-      {isAdmin && (
+      {/* Accès administrateur : affiché UNIQUEMENT pour un compte admin
+          (rôle d'administration OU email présent dans les comptes admin). */}
+      {isUserLoggedIn && isAdmin && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-[#D69E25]/45 bg-[#011D46]/80 px-4 py-3">
             <div className="flex items-center gap-3 flex-1 min-w-0">
