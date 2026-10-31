@@ -352,13 +352,22 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        // ⚠️ SÉCURITÉ : le type de compte envoyé par le navigateur ne doit JAMAIS
+        // pouvoir créer un administrateur. Seuls les rôles publics sont acceptés ;
+        // tout le reste retombe sur « buyer ».
+        const PUBLIC_ACCOUNT_TYPES = ["buyer", "freelance", "enterprise"] as const;
+        const requestedType = String(accountType || "").trim().toLowerCase();
+        const safeAccountType = (PUBLIC_ACCOUNT_TYPES as readonly string[]).includes(requestedType)
+          ? (requestedType as (typeof PUBLIC_ACCOUNT_TYPES)[number])
+          : "buyer";
+
         const newUser = await prisma.user.create({
           data: {
             email: normalizedEmail,
             passwordHash,
             name: name || normalizedEmail.split("@")[0],
             phone: phone || "",
-            accountType: accountType || "buyer",
+            accountType: safeAccountType,
           },
         });
 
