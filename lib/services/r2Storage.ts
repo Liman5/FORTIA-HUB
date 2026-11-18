@@ -263,12 +263,17 @@ export async function deleteFromR2(key: string): Promise<void> {
  */
 export async function getSignedDownloadUrl(
   key: string,
-  expiresInSeconds = 900
+  expiresInSeconds = 900,
+  response?: { contentType?: string; disposition?: string }
 ): Promise<string> {
   const bucket = bucketForKey(key);
   const command = new GetObjectCommand({
     Bucket: bucket,
     Key: key,
+    // Un support PDF de formation doit s'afficher DANS le navigateur
+    // (visionneuse intégrée) plutôt que d'être téléchargé.
+    ...(response?.contentType ? { ResponseContentType: response.contentType } : {}),
+    ...(response?.disposition ? { ResponseContentDisposition: response.disposition } : {}),
   });
   return getSignedUrl(clientForBucket(bucket), command, { expiresIn: expiresInSeconds });
 }

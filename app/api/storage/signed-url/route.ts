@@ -75,7 +75,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const signedUrl = await getSignedDownloadUrl(key, expiresIn);
+    const signedUrl = await getSignedDownloadUrl(
+      key,
+      expiresIn,
+      /\.pdf$/i.test(key) ? { contentType: "application/pdf", disposition: "inline" } : undefined
+    );
 
     return NextResponse.json({
       success: true,

@@ -55,6 +55,18 @@ function toYoutubeEmbedUrl(raw?: string): string | null {
   return null;
 }
 
+// Détecte une leçon « support PDF » : type article + contenu ou URL PDF.
+// (L'enum SQL lesson_type ne connaît que video/article/quiz : un PDF est
+// enregistré en « article » avec content = "pdf".)
+function isPdfLesson(lesson?: Lesson | null): boolean {
+  if (!lesson) return false;
+  const type = String(lesson.type || "");
+  if (type === "pdf") return true;
+  if (type !== "article") return false;
+  const content = String((lesson as any).content || "").toLowerCase();
+  return content === "pdf" || /\.pdf(\?|#|$)/i.test(String(lesson.videoUrl || ""));
+}
+
 // Identifiant stable d'attestation (numéro unique, non aléatoire à chaque rendu)
 function stableHash(value: string): string {
   let h = 2166136261;
@@ -202,7 +214,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
 
     const lessons = course.chapters
       .flatMap((chapter) => chapter.lessons || [])
-      .filter((lesson) => !!lesson.videoUrl);
+      .filter((lesson) => !!lesson.videoUrl && !isPdfLesson(lesson));
 
     if (lessons.length === 0) {
       setOfflineError("Aucune vidéo à télécharger dans ce cours.");
@@ -334,6 +346,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
 
   // Lecteur : détecte si la leçon courante est une vidéo YouTube ou un fichier vidéo direct (MP4/WebM/R2…)
   const currentYoutubeEmbed = currentLesson?.videoUrl ? toYoutubeEmbedUrl(currentLesson.videoUrl) : null;
+  const currentIsPdf = isPdfLesson(currentLesson);
   const currentIsVideoFile =
     !!currentLesson?.videoUrl && currentLesson?.type === "video" && !currentYoutubeEmbed;
 
@@ -676,8 +689,25 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
               {/* Left Lesson Viewer */}
               <div className="lg:col-span-8 space-y-4">
                 <div className="bg-black rounded-xl overflow-hidden aspect-video relative shadow-lg border border-[#D69E25]/30">
-                  {/* Leçon article / sans vidéo : affiche la couverture de la formation */}
-                  {!currentIsVideoFile && !currentYoutubeEmbed ? (
+                  {/* Leçon PDF : visionneuse intégrée (support de cours en PDF) */}
+                  {currentIsPdf ? (
+                    <>
+                      <iframe
+                        key={currentLesson?.id}
+                        className="absolute inset-0 w-full h-full border-0 bg-white"
+                        src={signedVideoUrl || currentLesson?.videoUrl}
+                        title={currentLesson?.title || "Support PDF de la formation"}
+                      />
+                      <a
+                        href={signedVideoUrl || currentLesson?.videoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute bottom-3 right-3 px-3 py-1.5 rounded-lg bg-[#021231]/90 text-[#D69E25] text-[10px] font-black border border-[#D69E25]/50 hover:bg-[#011D46] transition"
+                      >
+                        Ouvrir le PDF dans un onglet ↗
+                      </a>
+                    </>
+                  ) : !currentIsVideoFile && !currentYoutubeEmbed ? (
                     <>
                       <img
                         src={course.image}
@@ -920,6 +950,8 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                               <div className="flex items-center gap-2 overflow-hidden">
                                 {isDone ? (
                                   <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                ) : isPdfLesson(lesson) ? (
+                                  <FileText className="w-3.5 h-3.5 text-[#D69E25] shrink-0" />
                                 ) : (
                                   <PlayCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                 )}

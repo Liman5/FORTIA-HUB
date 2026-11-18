@@ -25,11 +25,12 @@ import {
   Copyright,
   ShieldCheck,
   FileCheck,
+  FileText,
   AlertTriangle,
   Info,
 } from "lucide-react";
 import { TrainingCenter, Course, InstructorCommission, InstructorStoragePurchase } from "@/lib/types";
-import { CategorySelect, REFERENCE_COURSE_CATEGORIES } from "@/components/CategorySelect";
+import { CategorySelect, buildCourseCategoryOptions } from "@/components/CategorySelect";
 import { useCatalog } from "@/lib/store/domains/contexts";
 import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2, resolveStorageUrl } from "@/lib/services/clientUpload";
 import { hashSecret } from "@/lib/services/offlineVideo";
@@ -88,18 +89,10 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const [category, setCategory] = useState("ai");
   const [categoryLabel, setCategoryLabel] = useState("Intelligence Artificielle");
   const { courseCategories } = useCatalog();
-  const categoryOptions = React.useMemo(() => {
-    const fromDb = (courseCategories || []).map((item: any) => ({
-      code: String(item.code || item.id || ""),
-      label: String(item.label || item.name || item.code || ""),
-    }));
-    const seen = new Set<string>();
-    return [...fromDb, ...REFERENCE_COURSE_CATEGORIES].filter((option) => {
-      if (!option.code || seen.has(option.code)) return false;
-      seen.add(option.code);
-      return true;
-    });
-  }, [courseCategories]);
+  const categoryOptions = React.useMemo(
+    () => buildCourseCategoryOptions(courseCategories as any),
+    [courseCategories]
+  );
   const [price, setPrice] = useState(25);
   const [description, setDescription] = useState("");
   const [image, setImage] = useState("");
@@ -115,8 +108,9 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
         id?: string;
         title: string;
         duration: string;
-        type: "video" | "article";
+        type: "video" | "article" | "pdf";
         videoUrl: string;
+        content?: string;
         videoProtected?: boolean;
         videoCodeHash?: string;
       }[];
@@ -125,7 +119,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const [chapterTitle, setChapterTitle] = useState("");
   const [lessonTitle, setLessonTitle] = useState("");
   const [lessonDuration, setLessonDuration] = useState("15 min");
-  const [lessonType, setLessonType] = useState<"video" | "article">("video");
+  const [lessonType, setLessonType] = useState<"video" | "article" | "pdf">("video");
   const [lessonVideoUrl, setLessonVideoUrl] = useState("");
   const [activeChapterIdx, setActiveChapterIdx] = useState<number | null>(null);
 
@@ -144,6 +138,25 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const [videoUploadProgress, setVideoUploadProgress] = useState("");
   const [videoSecretCode, setVideoSecretCode] = useState("");
 
+  // PDF file upload (supports de cours PDF, chapitre par chapitre)
+  const pdfFileRef = useRef<HTMLInputElement>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+
+  /**
+   * Type de leçon côté formulaire : « pdf » est mémorisé en base comme
+   * « article » avec `content = "pdf"` (l'enum `lesson_type` ne connaît que
+   * video / article / quiz). On reconstruit donc le type local à l'édition.
+   */
+  const toLocalLessonType = (lesson: any): "video" | "article" | "pdf" => {
+    const raw = String(lesson?.type || "video");
+    const content = String(lesson?.content || "").toLowerCase();
+    const url = String(lesson?.videoUrl || "");
+    if (raw === "pdf") return "pdf";
+    if (raw === "article" && (content === "pdf" || /\.pdf(\?|#|$)/i.test(url))) return "pdf";
+    if (raw === "quiz") return "article";
+    return raw === "article" ? "article" : "video";
+  };
+
   // ===== Gestion fichiers vidéo R2 : suppression / remplacement =====
   const extractR2Key = (url?: string): string | null => {
     if (!url) return null;
@@ -158,7 +171,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   const askAndRemoveLesson = (ci: number, li: number) => {
     const lesson = chapters[ci]?.lessons[li];
     if (!lesson) return;
-    if (!window.confirm(`Supprimer la leçon « ${lesson.title} » ?\nLa vidéo sera supprimée de Cloudflare et de la base.`)) return;
+    if (!window.confirm(`Supprimer la leçon « ${lesson.title} » ?\nLe fichier (vidéo ou PDF) sera supprimé de Cloudflare et de la base.`)) return;
     // Libère l'espace du quota plateforme selon la taille réelle du fichier
     resolveStorageUrl(lesson.videoUrl)
       .then((url) => (url ? fetch(url, { method: "HEAD" }) : null))
@@ -810,8 +823,9 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                                 lessons: (ch.lessons || []).map((l: any) => ({
                                   title: l.title,
                                   duration: l.duration || "15 min",
-                                  type: l.type === "quiz" ? ("article" as const) : ((l.type || "video") as "video" | "article"),
+                                  type: toLocalLessonType(l),
                                   videoUrl: l.videoUrl || "",
+                                  content: l.content || "",
                                   videoProtected: (l as any).videoProtected,
                                   videoCodeHash: (l as any).videoCodeHash || "",
                                 })),
@@ -877,10 +891,11 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                           lessons: (ch.lessons || []).map((l: any) => ({
                             title: l.title,
                             duration: l.duration || "15 min",
-                            type: l.type === "quiz" ? ("article" as const) : ((l.type || "video") as "video" | "article"),
+                            type: toLocalLessonType(l),
                             videoUrl: l.videoUrl || "",
-                                  videoProtected: (l as any).videoProtected,
-                                  videoCodeHash: (l as any).videoCodeHash || "",
+                            content: l.content || "",
+                            videoProtected: (l as any).videoProtected,
+                            videoCodeHash: (l as any).videoCodeHash || "",
                           })),
                         }))
                       );
@@ -1012,10 +1027,11 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             {/* ===== ÉDITEUR CHAPITRES & LEÇONS (vidéos) ===== */}
             <div className="pt-4 border-t border-slate-800 space-y-4">
               <h4 className="font-bold text-sm text-[#D69E25] flex items-center gap-2">
-                <Video className="w-4 h-4" /> Chapitres & Leçons (Cours & Vidéos)
+                <Video className="w-4 h-4" /> Chapitres & Leçons (Vidéos, PDF & Articles)
               </h4>
               <p className="text-[10px] text-slate-400">
-                Chaque chapitre contient des leçons (vidéo ou article). Les vidéos apparaissent dans le lecteur de formation.
+                Chaque chapitre contient des leçons : vidéo, support PDF (cours en PDF, chapitre par chapitre) ou article.
+                Les vidéos et les PDF apparaissent dans le lecteur de formation.
               </p>
 
               {chapters.map((ch, ci) => (
@@ -1027,7 +1043,13 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   {ch.lessons.map((l, li) => (
                     <div key={li} className="flex items-center justify-between text-[11px] text-slate-300 bg-[#011D46] rounded-lg p-2">
                       <span className="flex items-center gap-1.5">
-                        {l.type === "video" ? <Video className="w-3.5 h-3.5 text-[#D69E25]" /> : <BookOpen className="w-3.5 h-3.5 text-sky-400" />}
+                        {l.type === "video" ? (
+                          <Video className="w-3.5 h-3.5 text-[#D69E25]" />
+                        ) : l.type === "pdf" ? (
+                          <FileText className="w-3.5 h-3.5 text-rose-400" />
+                        ) : (
+                          <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+                        )}
                         {l.title} • {l.duration}
                       </span>
                       {l.type === "video" && l.videoUrl ? (
@@ -1036,6 +1058,12 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         </span>
                       ) : l.type === "video" && !l.videoUrl ? (
                         <span className="shrink-0 text-[10px] font-bold text-red-400">Vidéo manquante ⚠</span>
+                      ) : l.type === "pdf" && l.videoUrl ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/40 rounded-full px-2 py-0.5">
+                          <CheckCircle2 className="w-3 h-3" /> PDF enregistré ✓
+                        </span>
+                      ) : l.type === "pdf" ? (
+                        <span className="shrink-0 text-[10px] font-bold text-red-400">PDF manquant ⚠</span>
                       ) : (
                         <span className="shrink-0 text-[10px] font-bold text-sky-400">Leçon Article</span>
                       )}
@@ -1105,10 +1133,18 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   <div className="flex flex-col gap-2.5 w-full">
                     <select
                       value={lessonType}
-                      onChange={(e) => setLessonType(e.target.value as "video" | "article")}
+                      onChange={(e) => {
+                        setLessonType(e.target.value as "video" | "article" | "pdf");
+                        // Un fichier déjà choisi ne doit pas être réutilisé pour
+                        // un autre type de leçon (vidéo ↔ PDF).
+                        setLessonVideoUrl("");
+                        setVideoUploadProgress("");
+                        setVideoSecretCode("");
+                      }}
                       className="bg-[#011D46] border border-slate-700 text-xs rounded-lg p-2.5 text-white"
                     >
                       <option value="video">Leçon Vidéo</option>
+                      <option value="pdf">Leçon PDF (support de cours)</option>
                       <option value="article">Leçon Article</option>
                     </select>
 
@@ -1273,13 +1309,131 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         className="flex-1 bg-[#011D46] border border-slate-700 text-xs rounded-lg p-2.5 text-white"
                       />
                     )}
+                    {lessonType === "pdf" && (
+                      <>
+                        <input
+                          ref={pdfFileRef}
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+                            if (!isPdf) {
+                              alert("Veuillez choisir un fichier PDF (support de cours).");
+                              if (pdfFileRef.current) pdfFileRef.current.value = "";
+                              return;
+                            }
+                            if (lessonVideoUrl) {
+                              const ok = window.confirm(
+                                "Remplacer le support PDF actuel ?\nL'ancien fichier sera supprimé de Cloudflare pour libérer de l'espace."
+                              );
+                              if (!ok) {
+                                if (pdfFileRef.current) pdfFileRef.current.value = "";
+                                return;
+                              }
+                              deleteVideoFromR2(lessonVideoUrl);
+                            }
+                            if (usedBytes + file.size > quotaBytes) {
+                              alert(
+                                `Stockage du centre atteint (${quotaGb} Go utilisés) : supprimez d'abord des fichiers pour libérer de l'espace avant d'en uploader de nouveaux.`
+                              );
+                              if (pdfFileRef.current) pdfFileRef.current.value = "";
+                              return;
+                            }
+                            setUploadingPdf(true);
+                            try {
+                              const result = await uploadFileToR2(
+                                file,
+                                "course-media",
+                                center?.id || "instructor",
+                                false
+                              );
+                              if (result.success) {
+                                setLessonVideoUrl(result.url);
+                                setUsedBytes((b) => b + file.size);
+                                apiWritePlatform("register-course-media-storage", {
+                                  centerId: center?.id,
+                                  deltaBytes: file.size,
+                                });
+                              } else {
+                                alert(result.error || "Erreur lors de l'upload du support PDF.");
+                              }
+                            } catch (err: any) {
+                              alert(err?.message || "Erreur lors de l'upload du support PDF.");
+                            } finally {
+                              setUploadingPdf(false);
+                              if (pdfFileRef.current) pdfFileRef.current.value = "";
+                            }
+                          }}
+                        />
+                        <div className="flex flex-1 flex-col sm:flex-row gap-2 w-full">
+                          <input
+                            type="text"
+                            value={lessonVideoUrl}
+                            onChange={(e) => setLessonVideoUrl(e.target.value)}
+                            placeholder="URL du support PDF ou cliquez sur « Fichier PDF »"
+                            className="flex-1 bg-[#011D46] border border-slate-700 text-xs rounded-lg p-2.5 text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => !uploadingPdf && pdfFileRef.current?.click()}
+                            disabled={uploadingPdf}
+                            className="px-3 py-2 bg-[#D69E25] text-[#021231] font-bold text-xs rounded-lg hover:bg-amber-400 transition flex items-center gap-1.5 shrink-0 disabled:opacity-60"
+                          >
+                            {uploadingPdf ? (
+                              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Upload…</>
+                            ) : lessonVideoUrl ? (
+                              <><CheckCircle2 className="w-3.5 h-3.5" /> PDF prêt ✓</>
+                            ) : (
+                              <><UploadCloud className="w-3.5 h-3.5" /> Fichier PDF</>
+                            )}
+                          </button>
+                        </div>
+                        {lessonVideoUrl && (
+                          <div className="flex items-center justify-between gap-2 w-full">
+                            <p className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                              <FileText className="w-3.5 h-3.5" /> Support PDF prêt — il s&apos;affichera dans le lecteur de la formation.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const urlToRemove = lessonVideoUrl;
+                                if (!urlToRemove) return;
+                                if (!window.confirm("Retirer ce support PDF ?\nLe fichier sera supprimé de Cloudflare et l'espace libéré.")) return;
+                                setLessonVideoUrl("");
+                                resolveStorageUrl(urlToRemove)
+                                  .then((url) => (url ? fetch(url, { method: "HEAD" }) : null))
+                                  .then((r) => {
+                                    if (!r) return;
+                                    const len = r.headers.get("content-length");
+                                    if (len) {
+                                      const n = Number(len);
+                                      setUsedBytes((b) => Math.max(0, b - n));
+                                      apiWritePlatform("register-course-media-storage", { centerId: center?.id, deltaBytes: -n });
+                                    }
+                                  })
+                                  .catch(() => {});
+                                deleteVideoFromR2(urlToRemove);
+                              }}
+                              className="text-[10px] text-slate-400 hover:text-red-400 font-bold transition"
+                              title="Retirer ce support PDF"
+                            >
+                              ✕ Retirer
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+
                   </div>
                   {videoUploadProgress && (
                     <p className="text-[10px] text-[#D69E25] flex items-center gap-1">
                       <Loader2 className="w-3 h-3 animate-spin" /> {videoUploadProgress}
                     </p>
                   )}
-                  {lessonVideoUrl && (
+                  {lessonType === "video" && lessonVideoUrl && (
                     <div className="space-y-1.5">
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input
@@ -1328,6 +1482,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                             duration: lessonDuration,
                             type: lessonType,
                             videoUrl: lessonVideoUrl,
+                            content: lessonType === "pdf" ? "pdf" : "",
                             videoProtected,
                             videoCodeHash,
                           },
@@ -1456,6 +1611,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                           duration: lessonDuration,
                           type: lessonType,
                           videoUrl: lessonVideoUrl,
+                          content: lessonType === "pdf" ? "pdf" : "",
                           videoProtected: false,
                           videoCodeHash: "",
                         },
@@ -1470,7 +1626,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 }
                 const totalLessons = workingChapters.reduce((s, ch) => s + ch.lessons.length, 0);
                 if (totalLessons === 0) {
-                  alert("Ajoutez au moins une leçon (titre + vidéo) en cliquant sur « + Ajouter la Leçon » avant de publier la formation.");
+                  alert("Ajoutez au moins une leçon (titre + vidéo ou PDF) en cliquant sur « + Ajouter la Leçon » avant de publier la formation.");
                   return;
                 }
 
@@ -1495,8 +1651,11 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         id: `lesson-${Date.now()}-${ci}-${li}`,
                         title: l.title,
                         duration: l.duration,
-                        type: l.type,
+                        // L'enum SQL lesson_type ne connaît que video/article/quiz :
+                        // une leçon PDF est stockée en « article » + content = "pdf".
+                        type: l.type === "pdf" ? "article" : l.type,
                         videoUrl: l.videoUrl,
+                        content: l.type === "pdf" ? "pdf" : l.content || "",
                         videoProtected: (l as any).videoProtected,
                         videoCodeHash: (l as any).videoCodeHash || "",
                       })),
@@ -1538,8 +1697,11 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                         id: `lesson-${Date.now()}-${ci}-${li}`,
                         title: l.title,
                         duration: l.duration,
-                        type: l.type,
+                        // L'enum SQL lesson_type ne connaît que video/article/quiz :
+                        // une leçon PDF est stockée en « article » + content = "pdf".
+                        type: l.type === "pdf" ? "article" : l.type,
                         videoUrl: l.videoUrl,
+                        content: l.type === "pdf" ? "pdf" : l.content || "",
                         videoProtected: (l as any).videoProtected,
                         videoCodeHash: (l as any).videoCodeHash || "",
                       })),

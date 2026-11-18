@@ -44,11 +44,40 @@ import {
   DigitalProductType 
 } from '../types';
 import { VendorStatsPanel } from "./vendor/VendorStatsPanel";
+import { CategorySelect, buildCourseCategoryOptions, slugifyCategory } from './CategorySelect';
+import { useCatalog } from '@/lib/store/domains/contexts';
 import { ProductImageUploader } from './ProductImageUploader';
 import { ProductDeliverableUploader, DeliverableFile } from './ProductDeliverableUploader';
 import { StoreImageUploader } from './StoreImageUploader';
 import { enhanceTitle, enhanceDescription, enhanceFeatures } from '../utils/aiEnhancer';
 import { SuccessConfirmationModal } from './SuccessConfirmationModal';
+
+/**
+ * Codes acceptés par l'enum SQL `product_type`. Le type technique enregistré
+ * doit rester valide même si la catégorie affichée provient de la taxonomie
+ * des formations (crypto, IA, marketing…).
+ */
+const PRODUCT_TYPE_CODES = new Set([
+  'ebook',
+  'canva_template',
+  'ai_prompts',
+  'whitepaper',
+  'business_plan',
+  'contract',
+  'pitch_deck',
+  'premium_pack',
+  'course',
+]);
+
+/** Type technique correspondant à la catégorie choisie par le vendeur. */
+function productTypeForCategory(code: string, label: string): DigitalProductType {
+  if (PRODUCT_TYPE_CODES.has(code)) return code as DigitalProductType;
+  const lower = `${code} ${label}`.toLowerCase();
+  if (lower.includes('formation') || lower.includes('video') || lower.includes('vidéo')) {
+    return 'course' as DigitalProductType;
+  }
+  return 'ebook';
+}
 
 interface VendorDashboardProps {
   store: VendorStore;
@@ -107,6 +136,23 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   const [modalStep, setModalStep] = useState<1 | 2>(1);
   const [prodTitle, setProdTitle] = useState('');
   const [prodType, setProdType] = useState<DigitalProductType>('ebook');
+  /**
+   * Catégorie du produit : EXACTEMENT la même taxonomie que le formulaire
+   * Formateur (catégories enregistrées en base + référentiel de secours).
+   */
+  const { courseCategories } = useCatalog();
+  const categoryOptions = React.useMemo(
+    () => buildCourseCategoryOptions(courseCategories as any),
+    [courseCategories]
+  );
+  const [prodCategory, setProdCategory] = useState('');
+  const [prodCategoryLabel, setProdCategoryLabel] = useState('');
+
+  const selectCategory = (code: string, label: string) => {
+    setProdCategory(code);
+    setProdCategoryLabel(label);
+    setProdType(productTypeForCategory(code, label));
+  };
   const [prodPrice, setProdPrice] = useState<number>(25);
   const [prodFormat, setProdFormat] = useState('PDF');
   const [prodImage, setProdImage] = useState('');
@@ -164,7 +210,8 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     setEditingProduct(null);
     setModalStep(1);
     setProdTitle('');
-    setProdType('ebook');
+    const firstCategory = categoryOptions[0];
+    selectCategory(firstCategory?.code || '', firstCategory?.label || '');
     setProdPrice(25);
     setProdFormat('PDF');
     setProdImage('');
@@ -182,7 +229,18 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     setEditingProduct(p);
     setModalStep(1);
     setProdTitle(p.title);
-    setProdType(p.type as any);
+    // Catégorie : on retrouve celle enregistrée (code ou libellé) ; sinon on la
+    // conserve telle quelle en mode « Autre catégorie ».
+    const knownCategory = categoryOptions.find(
+      (option) => option.code === String(p.type) || option.label === p.typeLabel
+    );
+    if (knownCategory) {
+      selectCategory(knownCategory.code, knownCategory.label);
+    } else if (p.typeLabel) {
+      selectCategory(slugifyCategory(p.typeLabel), p.typeLabel);
+    } else {
+      setProdType(p.type as any);
+    }
     setProdPrice(p.price);
     setProdFormat(p.fileFormat);
     setProdImage(p.image || '');
@@ -214,7 +272,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         ...editingProduct,
         title: prodTitle,
         type: prodType,
-        typeLabel: TYPE_LABELS[prodType] || 'Fichier Numérique',
+        typeLabel: prodCategoryLabel || TYPE_LABELS[prodType] || 'Fichier Numérique',
         price: Number(prodPrice),
         fileFormat: prodFormat,
         image: prodImage,
@@ -235,7 +293,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         title: prodTitle,
         slug: prodTitle.toLowerCase().replace(/\s+/g, '-'),
         type: prodType,
-        typeLabel: TYPE_LABELS[prodType] || 'Fichier Numérique',
+        typeLabel: prodCategoryLabel || TYPE_LABELS[prodType] || 'Fichier Numérique',
         description: prodDesc || 'Ressource numérique d\'excellence prête au téléchargement.',
         price: Number(prodPrice),
         originalPrice: Number(prodPrice) * 1.5,
@@ -847,26 +905,19 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                     />
                   </div>
 
-                  {/* Type & Prix */}
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Catégorie & Prix */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-slate-300 block mb-1 font-bold">Type de Ressource</label>
-                      <select
-                        value={prodType}
-                        onChange={(e) => setProdType(e.target.value as any)}
+                      <label className="text-xs text-slate-300 block mb-1 font-bold">Catégorie</label>
+                      <CategorySelect
+                        value={prodCategory}
+                        labelValue={prodCategoryLabel}
+                        categories={categoryOptions}
+                        onChange={selectCategory}
                         className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-2.5 text-white"
-                      >
-                        <option value="ebook">eBook PDF</option>
-                        <option value="canva_template">Modèle Canva Pro</option>
-                        <option value="ai_prompts">Pack Prompts IA</option>
-                        <option value="whitepaper">White Paper PDF</option>
-                        <option value="business_plan">Business Plan</option>
-                        <option value="contract">Contrat Type</option>
-                        <option value="pitch_deck">Pitch Deck</option>
-                        <option value="pro_templates">Templates Pro</option>
-                        <option value="premium_pack">Pack Premium</option>
-                        <option value="course">Formation Vidéo (MP4)</option>
-                      </select>
+                        inputClassName="w-full mt-2 bg-[#021231] border border-slate-700 text-xs rounded-xl p-2.5 text-white"
+                        customPlaceholder="Nom de votre catégorie"
+                      />
                     </div>
 
                     <div>

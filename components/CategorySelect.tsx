@@ -146,6 +146,28 @@ export const REFERENCE_COURSE_CATEGORIES: CategoryOption[] = [
   { code: "education", label: "Éducation & Enseignement" },
 ];
 
+/**
+ * Construit la liste COMPLÈTE des catégories d'un formulaire :
+ *   1. celles enregistrées en base (table `course_categories`),
+ *   2. puis le référentiel de secours.
+ * Utilisée à l'identique par le formulaire Formateur ET le formulaire Vendeur
+ * afin que les deux proposent exactement les mêmes catégories.
+ */
+export function buildCourseCategoryOptions(
+  dbCategories?: Array<{ code?: string; id?: string; label?: string; name?: string }> | null
+): CategoryOption[] {
+  const fromDb = (dbCategories || []).map((item) => ({
+    code: String(item?.code || item?.id || ""),
+    label: String(item?.label || item?.name || item?.code || ""),
+  }));
+  const seen = new Set<string>();
+  return [...fromDb, ...REFERENCE_COURSE_CATEGORIES].filter((option) => {
+    if (!option.code || !option.label || seen.has(option.code)) return false;
+    seen.add(option.code);
+    return true;
+  });
+}
+
 /** Types de produits numériques de référence. */
 export const REFERENCE_PRODUCT_CATEGORIES: CategoryOption[] = [
   { code: "ebook", label: "eBook PDF" },
