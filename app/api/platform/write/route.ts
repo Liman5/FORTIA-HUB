@@ -83,6 +83,57 @@ function uuidOrNull(value: unknown): string | null {
   return raw && UUID_PATTERN.test(raw) ? raw : null;
 }
 
+/** Slug lisible (sans accents ni caractères spéciaux). */
+function slugifyTitle(value: string): string {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+/**
+ * Slug UNIQUE pour une formation.
+ * Deux formations portant le même titre ne doivent jamais partager la même
+ * URL (sinon la seconde écrase la première côté catalogue).
+ */
+async function uniqueCourseSlug(base: string, excludeId?: string): Promise<string> {
+  const root = slugifyTitle(base) || `cours-${Date.now()}`;
+  let candidate = root;
+  let suffix = 2;
+  while (suffix < 500) {
+    const existing = await prisma.course
+      .findUnique({ where: { slug: candidate }, select: { id: true } })
+      .catch(() => null);
+    if (!existing || existing.id === excludeId) return candidate;
+    candidate = `${root}-${suffix}`;
+    suffix += 1;
+  }
+  return `${root}-${Date.now()}`;
+}
+
+/** Niveaux acceptés par l'enum PostgreSQL `course_level`. */
+const COURSE_LEVELS = new Set([
+  "Debutant",
+  "Intermediaire",
+  "Avance",
+  "Expert",
+  "Tous_niveaux",
+]);
+
+/** Normalise un niveau saisi librement vers une valeur de l'enum SQL. */
+function normalizeCourseLevel(raw: unknown): string {
+  const normalized = String(raw || "Tous_niveaux")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_]/g, "");
+  return COURSE_LEVELS.has(normalized) ? normalized : "Tous_niveaux";
+}
+
+
 /**
  * POST /api/platform/write
  * Persiste une action d'écriture dans Supabase (via Prisma).
@@ -2233,40 +2284,63 @@ export async function POST(req: NextRequest) {
 
       // ============ SUIVI COURS PAR FORMATEUR ============
       case "submit-course-by-instructor": {
-        const category = data.category
-          ? await prisma.courseCategory.findUnique({ where: { code: data.category } })
+        // Catégorie : le client envoie un CODE (« crypto », « ai »…) ou un ID.
+        const categoryRef = String(data.category || data.categoryId || "").trim();
+        const category = categoryRef
+          ? await prisma.courseCategory
+              .findUnique({
+                where: UUID_PATTERN.test(categoryRef)
+                  ? { id: categoryRef }
+                  : { code: categoryRef },
+              })
+              .catch(() => null)
           : null;
 
-        const rawLevel = String(data.level || "Tous_niveaux");
-        const normalizedLevel = rawLevel
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .replace(/\s+/g, "_")
-          .replace(/[^a-zA-Z0-9_]/g, "");
+        // Identifiants STRICTEMENT validés : un « center-123 » local (créé hors
+        // ligne) provoquait une erreur PostgreSQL « invalid input syntax for
+        // type uuid » et la formation n'était jamais enregistrée.
+        const instructorId = uuidOrNull(data.instructorId);
+        const centerId = uuidOrNull(data.centerId);
+        if (!instructorId) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "Session formateur introuvable ou expirée : reconnectez-vous puis republiez la formation.",
+            },
+            { status: 401 }
+          );
+        }
 
-        const course = await prisma.course.create({
-          data: {
-            title: data.title || "Cours sans titre",
-            slug: data.slug || "cours-" + Date.now(),
-            instructorId: data.instructorId || undefined,
-            centerId: data.centerId || undefined,
-            categoryId: category?.id || undefined,
-            categoryLabel: data.categoryLabel || data.category || "",
-            description: data.description || "",
-            fullDescription: data.fullDescription || "",
-            level: normalizedLevel || "Tous_niveaux",
-            durationHours: data.durationHours || 0,
-            lessonsCount: data.lessonsCount || 0,
-            price: data.price || 0,
-            image: data.image || "",
-            badge: data.badge || "",
-            instructorName: data.instructorName || "",
-            instructorRole: data.instructorRole || "",
-            instructorAvatar: data.instructorAvatar || "",
-            learningOutcomes: data.learningOutcomes || [],
-            isPublished: data.isPublished ?? false,
-          } as any,
-        });
+        const title = String(data.title || "").trim() || "Cours sans titre";
+        const slug = await uniqueCourseSlug(String(data.slug || title));
+
+        let course: { id: string } | null = null;
+        try {
+          course = await prisma.course.create({
+            data: {
+              title,
+              slug,
+              instructorId,
+              centerId: centerId || undefined,
+              categoryId: category?.id || undefined,
+              categoryLabel: data.categoryLabel || data.category || "",
+              description: data.description || "",
+              fullDescription: data.fullDescription || "",
+              level: normalizeCourseLevel(data.level),
+              durationHours: data.durationHours || 0,
+              lessonsCount: data.lessonsCount || 0,
+              price: data.price || 0,
+              image: data.image || "",
+              badge: data.badge || "",
+              instructorName: data.instructorName || "",
+              instructorRole: data.instructorRole || "",
+              instructorAvatar: data.instructorAvatar || "",
+              learningOutcomes: data.learningOutcomes || [],
+              isPublished: data.isPublished ?? false,
+            } as any,
+          });
+
 
         if (Array.isArray(data.chapters)) {
           for (const [ci, chapter] of data.chapters.entries()) {
@@ -2320,6 +2394,16 @@ export async function POST(req: NextRequest) {
               }
             }
           }
+        }
+
+        } catch (error) {
+          // Aucune formation « fantôme » : si un chapitre, une leçon ou le quiz
+          // échoue, la formation déjà créée est annulée et l'erreur réelle est
+          // remontée au client (qui l'affiche désormais).
+          if (course?.id) {
+            await prisma.course.delete({ where: { id: course.id } }).catch(() => {});
+          }
+          throw error;
         }
 
         return NextResponse.json({ success: true, id: course.id });

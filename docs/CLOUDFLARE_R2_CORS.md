@@ -133,9 +133,42 @@ access-control-allow-headers: Content-Type,Authorization,...
 ## 🔑 Variables d'environnement nécessaires
 
 ```env
-CLOUDFLARE_ACCOUNT_ID=2077d7397173362bc01b49d49de0c2c7
+CLOUDFLARE_ACCOUNT_ID=<votre_account_id>
 CLOUDFLARE_BUCKET_NAME=fortia-hub-storage
-CLOUDFLARE_BUCKET_ENDPOINT=https://2077d7397173362bc01b49d49de0c2c7.r2.cloudflarestorage.com
-CLOUDFLARE_BUCKET_ACCESS_KEY=05f1ac8a1e707aca4970bbd4b31cc272
-CLOUDFLARE_BUCKET_SECRET_KEY=2bf0a20b42158c51738b93ba5c9d0a3f5041567d70a703c067e787c90eca5774
-CLOUDFLARE_BUCKET_PUBLIC_URL=https://pub-82bdba5e95cc4625abb92ef38fc07f49.r2.dev
+CLOUDFLARE_BUCKET_ENDPOINT=https://<votre_account_id>.r2.cloudflarestorage.com
+CLOUDFLARE_BUCKET_ACCESS_KEY=<votre_access_key>
+CLOUDFLARE_BUCKET_SECRET_KEY=<votre_secret_key>
+CLOUDFLARE_BUCKET_PUBLIC_URL=https://pub-xxxxxxxxxxxxxxxxxxxx.r2.dev
+
+# Bucket PRIVÉ : vidéos de formation, supports PDF, livrables produits, KYC
+CLOUDFLARE_PRIVATE_BUCKET_NAME=fortia-hub-private
+CLOUDFLARE_PRIVATE_BUCKET_ACCESS_KEY=<votre_access_key_prive>
+CLOUDFLARE_PRIVATE_BUCKET_SECRET_KEY=<votre_secret_key_prive>
+```
+
+---
+
+## 🚨 Cas « l'upload vidéo s'arrête en cours de route »
+
+Les vidéos et les PDF de formation sont envoyés **directement du navigateur vers
+le bucket PRIVÉ** (`fortia-hub-private`) via une URL PUT présignée. Cette voie
+exige une règle CORS **sur le bucket privé** :
+
+| Champ | Valeur obligatoire |
+|---|---|
+| Allowed origins | `*` (couvre le domaine de production et les aperçus Vercel) |
+| Allowed methods | `GET`, `HEAD`, `PUT`, `POST`, `DELETE` |
+| Allowed headers | `*` |
+| Expose headers | `ETag`, `Location` |
+
+Diagnostic rapide (sans authentification) — un `403` signifie que l'origine est
+refusée, donc que l'upload depuis le site échouera :
+
+```powershell
+node scripts/check-r2-cors.mjs
+node scripts/setup-r2-cors.mjs   # applique les règles aux 2 buckets (jeton avec droits CORS requis)
+```
+
+> ⚠️ Le jeton R2 doit disposer des droits de modification des CORS. Sinon,
+> ajoutez la règle manuellement : **Cloudflare > R2 > fortia-hub-private >
+> Settings > CORS Policy**.

@@ -139,7 +139,7 @@ function sanitizeFileName(fileName: string): string {
 /**
  * POST /api/storage/presign-upload
  * Body (JSON) : { folder, fileName, contentType, entityId, size }
- * Réponse : { key, uploadUrl (PUT présigné 15 min), publicUrl ('' si privé) }
+ * Réponse : { key, uploadUrl (PUT présigné 1 h), publicUrl ('' si privé) }
  *
  * ⚠️ SESSION OBLIGATOIRE : seuls le propriétaire de la ressource ou un
  * administrateur peuvent obtenir une autorisation de téléversement.
@@ -231,7 +231,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const uploadUrl = await getPresignedUploadUrl(key, contentType, 900);
+    const uploadUrl = await getPresignedUploadUrl(key, contentType, 3600);
     // Aucune URL publique pour un dossier privé (KYC, livrables, vidéos)
     const publicUrl = isPublicFolder(folder) ? getPublicObjectUrl(key) : "";
 

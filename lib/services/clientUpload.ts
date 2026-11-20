@@ -442,9 +442,15 @@ export async function uploadCourseVideoDirect(
   // ---- Phase 1 : préparer l'URL présignée ----
   let presignRes: Response;
   try {
+    const adminToken = readAdminToken();
     presignRes = await fetch("/api/storage/presign-upload", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // Session membre (cookie) + éventuel jeton admin : la route exige un
+        // acteur authentifié pour délivrer une autorisation d'upload.
+        ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+      },
       body: JSON.stringify({
         // Dossier explicite : les vidéos de formation vont dans le bucket PRIVÉ
         folder: "course-media",
@@ -537,7 +543,9 @@ function putFileWithProgress(
         reject(new Error(`HTTP ${xhr.status}`));
       }
     };
-    xhr.onerror = () => reject(new Error("Erreur réseau pendant l'upload direct"));
+    xhr.onerror = () => reject(new Error("Erreur réseau pendant l'upload direct (connexion coupée ou CORS du bucket R2)."));
+    xhr.ontimeout = () => reject(new Error("Délai dépassé pendant l'upload direct (connexion interrompue)."));
+    xhr.onabort = () => reject(new Error("Upload interrompu par le navigateur."));
     xhr.send(file);
   });
 }

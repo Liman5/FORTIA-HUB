@@ -52,8 +52,13 @@ interface InstructorDashboardProps {
   /** Photo de profil du membre connecté (source UNIQUE du visuel du formateur). */
   userAvatar?: string;
   onCreateCenter: (data: { centerName: string; description: string }) => void;
-  onAddCourse: (course: Course) => void;
-  onUpdateCourse: (courseId: string, updates: Partial<Course>) => void;
+  onAddCourse: (
+    course: Course
+  ) => Promise<{ success: boolean; id?: string; error?: string }> | void;
+  onUpdateCourse: (
+    courseId: string,
+    updates: Partial<Course>
+  ) => Promise<{ success: boolean; id?: string; error?: string }> | void;
   onSuspendCourse: (courseId: string) => void;
   onDeleteCourse: (courseId: string) => void;
   onBuyStorage: (center: TrainingCenter, amountGb: number, amountUsd: number) => void;
@@ -1199,7 +1204,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                             try {
                               const result = await uploadCourseVideoDirect(
                                 file,
-                                center?.id || "instructor",
+                                center?.id || userId || "instructor",
                                 (pct) => {
                                   setVideoUploadProgress(`Upload vidéo : ${pct}%`);
                                 }
@@ -1215,11 +1220,17 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                                 });
                               } else {
                                 setVideoUploadProgress("");
-                                alert(result.error || "Erreur lors de l'upload de la vidéo.");
+                                alert(
+                                  (result.error || "Erreur lors de l'upload de la vidéo.") +
+                                    "\n\nLa vidéo n'a PAS été enregistrée : cliquez de nouveau sur « Fichier » pour réessayer."
+                                );
                               }
                             } catch (err: any) {
                               setVideoUploadProgress("");
-                              alert(err?.message || "Erreur lors de l'upload de la vidéo.");
+                              alert(
+                                (err?.message || "Erreur lors de l'upload de la vidéo.") +
+                                  "\n\nLa vidéo n'a PAS été enregistrée : cliquez de nouveau sur « Fichier » pour réessayer."
+                              );
                             } finally {
                               setUploadingVideo(false);
                               if (videoFileRef.current) videoFileRef.current.value = "";
@@ -1347,7 +1358,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                               const result = await uploadFileToR2(
                                 file,
                                 "course-media",
-                                center?.id || "instructor",
+                                center?.id || userId || "instructor",
                                 false
                               );
                               if (result.success) {
@@ -1580,7 +1591,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             </div>
 
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (!title.trim()) { alert("Veuillez indiquer un titre."); return; }
                 // AJOUT AUTOMATIQUE : la leçon en cours est enregistrée sans obliger
                 // à cliquer sur « + Ajouter la Leçon » (chapitre auto-créé si besoin).
@@ -1629,10 +1640,26 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   alert("Ajoutez au moins une leçon (titre + vidéo ou PDF) en cliquant sur « + Ajouter la Leçon » avant de publier la formation.");
                   return;
                 }
+                // Une leçon vidéo/PDF sans fichier ne doit pas être publiée : c'est
+                // exactement ce qui arrivait lorsqu'un upload était interrompu.
+                const missingFile = workingChapters
+                  .flatMap((ch) => ch.lessons)
+                  .find(
+                    (l) =>
+                      (l.type === "video" || l.type === "pdf") &&
+                      !String(l.videoUrl || "").trim()
+                  );
+                if (missingFile) {
+                  alert(
+                    `Le fichier de la leçon « ${missingFile.title} » est manquant (upload interrompu ?).\n` +
+                      "Cliquez de nouveau sur « Fichier » / « Fichier PDF » pour terminer l'envoi, puis republiez."
+                  );
+                  return;
+                }
 
                 if (editingCourseId) {
                   // MODE ÉDITION : mettre à jour la formation existante
-                  onUpdateCourse(editingCourseId, {
+                  const updateResult = await onUpdateCourse(editingCourseId, {
                     title,
                     category: category as any,
                     categoryLabel: categoryLabel || category,
@@ -1668,13 +1695,27 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       explanation: q.explanation,
                     })),
                   } as any);
+                  if (updateResult && updateResult.success === false) {
+                    alert(
+                      updateResult.error ||
+                        "La formation n'a pas pu être mise à jour. Vérifiez votre connexion puis réessayez."
+                    );
+                    return;
+                  }
                 } else {
                   // MODE CRÉATION
-                  onAddCourse({
+                  const createResult = await onAddCourse({
                     id: `course-${Date.now()}`,
                     title,
-                    slug: title.toLowerCase().replace(/\s+/g, "-"),
-                    instructorId: center.ownerId,
+                    slug: title
+                      .toLowerCase()
+                      .normalize("NFD")
+                      .replace(/[\u0300-\u036f]/g, "")
+                      .replace(/[^a-z0-9]+/g, "-")
+                      .replace(/^-+|-+$/g, ""),
+                    // Toujours un formateur valide, même si le centre n'a pas
+                    // encore d'ownerId enregistré.
+                    instructorId: center.ownerId || userId || "",
                     centerId: center.id,
                     category: category as any,
                     categoryLabel: categoryLabel || category,
@@ -1714,11 +1755,21 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       explanation: q.explanation,
                     })),
                   });
+                  if (createResult && createResult.success === false) {
+                    alert(
+                      createResult.error ||
+                        "La formation n'a pas pu être publiée. Vérifiez votre connexion puis réessayez."
+                    );
+                    return;
+                  }
                 }
                 setEditingCourseId(null); setEditingCourse(null);
                 setTitle(""); setDescription(""); setImage("");
                 setChapters([]); setQuizQuestions([]); setActiveChapterIdx(null);
                 setShowCourseSuccess(true);
+                // On affiche immédiatement la liste des formations : le formateur
+                // voit sa publication sans avoir à changer d'onglet.
+                setActiveTab("overview");
               }}
               className="w-full py-3.5 bg-[#D69E25] text-[#021231] font-black text-xs rounded-xl hover:bg-amber-400 transition shadow-lg flex items-center justify-center gap-2"
             >
@@ -1781,8 +1832,8 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
         <SuccessConfirmationModal
           isOpen={showCourseSuccess}
           onClose={() => setShowCourseSuccess(false)}
-          title="Formation publiée !"
-          message="Votre formation a été enregistrée et publiée avec succès. Elle est maintenant visible dans votre catalogue et sur la plateforme."
+          title="Formation enregistrée !"
+          message="Votre formation a bien été enregistrée en base et publiée. Elle est maintenant visible dans la liste de vos formations ci-dessus (et sur la plateforme)."
         />
 
         {/* ===== Règles de publication (anti-abus) ===== */}

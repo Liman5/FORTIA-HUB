@@ -140,11 +140,14 @@ export function useCatalogDomain({
   );
 
   const updateInstructorCourse = useCallback(
-    (courseId: string, updates: Partial<Course>) => {
+    async (
+      courseId: string,
+      updates: Partial<Course>
+    ): Promise<{ success: boolean; error?: string; id?: string }> => {
       setCourses((prev) =>
         prev.map((c) => (c.id === courseId ? { ...c, ...updates } : c))
       );
-      apiWritePlatform("update-course", {
+      const res = await apiWritePlatform("update-course", {
         id: courseId,
         title: updates.title,
         slug: updates.slug,
@@ -166,11 +169,18 @@ export function useCatalogDomain({
         chapters: (updates as any).chapters || [],
         quiz: (updates as any).quiz || [],
       });
-      alert("✅ Formation mise à jour avec succès !");
+      if (!res.success) {
+        return {
+          success: false,
+          error: res.error || "La formation n'a pas pu être mise à jour.",
+        };
+      }
       clearPlatformCache();
-      refreshPlatformData();
+      await refreshPlatformData();
+      await loadAllCourses();
+      return { success: true, id: courseId };
     },
-    []
+    [refreshPlatformData, loadAllCourses]
   );
 
   const rateCourse = useCallback(
@@ -206,15 +216,39 @@ export function useCatalogDomain({
   );
 
   const addInstructorCourse = useCallback(
-    (course: Course) => {
+    async (course: Course): Promise<{ success: boolean; id?: string; error?: string }> => {
       const tempId = String(course.id || `course-${Date.now()}`);
-      setCourses((prev) => [{ ...(course as any), id: tempId } as Course, ...prev]);
-      apiWritePlatform("submit-course-by-instructor", {
+      const instructorId = userProfile?.id;
+      if (!instructorId) {
+        return {
+          success: false,
+          error: "Session expirée : reconnectez-vous pour publier une formation.",
+        };
+      }
+
+      // Un identifiant de centre local (« center-1792… », créé hors ligne) ne
+      // doit JAMAIS être envoyé en base : PostgreSQL rejette un UUID invalide et
+      // la formation n'était alors jamais enregistrée (échec silencieux).
+      const UUID_PATTERN =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const candidateCenterId = String(course.centerId || instructorCenter?.id || "");
+      const centerId = UUID_PATTERN.test(candidateCenterId) ? candidateCenterId : "";
+
+      const optimistic: Course = {
+        ...(course as any),
+        id: tempId,
+        instructorId,
+        centerId,
+      } as Course;
+      setCourses((prev) => [optimistic, ...prev]);
+
+      const res = await apiWritePlatform("submit-course-by-instructor", {
         title: course.title,
         slug: course.slug || `cours-${Date.now()}`,
-        instructorId: userProfile?.id,
-        centerId: instructorCenter?.id,
-        categoryId: course.category as string,
+        instructorId,
+        centerId: centerId || undefined,
+        // Le serveur résout la catégorie par son CODE (« crypto », « ai »…).
+        category: course.category,
         categoryLabel: course.categoryLabel || course.category,
         description: course.description,
         fullDescription: course.fullDescription,
@@ -230,17 +264,29 @@ export function useCatalogDomain({
         chapters: course.chapters || [],
         quiz: course.quiz || [],
         isPublished: true,
-      }).then((res) => {
-        if (res.success && res.id) {
-          setCourses((prev) =>
-            prev.map((c) => (c.id === tempId ? { ...c, id: res.id as string } : c))
-          );
-          clearPlatformCache();
-          refreshPlatformData();
-        }
       });
+
+      if (!res.success || !res.id) {
+        // Échec RÉEL : on retire la ligne optimiste (le formateur ne doit pas
+        // croire à une publication qui n'existe pas en base).
+        setCourses((prev) => prev.filter((c) => c.id !== tempId));
+        return {
+          success: false,
+          error: res.error || "La formation n'a pas pu être enregistrée.",
+        };
+      }
+
+      setCourses((prev) =>
+        prev.map((c) => (c.id === tempId ? { ...c, id: res.id as string } : c))
+      );
+      clearPlatformCache();
+      await refreshPlatformData();
+      // Relecture depuis la base : ce qui est affiché est exactement ce qui est
+      // enregistré (y compris les brouillons) — plus de « publié mais invisible ».
+      await loadAllCourses();
+      return { success: true, id: res.id };
     },
-    [userProfile, instructorCenter]
+    [userProfile, instructorCenter, refreshPlatformData, loadAllCourses]
   );
 
   const addCourseCategory = useCallback(

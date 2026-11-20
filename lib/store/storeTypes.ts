@@ -199,8 +199,13 @@ export interface AppStoreContextValue {
   instructorStoragePurchases: InstructorStoragePurchase[];
   instructorCenter: TrainingCenter | null;
   createTrainingCenter: (data: { centerName: string; description: string }) => void;
-  addInstructorCourse: (course: Course) => void;
-  updateInstructorCourse: (courseId: string, updates: Partial<Course>) => void;
+  addInstructorCourse: (
+    course: Course
+  ) => Promise<{ success: boolean; id?: string; error?: string }>;
+  updateInstructorCourse: (
+    courseId: string,
+    updates: Partial<Course>
+  ) => Promise<{ success: boolean; id?: string; error?: string }>;
   rateCourse: (courseId: string, rating: number) => void;
   suspendInstructorCourse: (courseId: string) => void;
   deleteInstructorCourse: (courseId: string) => void;
