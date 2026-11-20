@@ -77,15 +77,22 @@ console.log("\n=== 1. Matrice d'autorisation (statique) ===");
 const routeSrc = fs.readFileSync(path.join(ROOT, "app/api/platform/write/route.ts"), "utf8");
 const authSrc = fs.readFileSync(path.join(ROOT, "lib/server/writeAuthorization.ts"), "utf8");
 
-const routeActions = new Set([...routeSrc.matchAll(/case "([a-z0-9-]+)":/g)].map((m) => m[1]));
+const handlerDir = path.join(ROOT, "lib/modules/write/handlers");
+const handlerSrc = fs
+  .readdirSync(handlerDir)
+  .filter((name) => name.endsWith(".ts"))
+  .map((name) => fs.readFileSync(path.join(handlerDir, name), "utf8"))
+  .join("\n");
+
+const routeActions = new Set([...handlerSrc.matchAll(/case "([a-z0-9-]+)":/g)].map((m) => m[1]));
 const policyActions = new Set(
   [...authSrc.matchAll(/^\s{2}"([a-z0-9-]+)":\s*\{\s*actor:/gm)].map((m) => m[1])
 );
 
 /**
  * Phase 2 : ces 4 actions simulaient un paiement. Elles ne sont plus
- * exécutables (410) et n'ont plus de politique ; le code des `case` reste
- * en place (inatteignable) jusqu'au découpage de la route (Phase 3).
+ * exécutables (410), n'ont plus de politique et n'ont plus de handler
+ * depuis la Phase 5 (découpage en modules).
  */
 const DEPRECATED_ACTIONS = [
   "submit-order",
@@ -97,8 +104,13 @@ const activeRouteActions = new Set(
   [...routeActions].filter((action) => !DEPRECATED_ACTIONS.includes(action))
 );
 
-check(activeRouteActions.size === 54, "54 actions actives dans la route", `trouvées: ${activeRouteActions.size}`);
+check(activeRouteActions.size === 54, "54 actions actives dans les handlers", `trouvées: ${activeRouteActions.size}`);
 check(policyActions.size === 54, "54 politiques déclarées", `trouvées: ${policyActions.size}`);
+check(
+  DEPRECATED_ACTIONS.every((action) => !routeActions.has(action)),
+  "Aucun handler pour les 4 actions de paiement historiques",
+  DEPRECATED_ACTIONS.filter((action) => routeActions.has(action)).join(", ")
+);
 
 const missing = [...activeRouteActions].filter((a) => !policyActions.has(a));
 const extra = [...policyActions].filter((a) => !activeRouteActions.has(a));
@@ -109,6 +121,11 @@ check(
     DEPRECATED_ACTIONS.every((action) => routeSrc.includes(`"${action}"`)),
   "Actions de paiement historiques neutralisées (410)",
   DEPRECATED_ACTIONS.filter((action) => !routeSrc.includes(`"${action}"`)).join(", ")
+);
+check(
+  routeSrc.length < 10000 && !/case "[a-z0-9-]+":/.test(routeSrc),
+  "Route centrale = adaptateur sans logique métier",
+  `longueur=${routeSrc.length}`
 );
 
 const policyLines = authSrc

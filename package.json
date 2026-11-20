@@ -10,7 +10,7 @@
     "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "tsx --test tests/unit/*.test.ts",
+    "test": "tsx --conditions=react-server --test tests/unit/*.test.ts",
     "test:authz": "node scripts/test-write-authorization.mjs",
     "test:payments": "node scripts/test-payments-phase2.mjs",
     "test:academy": "node scripts/test-academy-certificates.mjs",
@@ -38,6 +38,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "resend": "^6.18.1",
+    "server-only": "^0.0.1",
     "web-push": "^3.6.7",
     "zod": "^3.24.0"
   },
