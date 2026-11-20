@@ -212,6 +212,11 @@ export async function issueCourseCertificate(
       return toDto(row);
     } catch (error) {
       if (String((error as { code?: string })?.code || "") !== "P2002") throw error;
+      // Course concurrente : l'attestation existe déjà (unicité métier).
+      const concurrent = await prisma.certificate.findFirst({
+        where: { userId: input.userId, courseId: input.courseId },
+      });
+      if (concurrent) return toDto(concurrent);
     }
   }
 

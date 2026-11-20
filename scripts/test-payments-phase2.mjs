@@ -264,6 +264,7 @@ async function cleanup() {
     if (orderIds.length > 0) {
       await prisma.refund.deleteMany({ where: { orderId: { in: orderIds } } });
       await prisma.paymentTransaction.deleteMany({ where: { orderId: { in: orderIds } } });
+      await prisma.marketplaceOrderItem.deleteMany({ where: { orderId: { in: orderIds } } });
       await prisma.marketplaceOrder.deleteMany({ where: { id: { in: orderIds } } });
     }
     const centerIds = [state.centerA?.id, state.centerB?.id].filter(Boolean);

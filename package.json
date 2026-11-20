@@ -14,8 +14,11 @@
     "test:authz": "node scripts/test-write-authorization.mjs",
     "test:payments": "node scripts/test-payments-phase2.mjs",
     "test:academy": "node scripts/test-academy-certificates.mjs",
-    "test:integration": "node scripts/test-write-authorization.mjs && node scripts/test-payments-phase2.mjs && node scripts/test-academy-certificates.mjs",
-    "verify": "npm run typecheck && npm run lint && npm test",
+    "test:db": "node scripts/test-database-integrity.mjs",
+    "test:migrations": "node scripts/test-migrations-replay.mjs",
+    "test:database": "node scripts/test-migrations-replay.mjs && node scripts/test-database-integrity.mjs",
+    "test:integration": "node scripts/test-write-authorization.mjs && node scripts/test-payments-phase2.mjs && node scripts/test-academy-certificates.mjs && node scripts/test-migrations-replay.mjs && node scripts/test-database-integrity.mjs",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run test:database",
     "smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {

@@ -7,7 +7,11 @@
 // ============================================================
 
 import { prisma } from "@/lib/prisma";
-import { grantEntitlement, revokeEntitlementsBySubscription } from "./entitlements";
+import {
+  grantEntitlement,
+  revokeEntitlementsBySubscription,
+  type EntitlementDb,
+} from "./entitlements";
 import { PaymentError } from "./types";
 
 function addInterval(from: Date, interval: string): Date {
@@ -22,9 +26,10 @@ function addInterval(from: Date, interval: string): Date {
  */
 export async function activateSubscriptionForOrder(
   orderId: string,
-  paymentId?: string
+  paymentId?: string,
+  db: EntitlementDb = prisma
 ) {
-  const order = await prisma.marketplaceOrder.findUnique({
+  const order = await db.marketplaceOrder.findUnique({
     where: { id: orderId },
     include: { items: true },
   });
@@ -39,12 +44,12 @@ export async function activateSubscriptionForOrder(
     throw new PaymentError(409, "SUBSCRIPTION_INVALID", "Abonnement sans formule associée.");
   }
 
-  const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+  const plan = await db.subscriptionPlan.findUnique({ where: { id: planId } });
   if (!plan) {
     throw new PaymentError(404, "PLAN_NOT_FOUND", "Formule d'abonnement introuvable.");
   }
 
-  const existing = await prisma.subscription.findUnique({ where: { orderId } }).catch(() => null);
+  const existing = await db.subscription.findUnique({ where: { orderId } }).catch(() => null);
   if (existing && existing.status === "active") {
     return existing;
   }
@@ -53,7 +58,7 @@ export async function activateSubscriptionForOrder(
   const end = addInterval(start, plan.interval);
 
   const subscription = existing
-    ? await prisma.subscription.update({
+    ? await db.subscription.update({
         where: { id: existing.id },
         data: {
           status: "active",
@@ -64,7 +69,7 @@ export async function activateSubscriptionForOrder(
           cancelAtPeriodEnd: false,
         },
       })
-    : await prisma.subscription.create({
+    : await db.subscription.create({
         data: {
           userId: order.buyerUserId,
           planId: plan.id,
@@ -76,17 +81,20 @@ export async function activateSubscriptionForOrder(
         },
       });
 
-  await grantEntitlement({
-    userId: order.buyerUserId,
-    resourceType: "subscription",
-    resourceId: plan.code,
-    source: "subscription",
-    orderId,
-    subscriptionId: subscription.id,
-    paymentId,
-    expiresAt: end,
-    metadata: { planId: plan.id, interval: plan.interval },
-  });
+  await grantEntitlement(
+    {
+      userId: order.buyerUserId,
+      resourceType: "subscription",
+      resourceId: plan.code,
+      source: "subscription",
+      orderId,
+      subscriptionId: subscription.id,
+      paymentId,
+      expiresAt: end,
+      metadata: { planId: plan.id, interval: plan.interval },
+    },
+    db
+  );
 
   return subscription;
 }
@@ -181,11 +189,13 @@ export async function expireSubscriptions(now: Date = new Date()): Promise<numbe
   if (rows.length === 0) return 0;
 
   for (const row of rows) {
-    await prisma.subscription.update({
-      where: { id: row.id },
-      data: { status: "expired" },
+    await prisma.$transaction(async (tx) => {
+      await tx.subscription.update({
+        where: { id: row.id },
+        data: { status: "expired" },
+      });
+      await revokeEntitlementsBySubscription(row.id, tx);
     });
-    await revokeEntitlementsBySubscription(row.id);
   }
   return rows.length;
 }

@@ -6,6 +6,7 @@
 // pour débloquer une attestation.
 // ============================================================
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hasEntitlement } from "@/lib/modules/payments/entitlements";
 import {
@@ -13,6 +14,8 @@ import {
   forbiddenError,
   notFoundError,
 } from "@/lib/server/errors";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 export const QUIZ_PASS_THRESHOLD = 0.7;
 
@@ -77,13 +80,14 @@ export async function assertCourseAccess(
 /** Calcule la progression à partir des preuves serveur uniquement. */
 export async function computeCourseProgress(
   userId: string,
-  courseId: string
+  courseId: string,
+  db: Db = prisma
 ): Promise<CourseProgressSummary> {
   const [totalLessons, completedLessons, totalQuizzes, attempts] = await Promise.all([
-    prisma.courseLesson.count({ where: { chapter: { courseId } } }),
-    prisma.courseLessonProgress.count({ where: { userId, courseId } }),
-    prisma.courseQuiz.count({ where: { courseId } }),
-    prisma.courseQuizAttempt.findMany({
+    db.courseLesson.count({ where: { chapter: { courseId } } }),
+    db.courseLessonProgress.count({ where: { userId, courseId } }),
+    db.courseQuiz.count({ where: { courseId } }),
+    db.courseQuizAttempt.findMany({
       where: { userId, courseId },
       orderBy: { createdAt: "desc" },
       take: 20,
@@ -114,10 +118,11 @@ export async function computeCourseProgress(
 async function syncProgressCache(
   userId: string,
   courseId: string,
-  summary: CourseProgressSummary
+  summary: CourseProgressSummary,
+  db: Db = prisma
 ): Promise<void> {
   const completedAt = summary.progressPercent === 100 ? new Date() : null;
-  await prisma.courseEnrollment.upsert({
+  await db.courseEnrollment.upsert({
     where: { userId_courseId: { userId, courseId } },
     create: {
       userId,
@@ -131,7 +136,7 @@ async function syncProgressCache(
     },
   });
 
-  const user = await prisma.user.findUnique({
+  const user = await db.user.findUnique({
     where: { id: userId },
     select: { courseProgress: true },
   });
@@ -143,7 +148,7 @@ async function syncProgressCache(
     map = {};
   }
   map[courseId] = summary.progressPercent;
-  await prisma.user.update({
+  await db.user.update({
     where: { id: userId },
     data: { courseProgress: map as never },
   });
@@ -166,19 +171,21 @@ export async function recordLessonProgress(
     throw new AppError(400, "LESSON_NOT_IN_COURSE", "Cette leçon n'appartient pas à la formation.");
   }
 
-  if (completed) {
-    await prisma.courseLessonProgress.upsert({
-      where: { userId_lessonId: { userId, lessonId } },
-      create: { userId, courseId, lessonId },
-      update: { completedAt: new Date() },
-    });
-  } else {
-    await prisma.courseLessonProgress.deleteMany({ where: { userId, lessonId } });
-  }
+  return prisma.$transaction(async (tx) => {
+    if (completed) {
+      await tx.courseLessonProgress.upsert({
+        where: { userId_lessonId: { userId, lessonId } },
+        create: { userId, courseId, lessonId },
+        update: { completedAt: new Date() },
+      });
+    } else {
+      await tx.courseLessonProgress.deleteMany({ where: { userId, lessonId } });
+    }
 
-  const summary = await computeCourseProgress(userId, courseId);
-  await syncProgressCache(userId, courseId, summary);
-  return summary;
+    const summary = await computeCourseProgress(userId, courseId, tx);
+    await syncProgressCache(userId, courseId, summary, tx);
+    return summary;
+  });
 }
 
 export interface QuizCorrection {

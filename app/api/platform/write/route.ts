@@ -2273,12 +2273,42 @@ export async function POST(req: NextRequest) {
       case "delete-training-center": {
         if (!uuidOrNull(data.centerId))
           return NextResponse.json({ error: "centerId (UUID) requis" }, { status: 400 });
-        // Les formations restent en base mais sont détachées du centre supprimé.
-        await prisma.course
-          .updateMany({ where: { centerId: data.centerId }, data: { centerId: null } as any })
-          .catch(() => null);
-        await prisma.trainingCenter.delete({ where: { id: data.centerId } });
-        return NextResponse.json({ success: true });
+        const center = await prisma.trainingCenter.findUnique({
+          where: { id: data.centerId },
+          include: { courses: true, commissions: true, storagePurchases: true },
+        });
+        if (!center) {
+          return NextResponse.json({ error: "Centre introuvable." }, { status: 404 });
+        }
+
+        await prisma.$transaction(async (tx) => {
+          const payload = JSON.parse(JSON.stringify(center)) as never;
+          await tx.dataArchive.upsert({
+            where: {
+              tableName_recordId_reason: {
+                tableName: "training_centers",
+                recordId: center.id,
+                reason: "center_deleted",
+              },
+            },
+            create: {
+              tableName: "training_centers",
+              recordId: center.id,
+              reason: "center_deleted",
+              payload,
+            },
+            update: { payload, archivedAt: new Date() },
+          });
+
+          // Les formations restent en base mais sont détachées du centre supprimé.
+          await tx.course.updateMany({
+            where: { centerId: center.id },
+            data: { centerId: null },
+          });
+          await tx.trainingCenter.delete({ where: { id: center.id } });
+        });
+
+        return NextResponse.json({ success: true, archived: true });
       }
 
       case "update-training-center-config": {
@@ -2586,8 +2616,55 @@ export async function POST(req: NextRequest) {
       case "delete-course": {
         // Propriétaire (formateur / centre) ou administrateur uniquement.
         await assertCourseAccess(auth, data.id);
-        await prisma.course.delete({ where: { id: data.id } });
-        return NextResponse.json({ success: true });
+        const course = await prisma.course.findUnique({
+          where: { id: data.id },
+          include: {
+            chapters: { include: { lessons: true } },
+            quizzes: { include: { options: true } },
+            reviews: true,
+            certificates: true,
+          },
+        });
+        if (!course) {
+          return NextResponse.json({ error: "Formation introuvable." }, { status: 404 });
+        }
+
+        await prisma.$transaction(async (tx) => {
+          // Snapshot complet avant suppression (contenu, avis, attestations).
+          const payload = JSON.parse(JSON.stringify(course)) as never;
+          await tx.dataArchive.upsert({
+            where: {
+              tableName_recordId_reason: {
+                tableName: "courses",
+                recordId: course.id,
+                reason: "course_deleted",
+              },
+            },
+            create: {
+              tableName: "courses",
+              recordId: course.id,
+              reason: "course_deleted",
+              payload,
+            },
+            update: { payload, archivedAt: new Date() },
+          });
+
+          // Les droits d'accès au contenu supprimé sont révoqués.
+          await tx.entitlement.updateMany({
+            where: {
+              resourceType: "course",
+              resourceId: course.id,
+              status: { in: ["active", "suspended"] },
+            },
+            data: { status: "revoked", revokedAt: new Date() },
+          });
+
+          // Les attestations sont conservées (certificates.course_id → NULL),
+          // les commandes/lignes financières ne sont jamais supprimées.
+          await tx.course.delete({ where: { id: course.id } });
+        });
+
+        return NextResponse.json({ success: true, archived: true });
       }
 
       // ============ ACHAT STOCKAGE FORMATEUR ============

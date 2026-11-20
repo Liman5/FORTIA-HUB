@@ -13,7 +13,7 @@ import {
   resolveCommissionRule,
   type SaleScope,
 } from "@/lib/server/commissions";
-import { grantEntitlement } from "./entitlements";
+import { grantEntitlement, type EntitlementDb } from "./entitlements";
 import { fromMinorUnits } from "./money";
 import { resolveOrderItems } from "./pricing";
 import { activateSubscriptionForOrder } from "./subscriptions";
@@ -199,8 +199,10 @@ export async function markOrderPaid(
     throw new PaymentError(409, "ORDER_CLOSED", "Cette commande est clôturée.");
   }
 
-  if (order.status !== "Paye") {
-    const transitioned = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
+    let transitioned = order.status === "Paye";
+
+    if (order.status !== "Paye") {
       const updated = await tx.marketplaceOrder.updateMany({
         where: { id: orderId, status: "En_attente_API" },
         data: {
@@ -209,7 +211,9 @@ export async function markOrderPaid(
           paymentGateway: options.provider || order.paymentGateway,
         },
       });
+
       if (updated.count === 1) {
+        transitioned = true;
         for (const item of order.items) {
           if (item.itemType !== "product" || !item.resourceId) continue;
           await tx.product
@@ -231,26 +235,29 @@ export async function markOrderPaid(
               .catch(() => null);
           }
         }
-      }
-      return updated.count;
-    });
-
-    if (transitioned === 0) {
-      const fresh = await prisma.marketplaceOrder.findUnique({
-        where: { id: orderId },
-        select: { status: true },
-      });
-      if (fresh?.status !== "Paye") {
-        throw new PaymentError(409, "ORDER_STATE", "La commande n'est pas dans un état payable.");
+      } else {
+        const fresh = await tx.marketplaceOrder.findUnique({
+          where: { id: orderId },
+          select: { status: true },
+        });
+        if (fresh?.status !== "Paye") {
+          throw new PaymentError(409, "ORDER_STATE", "La commande n'est pas dans un état payable.");
+        }
+        transitioned = true;
       }
     }
-  }
 
-  await grantOrderEntitlements(order.id, order.buyerUserId, options.paymentId, order.items);
+    // Droits accordés dans la MÊME transaction que la confirmation :
+    // un paiement « Paye » ne peut plus exister sans ses entitlements.
+    if (transitioned) {
+      await grantOrderEntitlements(order.id, order.buyerUserId!, options.paymentId, order.items, tx);
+    }
+  });
+
   return prisma.marketplaceOrder.findUnique({ where: { id: orderId } });
 }
 
-/** Accorde les droits de chaque article (idempotent). */
+/** Accorde les droits de chaque article (idempotent, transactionnel). */
 async function grantOrderEntitlements(
   orderId: string,
   userId: string,
@@ -262,7 +269,8 @@ async function grantOrderEntitlements(
     totalMinor: number;
     quantity: number;
     metadata: unknown;
-  }>
+  }>,
+  db: EntitlementDb
 ) {
   for (const item of items) {
     const metadata = (item.metadata || {}) as Record<string, unknown>;
@@ -274,15 +282,18 @@ async function grantOrderEntitlements(
       item.itemType === "feature"
     ) {
       if (!item.resourceId) continue;
-      await grantEntitlement({
-        userId,
-        resourceType: item.itemType,
-        resourceId: item.resourceId,
-        source: "order",
-        orderId,
-        paymentId: paymentId || null,
-        metadata,
-      });
+      await grantEntitlement(
+        {
+          userId,
+          resourceType: item.itemType,
+          resourceId: item.resourceId,
+          source: "order",
+          orderId,
+          paymentId: paymentId || null,
+          metadata,
+        },
+        db
+      );
       continue;
     }
 
@@ -291,32 +302,35 @@ async function grantOrderEntitlements(
       if (!centerId) continue;
       const resourceId = `center:${centerId}`;
 
-      const alreadyGranted = await prisma.entitlement.findFirst({
+      const alreadyGranted = await db.entitlement.findFirst({
         where: { orderId, resourceType: "storage", resourceId },
         select: { id: true },
       });
 
-      await grantEntitlement({
-        userId,
-        resourceType: "storage",
-        resourceId,
-        source: "order",
-        orderId,
-        paymentId: paymentId || null,
-        metadata: { ...metadata, centerId },
-      });
+      await grantEntitlement(
+        {
+          userId,
+          resourceType: "storage",
+          resourceId,
+          source: "order",
+          orderId,
+          paymentId: paymentId || null,
+          metadata: { ...metadata, centerId },
+        },
+        db
+      );
 
       if (!alreadyGranted) {
         const gb = Number(metadata.gb || 0);
         if (gb > 0) {
-          await prisma.trainingCenter
+          await db.trainingCenter
             .update({
               where: { id: centerId },
               data: { storageQuotaGb: { increment: gb } },
             })
             .catch(() => null);
         }
-        await prisma.instructorStoragePurchase
+        await db.instructorStoragePurchase
           .create({
             data: {
               instructorId: userId,
@@ -332,7 +346,7 @@ async function grantOrderEntitlements(
     }
 
     if (item.itemType === "subscription") {
-      await activateSubscriptionForOrder(orderId, paymentId);
+      await activateSubscriptionForOrder(orderId, paymentId, db);
     }
   }
 }

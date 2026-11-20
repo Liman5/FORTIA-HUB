@@ -227,6 +227,8 @@ model User {
   products              Product[]
   vendorApplications    VendorApplication[]
   kycSubmissions        KycSubmission[]
+  instructorCommissions InstructorCommission[]
+  instructorStoragePurchases InstructorStoragePurchase[]
   freelanceProfile      FreelanceProfile?
   enterpriseProfile     EnterpriseProfile?
   notifications         Notification[]
@@ -238,6 +240,8 @@ model User {
   pushSubscriptions     PushSubscription[]
   subscriptions         Subscription[]
   entitlements          Entitlement[]
+  lessonProgress        CourseLessonProgress[]
+  quizAttempts          CourseQuizAttempt[]
 
 
   @@index([accountType])
@@ -276,6 +280,7 @@ model Session {
   adminUser    AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([adminUserId])
   @@index([expiresAt])
   @@map("sessions")
 }
@@ -391,8 +396,13 @@ model Course {
   enrollments      CourseEnrollment[]
   reviews          CourseReview[]
   certificates     Certificate[]
+  lessonProgress   CourseLessonProgress[]
+  quizAttempts     CourseQuizAttempt[]
+  instructorCommissions InstructorCommission[]
 
   @@index([categoryId])
+  @@index([instructorId])
+  @@index([centerId])
   @@map("courses")
 }
 
@@ -414,7 +424,7 @@ model TrainingCenter {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  owner            User?      @relation("TrainingCenters", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner            User?      @relation("TrainingCenters", fields: [ownerId], references: [id], onDelete: SetNull)
   courses          Course[]
   commissions      InstructorCommission[]
   storagePurchases InstructorStoragePurchase[]
@@ -437,9 +447,13 @@ model InstructorCommission {
   createdAt              DateTime @default(now()) @map("created_at")
 
   center                 TrainingCenter? @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  instructor             User             @relation(fields: [instructorId], references: [id], onDelete: Restrict)
+  course                 Course?          @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  order                  MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([instructorId])
   @@index([courseId])
+  @@index([orderId])
   @@map("instructor_commissions")
 }
 
@@ -453,6 +467,7 @@ model InstructorStoragePurchase {
   createdAt    DateTime @default(now()) @map("created_at")
 
   center       TrainingCenter? @relation(fields: [centerId], references: [id], onDelete: SetNull)
+  instructor   User            @relation(fields: [instructorId], references: [id], onDelete: Restrict)
 
   @@index([instructorId])
   @@map("instructor_storage_purchases")
@@ -486,6 +501,7 @@ model CourseLesson {
   createdAt    DateTime    @default(now()) @map("created_at")
 
   chapter      CourseChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  progress     CourseLessonProgress[]
 
   @@index([chapterId])
   @@map("course_lessons")
@@ -536,7 +552,6 @@ model CourseEnrollment {
   @@map("course_enrollments")
 }
 
-/// Progression RÉELLE par leçon (Phase 3) : preuve serveur pour l'attestation.
 model CourseLessonProgress {
   id          String   @id @default(uuid())
   userId      String   @map("user_id")
@@ -544,9 +559,14 @@ model CourseLessonProgress {
   lessonId    String   @map("lesson_id")
   completedAt DateTime @default(now()) @map("completed_at")
 
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson      CourseLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
   @@unique([userId, lessonId])
   @@index([userId, courseId])
   @@index([courseId])
+  @@index([lessonId])
   @@map("course_lesson_progress")
 }
 
@@ -560,6 +580,9 @@ model CourseQuizAttempt {
   passed    Boolean  @default(false)
   answers   Json     @default("{}")
   createdAt DateTime @default(now()) @map("created_at")
+
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@index([userId, courseId])
   @@index([courseId])
@@ -580,6 +603,7 @@ model CourseReview {
 
   @@unique([courseId, userId])
   @@index([courseId])
+  @@index([userId])
   @@map("course_reviews")
 }
 
@@ -628,7 +652,7 @@ model Store {
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
-  vendor          User?        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  vendor          User?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   payoutInfo      StorePayoutInfo?
   products        Product[]
   orders          MarketplaceOrder[]
@@ -689,13 +713,14 @@ model Product {
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
-  store           Store?       @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  vendor          User?        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  store           Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  vendor          User?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   files           ProductFile[]
   reviews         ProductReview[]
   orders          MarketplaceOrder[]
 
   @@index([storeId])
+  @@index([vendorId])
   @@index([type])
   @@map("products")
 }
@@ -728,6 +753,7 @@ model ProductReview {
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([productId])
+  @@index([userId])
   @@map("product_reviews")
 }
 
@@ -745,7 +771,7 @@ model VendorApplication {
   status           ApprovalStatus @default(En_attente)
   adminNotes       String         @default("") @map("admin_notes")
 
-  user             User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@map("vendor_applications")
@@ -817,10 +843,12 @@ model MarketplaceOrder {
   refunds              Refund[]
   subscription         Subscription?
   entitlements         Entitlement[]
+  instructorCommissions InstructorCommission[]
 
   @@index([storeId])
   @@index([buyerEmail])
   @@index([buyerUserId])
+  @@index([productId])
   @@index([status])
   @@map("marketplace_orders")
 }
@@ -838,7 +866,7 @@ model PayoutRequest {
   status             PayoutStatus @default(En_attente)
   transactionHashOrRef String     @default("") @map("transaction_hash_or_ref")
 
-  store              Store?       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store              Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   @@index([storeId])
   @@map("payout_requests")
@@ -1314,14 +1342,16 @@ model PaymentTransaction {
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
-  order          MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  order          MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: Restrict)
   gateway        PaymentGateway?   @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
   user           User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   refunds        Refund[]
+  entitlements   Entitlement[]
 
   @@unique([provider, providerRef])
   @@index([orderId])
   @@index([gatewayId])
+  @@index([userId])
   @@index([status])
   @@map("payment_transactions")
 }
@@ -1363,7 +1393,7 @@ model MarketplaceOrderItem {
   metadata       Json     @default("{}")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  order          MarketplaceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order          MarketplaceOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
   @@index([itemType, resourceId])
@@ -1420,11 +1450,12 @@ model Subscription {
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan           SubscriptionPlan   @relation(fields: [planId], references: [id])
+  plan           SubscriptionPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
   order          MarketplaceOrder?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
   entitlements   Entitlement[]
 
   @@index([userId, status])
+  @@index([planId])
   @@index([status, currentPeriodEnd])
   @@map("subscriptions")
 }
@@ -1452,10 +1483,13 @@ model Entitlement {
   user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   order          MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
   subscription   Subscription?     @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  payment        PaymentTransaction? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
   @@unique([userId, resourceType, resourceId])
   @@index([userId, status])
   @@index([resourceType, resourceId])
+  @@index([orderId])
+  @@index([subscriptionId])
   @@index([expiresAt])
   @@map("entitlements")
 }
@@ -1475,8 +1509,8 @@ model Refund {
   createdAt   DateTime  @default(now()) @map("created_at")
   processedAt DateTime? @map("processed_at")
 
-  order       MarketplaceOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  payment     PaymentTransaction?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  order       MarketplaceOrder     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  payment     PaymentTransaction?  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
   @@index([paymentId])
@@ -1550,4 +1584,25 @@ model RateLimitCounter {
 
   @@index([resetAt])
   @@map("rate_limit_counters")
+}
+
+// ============================================================
+// MAINTENANCE — Archive des enregistrements orphelins (Phase 4)
+// ------------------------------------------------------------
+// Avant toute suppression d'une ligne orpheline (migration ou nettoyage),
+// sa représentation JSON est conservée ici. Aucune donnée historique n'est
+// donc perdue : elle est déplacée vers un emplacement traçable.
+// ============================================================
+model DataArchive {
+  id         String   @id @default(uuid())
+  tableName  String   @map("table_name")
+  recordId   String   @map("record_id")
+  reason     String   @default("")
+  payload    Json
+  archivedAt DateTime @default(now()) @map("archived_at")
+
+  @@unique([tableName, recordId, reason])
+  @@index([tableName])
+  @@index([archivedAt])
+  @@map("data_archive")
 }

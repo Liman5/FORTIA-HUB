@@ -6,7 +6,11 @@
 // Aucune route ne doit lire un identifiant client pour accorder un accès.
 // ============================================================
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+/** Client Prisma global ou transaction interactive (écritures atomiques). */
+export type EntitlementDb = Prisma.TransactionClient | typeof prisma;
 
 export type ResourceType =
   | "course"
@@ -58,12 +62,15 @@ export async function hasEntitlement(
  * Accorde (ou réactive) un droit. Idempotent : un même droit n'est jamais
  * dupliqué grâce à la contrainte unique (userId, resourceType, resourceId).
  */
-export async function grantEntitlement(input: GrantEntitlementInput) {
+export async function grantEntitlement(
+  input: GrantEntitlementInput,
+  db: EntitlementDb = prisma
+) {
   const expiresAt = input.expiresAt ?? null;
   const metadata = input.metadata ?? {};
   const now = new Date();
 
-  const row = await prisma.entitlement.upsert({
+  const row = await db.entitlement.upsert({
     where: {
       userId_resourceType_resourceId: {
         userId: input.userId,
@@ -97,16 +104,17 @@ export async function grantEntitlement(input: GrantEntitlementInput) {
     },
   });
 
-  await syncLegacyAccessCache(input.userId, input.resourceType, input.resourceId, true);
+  await syncLegacyAccessCache(input.userId, input.resourceType, input.resourceId, true, db);
   return row;
 }
 
 export async function suspendEntitlement(
   userId: string,
   resourceType: ResourceType,
-  resourceId: string
+  resourceId: string,
+  db: EntitlementDb = prisma
 ) {
-  return prisma.entitlement.updateMany({
+  return db.entitlement.updateMany({
     where: { userId, resourceType, resourceId, status: "active" },
     data: { status: "suspended" },
   });
@@ -116,27 +124,31 @@ export async function suspendEntitlement(
 export async function revokeEntitlement(
   userId: string,
   resourceType: ResourceType,
-  resourceId: string
+  resourceId: string,
+  db: EntitlementDb = prisma
 ) {
-  const result = await prisma.entitlement.updateMany({
+  const result = await db.entitlement.updateMany({
     where: { userId, resourceType, resourceId, status: { in: ["active", "suspended"] } },
     data: { status: "revoked", revokedAt: new Date() },
   });
   if (result.count > 0) {
-    await syncLegacyAccessCache(userId, resourceType, resourceId, false);
+    await syncLegacyAccessCache(userId, resourceType, resourceId, false, db);
   }
   return result;
 }
 
 /** Révoque tous les droits accordés par un paiement (remboursement). */
-export async function revokeEntitlementsByPayment(paymentId: string) {
-  const rows = await prisma.entitlement.findMany({
+export async function revokeEntitlementsByPayment(
+  paymentId: string,
+  db: EntitlementDb = prisma
+) {
+  const rows = await db.entitlement.findMany({
     where: { paymentId, status: { in: ["active", "suspended"] } },
     select: { userId: true, resourceType: true, resourceId: true },
   });
   if (rows.length === 0) return 0;
 
-  const updated = await prisma.entitlement.updateMany({
+  const updated = await db.entitlement.updateMany({
     where: { paymentId, status: { in: ["active", "suspended"] } },
     data: { status: "revoked", revokedAt: new Date() },
   });
@@ -146,21 +158,25 @@ export async function revokeEntitlementsByPayment(paymentId: string) {
       row.userId,
       row.resourceType as ResourceType,
       row.resourceId,
-      false
+      false,
+      db
     );
   }
   return updated.count;
 }
 
 /** Révoque les droits liés à un abonnement (expiration / annulation). */
-export async function revokeEntitlementsBySubscription(subscriptionId: string) {
-  const rows = await prisma.entitlement.findMany({
+export async function revokeEntitlementsBySubscription(
+  subscriptionId: string,
+  db: EntitlementDb = prisma
+) {
+  const rows = await db.entitlement.findMany({
     where: { subscriptionId, status: { in: ["active", "suspended"] } },
     select: { userId: true, resourceType: true, resourceId: true },
   });
   if (rows.length === 0) return 0;
 
-  const updated = await prisma.entitlement.updateMany({
+  const updated = await db.entitlement.updateMany({
     where: { subscriptionId, status: { in: ["active", "suspended"] } },
     data: { status: "revoked", revokedAt: new Date() },
   });
@@ -169,21 +185,25 @@ export async function revokeEntitlementsBySubscription(subscriptionId: string) {
       row.userId,
       row.resourceType as ResourceType,
       row.resourceId,
-      false
+      false,
+      db
     );
   }
   return updated.count;
 }
 
 /** Expire les droits temporaires arrivés à échéance (job de maintenance). */
-export async function expireEntitlements(now: Date = new Date()): Promise<number> {
-  const rows = await prisma.entitlement.findMany({
+export async function expireEntitlements(
+  now: Date = new Date(),
+  db: EntitlementDb = prisma
+): Promise<number> {
+  const rows = await db.entitlement.findMany({
     where: { status: "active", expiresAt: { lte: now } },
     select: { userId: true, resourceType: true, resourceId: true },
   });
   if (rows.length === 0) return 0;
 
-  const updated = await prisma.entitlement.updateMany({
+  const updated = await db.entitlement.updateMany({
     where: { status: "active", expiresAt: { lte: now } },
     data: { status: "expired" },
   });
@@ -192,11 +212,13 @@ export async function expireEntitlements(now: Date = new Date()): Promise<number
       row.userId,
       row.resourceType as ResourceType,
       row.resourceId,
-      false
+      false,
+      db
     );
   }
   return updated.count;
 }
+
 
 export async function listEntitlements(userId: string) {
   const rows = await prisma.entitlement.findMany({
@@ -227,12 +249,13 @@ async function syncLegacyAccessCache(
   userId: string,
   resourceType: ResourceType,
   resourceId: string,
-  grant: boolean
+  grant: boolean,
+  db: EntitlementDb = prisma
 ): Promise<void> {
   try {
     if (resourceType === "course") {
       if (grant) {
-        await prisma.$executeRaw`
+        await db.$executeRaw`
           UPDATE users
           SET enrolled_course_ids = (
             SELECT ARRAY(SELECT DISTINCT unnest(COALESCE(enrolled_course_ids, '{}') || ${[resourceId]}::text[]))
@@ -240,7 +263,7 @@ async function syncLegacyAccessCache(
           WHERE id = ${userId}::uuid
         `;
       } else {
-        await prisma.$executeRaw`
+        await db.$executeRaw`
           UPDATE users
           SET enrolled_course_ids = array_remove(COALESCE(enrolled_course_ids, '{}'), ${resourceId})
           WHERE id = ${userId}::uuid
@@ -250,7 +273,7 @@ async function syncLegacyAccessCache(
 
     if (resourceType === "product") {
       if (grant) {
-        await prisma.$executeRaw`
+        await db.$executeRaw`
           UPDATE users
           SET purchased_product_ids = (
             SELECT ARRAY(SELECT DISTINCT unnest(COALESCE(purchased_product_ids, '{}') || ${[resourceId]}::text[]))
@@ -258,7 +281,7 @@ async function syncLegacyAccessCache(
           WHERE id = ${userId}::uuid
         `;
       } else {
-        await prisma.$executeRaw`
+        await db.$executeRaw`
           UPDATE users
           SET purchased_product_ids = array_remove(COALESCE(purchased_product_ids, '{}'), ${resourceId})
           WHERE id = ${userId}::uuid

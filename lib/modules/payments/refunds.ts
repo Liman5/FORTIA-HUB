@@ -106,27 +106,32 @@ export async function refundOrder(input: RefundOrderInput) {
       },
     });
 
-    const updated = await prisma.refund.update({
-      where: { id: refund.id },
-      data: {
-        status: result.succeeded ? "succeeded" : "failed",
-        providerRef: result.providerRef,
-        processedAt: new Date(),
-      },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.refund.update({
+        where: { id: refund.id },
+        data: {
+          status: result.succeeded ? "succeeded" : "failed",
+          providerRef: result.providerRef,
+          processedAt: new Date(),
+        },
+      });
 
-    if (result.succeeded && alreadyRefunded + requested >= payment.amountMinor) {
-      // Remboursement TOTAL → révocation des droits liés à ce paiement.
-      await prisma.paymentTransaction.update({
-        where: { id: payment.id },
-        data: { status: "Rembourse" },
-      });
-      await prisma.marketplaceOrder.update({
-        where: { id: order.id },
-        data: { status: "Rembourse" },
-      });
-      await revokeEntitlementsByPayment(payment.id);
-    }
+      if (result.succeeded && alreadyRefunded + requested >= payment.amountMinor) {
+        // Remboursement TOTAL → révocation des droits liés à ce paiement,
+        // dans la même transaction que la mise à jour financière.
+        await tx.paymentTransaction.update({
+          where: { id: payment.id },
+          data: { status: "Rembourse" },
+        });
+        await tx.marketplaceOrder.update({
+          where: { id: order.id },
+          data: { status: "Rembourse" },
+        });
+        await revokeEntitlementsByPayment(payment.id, tx);
+      }
+
+      return row;
+    });
 
     return updated;
   } catch (error) {

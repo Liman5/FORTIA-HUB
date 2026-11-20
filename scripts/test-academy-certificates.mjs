@@ -95,6 +95,7 @@ async function setup() {
       categoryLabel: "TestCert",
       price: 0,
       isPublished: true,
+      instructorId: user.id,
     },
   });
   state.courseId = course.id;
@@ -146,6 +147,10 @@ async function cleanup() {
       await prisma.course.deleteMany({ where: { id: state.courseId } });
     }
     if (state.userId) {
+      await prisma.certificate.deleteMany({ where: { userId: state.userId } });
+      await prisma.dataArchive.deleteMany({
+        where: { tableName: "courses", recordId: state.courseId || undefined },
+      });
       await prisma.session.deleteMany({ where: { userId: state.userId } });
       await prisma.rateLimitCounter.deleteMany({
         where: { key: { contains: state.userId } },
@@ -282,6 +287,43 @@ async function run() {
       where: { userId: state.userId, courseId: state.courseId },
     });
     check(!!dbCertificate?.verified, "Attestation tracée et vérifiée en base");
+
+    console.log("\n=== 4. Suppression de formation : archivage et conservation ===");
+    await prisma.entitlement.create({
+      data: {
+        userId: state.userId,
+        resourceType: "course",
+        resourceId: state.courseId,
+        status: "active",
+        source: "test",
+      },
+    });
+
+    const deletion = await api("/api/platform/write", {
+      method: "POST",
+      token: state.token,
+      body: { action: "delete-course", data: { id: state.courseId } },
+    });
+    check(deletion.status === 200 && deletion.json?.archived === true, "Formation supprimée et archivée", `body=${deletion.text.slice(0, 140)}`);
+
+    const archived = await prisma.dataArchive.findFirst({
+      where: { tableName: "courses", recordId: state.courseId, reason: "course_deleted" },
+    });
+    check(!!archived, "Snapshot de la formation conservé dans data_archive");
+
+    const certificateAfter = await prisma.certificate.findFirst({
+      where: { userId: state.userId },
+    });
+    check(certificateAfter?.courseId === null, "Attestation conservée après suppression du cours");
+
+    const entitlementAfter = await prisma.entitlement.findFirst({
+      where: { userId: state.userId, resourceType: "course", resourceId: state.courseId },
+    });
+    check(entitlementAfter?.status === "revoked", "Droit d'accès révoqué après suppression");
+
+    const lessonsAfter = await prisma.courseLesson.count({ where: { chapter: { courseId: state.courseId } } });
+    check(lessonsAfter === 0, "Aucune leçon orpheline après suppression");
+
 
     console.log(`\n=== RÉSULTAT : ${passed} réussis / ${failed} échoués ===`);
     if (failures.length > 0) console.log(failures.map((failure) => ` - ${failure}`).join("\n"));
