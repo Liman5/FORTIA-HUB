@@ -2,9 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
 import { notifyUser } from "@/lib/services/notifyUser";
-import { requireAdmin, normalizeRole } from "@/lib/server/requireAdmin";
-import { getCurrentUser } from "@/lib/services/authSession";
-import { actionDomain, canWriteDomain, isReadOnlyAdmin } from "@/lib/server/adminRoles";
+import { requireAdmin } from "@/lib/server/requireAdmin";
+import {
+  authorizeWriteAction,
+  WriteError,
+  assertCenterAccess,
+  assertContentOwnership,
+  assertCourseAccess,
+  assertNotificationAccess,
+  assertOrderAccess,
+  assertProductAccess,
+  assertSelfOrAdmin,
+  logWriteFailure,
+  requireActorUser,
+  requireStoreAccess,
+  resolveTargetUserId,
+  toWriteErrorResponse,
+} from "@/lib/server/writeAuthorization";
 import {
   computeCommissionUsd,
   isSaleScope,
@@ -42,6 +56,9 @@ const FROM_EMAIL = process.env.SENDER_EMAIL || "Fortia Hub <onboarding@resend.de
 // On résout donc TOUJOURS par id (UUID), sinon par slug, sinon par nom.
 // ============================================================
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Adresse e-mail plausible (validation minimale des actions publiques). */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Extrait la clé R2 d'une valeur stockée en base : soit déjà une clé
@@ -144,50 +161,44 @@ function normalizeCourseLevel(raw: unknown): string {
  * KYC = KYC uniquement. Les parcours publics (visiteur/membre) restent inchangés.
  */
 export async function POST(req: NextRequest) {
+  let actionName = "";
   try {
     const body = await req.json();
     const { action, data } = body || {};
+    actionName = String(action || "");
 
-    if (!action || !data) {
-      return NextResponse.json({ error: "action et data requis" }, { status: 400 });
+    if (!actionName || !data || typeof data !== "object" || Array.isArray(data)) {
+      return NextResponse.json(
+        { success: false, error: "Action et données requises." },
+        { status: 400 }
+      );
     }
 
-    // Toute écriture invalide le cache serveur des routes publiques :
+    // ⚠️ SÉCURITÉ (Phase 1A) : politique d'accès EXPLICITE avant toute
+    // écriture. Action inconnue = refus. L'identité vient de la session,
+    // jamais des identifiants envoyés par le navigateur.
+    const auth = await authorizeWriteAction(req, actionName, data as Record<string, unknown>);
+
+    // Toute écriture AUTORISÉE invalide le cache serveur des routes publiques :
     // les visiteurs voient immédiatement la nouvelle version.
     invalidateResponseCache();
-
-    const adminActor = await requireAdmin(req).catch(() => null);
-    if (adminActor) {
-      const role = normalizeRole(adminActor.role);
-      if (isReadOnlyAdmin(role)) {
-        return NextResponse.json(
-          { error: "Votre profil est en lecture seule (superviseur) : aucune modification autorisée." },
-          { status: 403 }
-        );
-      }
-      const domain = actionDomain(String(action));
-      if (!canWriteDomain(role, domain)) {
-        return NextResponse.json(
-          {
-            error:
-              domain === "finance"
-                ? "Vos droits ne couvrent pas le domaine finance."
-                : domain === "kyc"
-                  ? "Vos droits ne couvrent pas le domaine KYC."
-                  : "Vos droits ne couvrent pas ce domaine.",
-          },
-          { status: 403 }
-        );
-      }
-    }
 
     switch (action) {
       // ============ DEVIS SERVICE ============
       case "submit-quote": {
+        // Action publique : champs obligatoires validés (anti-spam).
+        const clientName = String(data.clientName || "").trim();
+        const clientEmail = String(data.clientEmail || "").trim().toLowerCase();
+        if (!clientName || !EMAIL_PATTERN.test(clientEmail)) {
+          return NextResponse.json(
+            { success: false, error: "Nom et adresse e-mail valides requis." },
+            { status: 400 }
+          );
+        }
         const created = await prisma.serviceQuote.create({
           data: {
-            clientName: data.clientName || "",
-            clientEmail: data.clientEmail || "",
+            clientName,
+            clientEmail,
             clientPhone: data.phone || "",
             serviceTitle: data.serviceTitle || "",
             serviceId: data.serviceCategory || undefined,
@@ -205,8 +216,11 @@ export async function POST(req: NextRequest) {
         // Le frontend génère parfois un ID mocké "user-..." qui n'est PAS un UUID.
         // → On vérifie la validité et on neutralise si invalide (la relation
         //   avec users est optionnelle : on peut lier plus tard par email).
-        const rawApplicantId = data.applicantId ? String(data.applicantId) : "";
-        const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawApplicantId);
+        // Identité imposée par la session : un membre ne peut pas déposer un
+        // dossier KYC au nom d'un autre compte.
+        const kycUser = requireActorUser(auth);
+        const rawApplicantId = kycUser.id;
+        const isValidUuid = UUID_PATTERN.test(rawApplicantId);
 
         // Les fichiers (base64 DataURL) peuvent être très volumineux.
         // On ne les stocke PAS dans la table (URLs externes/R2 attendues).
@@ -226,7 +240,7 @@ export async function POST(req: NextRequest) {
             firstName: data.firstName || "",
             lastName: data.lastName || "",
             repRole: data.repRole || "",
-            email: data.email || "",
+            email: kycUser.email || data.email || "",
             phone: data.phone || "",
             country: data.country || "",
             address: data.address || "",
@@ -663,11 +677,12 @@ export async function POST(req: NextRequest) {
 
       // ============ MISE À JOUR PROFIL FREELANCE (par le freelance) ============
       case "update-freelance-profile": {
-        if (!data.userId) return NextResponse.json({ error: "userId requis" }, { status: 400 });
+        // Identité imposée par la session (un admin peut cibler un utilisateur).
+        const ownerUserId = resolveTargetUserId(auth, data.userId);
         // La table freelance_profiles n'a PAS de contrainte unique sur user_id :
         // on utilise findFirst + update/create (l'upsert Prisma échouerait en base).
         const existingFreelanceProfile = await prisma.freelanceProfile.findFirst({
-          where: { userId: data.userId },
+          where: { userId: ownerUserId },
         });
         const profile = existingFreelanceProfile
           ? await prisma.freelanceProfile.update({
@@ -686,7 +701,7 @@ export async function POST(req: NextRequest) {
             })
           : await prisma.freelanceProfile.create({
               data: {
-                userId: data.userId,
+                userId: ownerUserId,
                 name: data.name || "Freelance",
                 title: data.title || "",
                 bio: data.bio || "",
@@ -724,11 +739,12 @@ export async function POST(req: NextRequest) {
 
       // ============ MISE À JOUR PROFIL ENTREPRISE (par l'entreprise) ============
       case "update-enterprise-profile": {
-        if (!data.userId) return NextResponse.json({ error: "userId requis" }, { status: 400 });
+        // Identité imposée par la session (un admin peut cibler un utilisateur).
+        const ownerUserId = resolveTargetUserId(auth, data.userId);
         // La table enterprise_profiles n'a PAS de contrainte unique sur user_id :
         // on utilise findFirst + update/create (l'upsert Prisma échouerait en base).
         const existingEnterpriseProfile = await prisma.enterpriseProfile.findFirst({
-          where: { userId: data.userId },
+          where: { userId: ownerUserId },
         });
         const profile = existingEnterpriseProfile
           ? await prisma.enterpriseProfile.update({
@@ -748,7 +764,7 @@ export async function POST(req: NextRequest) {
             })
           : await prisma.enterpriseProfile.create({
               data: {
-                userId: data.userId,
+                userId: ownerUserId,
                 companyName: data.companyName || "Entreprise",
                 tagline: data.tagline || "",
                 description: data.description || "",
@@ -785,27 +801,43 @@ export async function POST(req: NextRequest) {
 
       // ============ MISE À JOUR PROFIL UTILISATEUR (avatar, infos) ============
       case "update-profile": {
-        if (!data.id) return NextResponse.json({ error: "id requis" }, { status: 400 });
-        const user = await prisma.user.update({
-          where: { id: data.id },
+        // Un membre ne peut modifier QUE son profil ; un admin peut cibler un id.
+        const targetUserId = resolveTargetUserId(auth, data.id);
+        const updatedUser = await prisma.user.update({
+          where: { id: targetUserId },
           data: {
             avatar: data.avatar ?? undefined,
             name: data.name ?? undefined,
             phone: data.phone ?? undefined,
           } as any,
         });
-        return NextResponse.json({ success: true, id: user.id });
+        return NextResponse.json({ success: true, id: updatedUser.id });
       }
 
       // ============ CANDIDATURE VENDEUR ============
       case "submit-vendor-app": {
+        // Candidature ouverte aux visiteurs ; si un membre est connecté,
+        // le dossier est rattaché à SON compte (jamais à un userId fourni).
+        const applicantUserId = auth.user?.id || undefined;
+        const applicantName = String(data.applicantName || "").trim();
+        const applicantEmail = String(data.email || "").trim().toLowerCase();
+        const storeName = String(data.storeName || "").trim();
+        if (!applicantName || !storeName || !EMAIL_PATTERN.test(applicantEmail)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Nom, nom de boutique et adresse e-mail valides requis.",
+            },
+            { status: 400 }
+          );
+        }
         const created = await prisma.vendorApplication.create({
           data: {
-            userId: data.userId || undefined,
-            applicantName: data.applicantName || "",
-            email: data.email || "",
+            userId: applicantUserId,
+            applicantName,
+            email: applicantEmail,
             phone: data.phone || "",
-            storeName: data.storeName || "",
+            storeName,
             storeCategory: data.storeCategory || "",
             storeDescription: data.storeDescription || "",
             experienceBio: data.experienceBio || "",
@@ -900,22 +932,18 @@ export async function POST(req: NextRequest) {
       // Persiste la progression, les inscriptions aux formations et les
       // attestations obtenues (earnedCertificates) sur le compte utilisateur.
       case "sync-user-learning": {
-        const { userId } = data;
-        if (!userId) {
-          return NextResponse.json({ error: "userId requis" }, { status: 400 });
-        }
+        // Un membre ne synchronise QUE son compte ; un admin peut cibler un id.
+        const userId = resolveTargetUserId(auth, data.userId);
 
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) {
           return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
         }
 
-        let enrolled = Array.isArray(user.enrolledCourseIds) ? [...user.enrolledCourseIds] : [];
-        if (Array.isArray(data.enrolledCourseIds)) {
-          data.enrolledCourseIds.forEach((cid: string) => {
-            if (cid && !enrolled.includes(cid)) enrolled.push(cid);
-          });
-        }
+        // ⚠️ SÉCURITÉ : les inscriptions ne sont JAMAIS acceptées depuis le
+        // navigateur (elles proviennent du paiement vérifié ou d'un admin).
+        // `data.enrolledCourseIds` est volontairement ignoré.
+        const enrolled = Array.isArray(user.enrolledCourseIds) ? [...user.enrolledCourseIds] : [];
 
         let progress: Record<string, number> = {};
         try {
@@ -924,7 +952,10 @@ export async function POST(req: NextRequest) {
         } catch {}
         if (data.courseProgress && typeof data.courseProgress === "object") {
           Object.entries(data.courseProgress).forEach(([cid, pct]) => {
-            if (cid) progress[cid] = Math.max(0, Math.min(100, Number(pct) || 0));
+            // Progression acceptée uniquement pour une formation DÉJÀ suivie.
+            if (cid && enrolled.includes(cid)) {
+              progress[cid] = Math.max(0, Math.min(100, Number(pct) || 0));
+            }
           });
         }
 
@@ -934,28 +965,17 @@ export async function POST(req: NextRequest) {
           if (Array.isArray(parsed)) certificates = [...parsed];
         } catch {}
         if (Array.isArray(data.earnedCertificates)) {
-          data.earnedCertificates.forEach((cert: any) => {
-            if (cert && cert.id && !certificates.some((c: any) => c.id === cert.id)) {
-              certificates.push(cert);
-              // Enregistre aussi la ligne officielle en base (pour la vérification publique)
-              prisma.certificate
-                .create({
-                  data: {
-                    certificateNumber: cert.id,
-                    userId,
-                    courseId: cert.courseId || undefined,
-                    studentName: cert.studentName || user.name,
-                    courseTitle: cert.courseTitle || "",
-                    category: cert.category || "",
-                    issueDate: cert.issueDate || "",
-                    grade: cert.grade || "",
-                    qrCodeUrl: cert.qrCodeUrl || "",
-                    verified: true,
-                  } as any,
-                })
-                .catch(() => {});
-            }
-          });
+          for (const cert of data.earnedCertificates) {
+            const certId = String(cert?.id || "").trim();
+            if (!certId || certificates.some((c: any) => c.id === certId)) continue;
+            // Attestation acceptée uniquement si le SERVEUR l'a réellement délivrée.
+            const official = await prisma.certificate.findFirst({
+              where: { certificateNumber: certId, userId },
+              select: { certificateNumber: true },
+            });
+            if (!official) continue;
+            certificates.push(cert);
+          }
         }
 
         await prisma.user.update({
@@ -974,13 +994,45 @@ export async function POST(req: NextRequest) {
       // Génère un numéro UNIQUE en base (contrainte certificate_number),
       // rattaché à la personne (userId) et à la formation (courseId).
       case "issue-certificate": {
-        const { userId, courseId, courseTitle, studentName, category, grade } = data;
-        if (!userId || !courseTitle) {
-          return NextResponse.json({ error: "userId et courseTitle requis" }, { status: 400 });
+        const { courseId, courseTitle, studentName, category, grade } = data;
+        // Un membre ne délivre QUE sa propre attestation ; un admin peut cibler.
+        const userId = resolveTargetUserId(auth, data.userId);
+        if (!courseTitle) {
+          return NextResponse.json(
+            { success: false, error: "courseTitle requis." },
+            { status: 400 }
+          );
         }
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) {
           return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+        }
+
+        // ⚠️ Une attestation n'est délivrée que pour une formation réellement
+        // suivie (inscription) ou gratuite et publiée.
+        if (courseId) {
+          const courseUuid = uuidOrNull(courseId);
+          if (!courseUuid) throw new WriteError(400, "Formation invalide.");
+          const course = await prisma.course.findUnique({
+            where: { id: courseUuid },
+            select: { price: true, isPublished: true },
+          });
+          if (!course) throw new WriteError(404, "Formation introuvable.");
+          const isFree = Number(course.price) === 0 && course.isPublished;
+          const hasEnrollment =
+            (user.enrolledCourseIds || []).includes(courseUuid) ||
+            !!(await prisma.courseEnrollment
+              .findUnique({
+                where: { userId_courseId: { userId, courseId: courseUuid } },
+                select: { id: true },
+              })
+              .catch(() => null));
+          if (!isFree && !hasEnrollment) {
+            throw new WriteError(
+              403,
+              "Attestation impossible : cette formation n'est pas suivie par ce compte."
+            );
+          }
         }
 
         const today = new Date();
@@ -993,7 +1045,8 @@ export async function POST(req: NextRequest) {
             .slice(0, 4) || "FORT";
         const issueDate = today.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
         const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        const safeName = studentName || user.name;
+        // Le nom de l'attestation est celui du compte (un admin peut le fixer).
+        const safeName = auth.isAdmin && studentName ? String(studentName) : user.name;
 
         let finalCertificate: any = null;
         for (let attempt = 0; attempt < 5 && !finalCertificate; attempt++) {
@@ -1060,9 +1113,11 @@ export async function POST(req: NextRequest) {
   // Incrémente/décrémente le stockage réellement utilisé (quota plateforme).
   case "register-course-media-storage": {
     const { centerId, deltaBytes } = data;
-    if (!centerId) {
+        if (!centerId) {
       return NextResponse.json({ error: "centerId requis" }, { status: 400 });
     }
+    // Seul le propriétaire du centre (ou un admin) peut ajuster son quota.
+    await assertCenterAccess(auth, centerId);
     const centerDoc = await prisma.trainingCenter.findUnique({ where: { id: centerId } });
     if (!centerDoc) {
       return NextResponse.json({ error: "Centre introuvable" }, { status: 404 });
@@ -1088,13 +1143,59 @@ export async function POST(req: NextRequest) {
 
       // ============ COMMANDE PAYEE ============
       case "submit-order": {
-        // La commission est CALCULÉE ICI (jamais celle du navigateur) à partir
-        // du taux actif du type de vente — voir ADMIN → Marketplace → Taux.
+        // ⚠️ SÉCURITÉ : aucune passerelle de paiement n'est intégrée. Le montant
+        // est recalculé à partir des prix en BASE et la commande reste
+        // « En_attente_API » : AUCUN droit d'accès payant n'est accordé ici.
+        const buyerEmail = String(data.buyerEmail || "").trim().toLowerCase();
+        if (!EMAIL_PATTERN.test(buyerEmail)) {
+          return NextResponse.json(
+            { success: false, error: "Adresse e-mail de l'acheteur requise." },
+            { status: 400 }
+          );
+        }
         const saleScope: SaleScope =
           data.saleScope === "course" || data.saleScope === "service" || data.saleScope === "storage"
             ? data.saleScope
             : "digital_product";
-        const amountUsd = Math.max(0, Number(data.amountUsd) || 0);
+
+        const courseIds = (Array.isArray(data.courseIds) ? data.courseIds : [])
+          .map((value: unknown) => String(value || ""))
+          .filter((value: string) => UUID_PATTERN.test(value));
+        const productIds = (Array.isArray(data.productIds) ? data.productIds : [])
+          .map((value: unknown) => String(value || ""))
+          .filter((value: string) => UUID_PATTERN.test(value));
+
+        let serverAmount = 0;
+        let priceKnown = false;
+        if (courseIds.length > 0) {
+          const rows = await prisma.course.findMany({
+            where: { id: { in: courseIds }, isPublished: true },
+            select: { price: true },
+          });
+          if (rows.length !== courseIds.length) {
+            throw new WriteError(404, "Formation introuvable ou non publiée.");
+          }
+          serverAmount += rows.reduce((sum, row) => sum + Number(row.price || 0), 0);
+          priceKnown = true;
+        }
+        if (productIds.length > 0) {
+          const rows = await prisma.product.findMany({
+            where: { id: { in: productIds }, isPublished: true },
+            select: { price: true },
+          });
+          if (rows.length !== productIds.length) {
+            throw new WriteError(404, "Produit introuvable ou non publié.");
+          }
+          serverAmount += rows.reduce((sum, row) => sum + Number(row.price || 0), 0);
+          priceKnown = true;
+        }
+
+        // Services / stockage : aucun prix n'est encore modélisé en base.
+        // On conserve le montant déclaré (estimation) mais la commande reste
+        // NON PAYÉE tant que le paiement n'est pas vérifié côté serveur.
+        const declaredAmount = Math.max(0, Number(data.amountUsd) || 0);
+        const amountUsd = priceKnown ? serverAmount : declaredAmount;
+
         const commissionRule = await resolveCommissionRule(saleScope);
         const { commissionUsd, vendorUsd } = computeCommissionUsd(amountUsd, commissionRule);
 
@@ -1102,129 +1203,32 @@ export async function POST(req: NextRequest) {
           data: {
             orderNumber: data.orderNumber || "ORD-" + Date.now(),
             buyerName: data.buyerName || "",
-            buyerEmail: data.buyerEmail || "",
+            buyerEmail,
             buyerPhone: data.buyerPhone || "",
-            buyerUserId: uuidOrNull(data.buyerUserId) || undefined,
+            // Identité issue de la session : jamais l'id envoyé par le client.
+            buyerUserId: auth.user?.id || undefined,
             storeId: (await resolveStoreRef(data.storeId))?.id || undefined,
             storeName: data.storeName || "",
-            productId: data.productId || undefined,
+            productId: uuidOrNull(data.productId) || undefined,
             productTitle: data.productTitle || "",
             amountUsd,
             platformCommissionUsd: commissionUsd,
             vendorEarningsUsd: vendorUsd,
-            paymentGateway: data.paymentGateway || "Wave API",
-            transactionRef: data.transactionRef || "",
-            status: "Paye",
+            paymentGateway: String(data.paymentGateway || "Non vérifié"),
+            transactionRef: String(data.transactionRef || ""),
+            status: "En_attente_API",
           } as any,
         });
 
-        // ===== ACCÈS AUX FORMATIONS ACHETÉES (source de vérité : le serveur) =====
-        // Un paiement de formation doit ouvrir l'accès : la formation est
-        // ajoutée au compte de l'acheteur (enrolled_course_ids + inscription),
-        // sinon la commande était enregistrée mais le lecteur restait verrouillé.
-        const rawCourseIds = Array.isArray(data.courseIds) ? data.courseIds : [];
-        const rawProductIds = Array.isArray(data.productIds) ? data.productIds : [];
-        const courseIds = rawCourseIds.map((v: unknown) => String(v || "")).filter((v: string) => UUID_PATTERN.test(v));
-        const productIds = rawProductIds.map((v: unknown) => String(v || "")).filter((v: string) => UUID_PATTERN.test(v));
+        // ⚠️ PHASE 1A : aucun droit d'accès n'est accordé tant que le paiement
+        // n'est pas vérifié par le serveur (aucune passerelle intégrée). L'octroi
+        // (enrolledCourseIds / purchasedProductIds / CourseEnrollment) sera
+        // réalisé exclusivement par le webhook de paiement (phase dédiée).
+        const grantedCourseIds: string[] = [];
 
-        let buyer: { id: string; enrolledCourseIds: string[]; purchasedProductIds: string[]; courseProgress: unknown } | null =
-          null;
-        const buyerId = uuidOrNull(data.buyerUserId);
-        try {
-          if (buyerId) buyer = await prisma.user.findUnique({ where: { id: buyerId } });
-          if (!buyer && data.buyerEmail) {
-            buyer = await prisma.user.findFirst({
-              where: { email: { equals: String(data.buyerEmail), mode: "insensitive" } },
-            });
-          }
-        } catch (error) {
-          console.warn("[ORDER] Acheteur introuvable:", error);
-        }
-
-        let grantedCourseIds: string[] = [];
-        if (buyer && (courseIds.length > 0 || productIds.length > 0)) {
-          const enrolled = Array.from(new Set([...(buyer.enrolledCourseIds || []), ...courseIds]));
-          const purchased = Array.from(new Set([...(buyer.purchasedProductIds || []), ...productIds]));
-          const progress = {
-            ...((buyer.courseProgress as Record<string, number> | null) || {}),
-          };
-          for (const id of courseIds) {
-            if (typeof progress[id] !== "number") progress[id] = 0;
-          }
-
-          try {
-            await prisma.user.update({
-              where: { id: buyer.id },
-              data: {
-                enrolledCourseIds: enrolled,
-                purchasedProductIds: purchased,
-                courseProgress: progress,
-              },
-            });
-            // Inscription officielle (une seule par formation et par membre)
-            for (const courseId of courseIds) {
-              await prisma.courseEnrollment
-                .upsert({
-                  where: { userId_courseId: { userId: buyer.id, courseId } },
-                  create: { userId: buyer.id, courseId },
-                  update: {},
-                })
-                .catch(() => null);
-            }
-            grantedCourseIds = courseIds;
-
-            for (const courseId of courseIds) {
-              const course = await prisma.course
-                .findUnique({ where: { id: courseId }, select: { title: true } })
-                .catch(() => null);
-              await notifyUser(buyer.id, {
-                title: "Formation débloquée 🎓",
-                message: `Paiement confirmé : « ${course?.title || "votre formation"} » est maintenant accessible dans Ma Bibliothèque.`,
-                type: "success",
-                linkTab: "library",
-              }).catch(() => null);
-            }
-          } catch (error) {
-            console.error("[ORDER] Activation de l'accès impossible:", error);
-          }
-        }
-
-        // ===== Notifications de vente (vendeur + diffusion admin/globale) =====
-        try {
-          if (created.storeId) {
-            const storeDoc = await prisma.store.findUnique({ where: { id: created.storeId } });
-            const sellerEmail = storeDoc?.ownerEmail || "";
-            if (sellerEmail) {
-              const seller = await prisma.user.findFirst({
-                where: { email: { equals: sellerEmail, mode: "insensitive" } },
-              });
-              if (seller) {
-                await notifyUser(seller.id, {
-                  title: "Nouvelle vente ! 🎉",
-                  message: `Votre produit « ${created.productTitle || "—"} » a été acheté pour ${created.amountUsd || 0} $ (${created.paymentGateway || "Paiement"}).`,
-                  type: "success",
-                  linkTab: "vendor",
-                });
-              }
-            }
-          }
-          // Notifier UNIQUEMENT les administrateurs (jamais diffusé à tous)
-          const adminRoles = ["admin", "superadmin", "super_admin"] as const;
-          const admins = await prisma.user.findMany({
-            where: { accountType: { in: adminRoles as unknown as any[] }, isActive: true },
-            select: { id: true },
-          });
-          for (const admin of admins) {
-            await notifyUser(admin.id, {
-              title: "Vente enregistrée",
-              message: `Un produit « ${created.productTitle || "—"} » vient d'être acheté sur FORTIA HUB (${created.amountUsd || 0} $).`,
-              type: "info",
-              linkTab: "admin",
-            });
-          }
-        } catch (e) {
-          console.warn("[NOTIFY] Notification de vente impossible:", e);
-        }
+        // Aucune notification de « vente » n'est envoyée : la commande n'est
+        // pas payée. Le vendeur et l'admin seront notifiés par le webhook de
+        // paiement une fois la transaction confirmée.
 
         return NextResponse.json({
           success: true,
@@ -1233,16 +1237,22 @@ export async function POST(req: NextRequest) {
           commissionUsd,
           vendorUsd,
           commissionRule,
+          status: "En_attente_API",
           enrolledCourseIds: grantedCourseIds,
+          message:
+            "Commande enregistrée. Elle sera validée après vérification du paiement.",
         });
       }
 
       // ============ TAUX DE COMMISSION (ADMIN → MARKETPLACE) ============
       case "save-commission-rule": {
-        // Action réservée aux administrateurs (aucun accès public).
-        if (!adminActor) {
+        // Action réservée aux administrateurs finances (politique d'accès).
+        if (!auth.admin) {
           return NextResponse.json(
-            { error: "Session administrateur requise pour modifier un taux de commission." },
+            {
+              success: false,
+              error: "Session administrateur requise pour modifier un taux de commission.",
+            },
             { status: 401 }
           );
         }
@@ -1265,14 +1275,23 @@ export async function POST(req: NextRequest) {
 
       // ============ SUPPORT POST-ACHAT ============
       case "submit-support": {
+        // Action publique : commande + e-mail valides obligatoires.
+        const supportEmail = String(data.email || "").trim().toLowerCase();
+        const orderNumber = String(data.orderNumber || "").trim();
+        if (!orderNumber || !EMAIL_PATTERN.test(supportEmail)) {
+          return NextResponse.json(
+            { success: false, error: "Numéro de commande et e-mail valides requis." },
+            { status: 400 }
+          );
+        }
         const created = await prisma.postPurchaseSupport.create({
           data: {
-            orderNumber: data.orderNumber || "",
+            orderNumber,
             productTitle: data.productTitle || "",
             lastName: data.lastName || "",
             firstName: data.firstName || "",
             phoneContact: data.phoneContact || "",
-            email: data.email || "",
+            email: supportEmail,
             notes: data.notes || "",
             forwardedEmail: data.forwardedEmail || "",
             status: "Transmis_Enregistre",
@@ -1283,8 +1302,9 @@ export async function POST(req: NextRequest) {
 
       // ============ NOTIFICATION LUE ============
       case "mark-notification-read": {
+        const notification = await assertNotificationAccess(auth, data.id);
         const updated = await prisma.notification.update({
-          where: { id: data.id },
+          where: { id: notification.id },
           data: { isRead: true } as any,
         });
         return NextResponse.json({ success: true, id: updated.id });
@@ -1293,26 +1313,18 @@ export async function POST(req: NextRequest) {
       // ============ SUPPRESSION D'UNE NOTIFICATION ============
       case "delete-notification": {
         // Une notification n'est supprimable que par son destinataire ;
-        // une annonce globale est seulement marquée lue (jamais effacée
-        // pour les autres utilisateurs).
-        const notification = await prisma.notification.findUnique({
-          where: { id: data.id },
-        });
-        if (!notification) {
-          return NextResponse.json({ success: true, deleted: false });
-        }
-
-        const viewer = await getCurrentUser(req).catch(() => null);
-        const isOwner = !!viewer && notification.userId === viewer.id;
+        // une annonce globale est seulement marquée lue.
+        const notification = await assertNotificationAccess(auth, data.id);
+        const isOwner = !!auth.user?.id && notification.userId === auth.user.id;
 
         if (notification.isGlobal || !isOwner) {
           await prisma.notification
-            .update({ where: { id: data.id }, data: { isRead: true } as any })
+            .update({ where: { id: notification.id }, data: { isRead: true } as any })
             .catch(() => null);
           return NextResponse.json({ success: true, deleted: false, markedRead: true });
         }
 
-        await prisma.notification.delete({ where: { id: data.id } });
+        await prisma.notification.delete({ where: { id: notification.id } });
         return NextResponse.json({ success: true, deleted: true });
       }
 
@@ -1378,6 +1390,8 @@ export async function POST(req: NextRequest) {
 
       // ============ MISE À JOUR COURS ============
       case "update-course": {
+        // Propriétaire de la formation ou administrateur uniquement.
+        await assertCourseAccess(auth, data.id);
         let resolvedCategoryId = data.categoryId ?? undefined;
         if (!resolvedCategoryId && data.category) {
           const category = await prisma.courseCategory.findUnique({
@@ -1575,25 +1589,34 @@ export async function POST(req: NextRequest) {
       }
 
       case "create-product": {
-        // Résolution SÛRE de la boutique (UUID, sinon slug, sinon nom).
-        // Évite « invalid input syntax for type uuid » à l'import d'un produit.
-        // Dernier recours : la boutique du vendeur connecté (id « new-… » côté
-        // navigateur quand la boutique vient d'être créée).
-        let store =
-          (await resolveStoreRef(data.storeId)) ||
-          (data.storeName ? await resolveStoreRef(data.storeName) : null);
-
-        if (!store && data.vendorId && uuidOrNull(data.vendorId)) {
-          store = await prisma.store
-            .findFirst({ where: { vendorId: data.vendorId } })
-            .catch(() => null);
+        // Boutique résolue en base puis vérifiée : un vendeur ne peut créer un
+        // produit que dans SA boutique (l'admin peut cibler une boutique).
+        const storeRef = data.storeId || data.storeName;
+        let store:
+          | { id: string; name: string; vendorId: string | null; ownerEmail: string; logo: string }
+          | null = null;
+        if (storeRef) {
+          store = await requireStoreAccess(auth, storeRef);
+        } else if (!auth.isAdmin) {
+          const seller = requireActorUser(auth);
+          store = await prisma.store.findFirst({
+            where: { vendorId: seller.id },
+            select: { id: true, name: true, vendorId: true, ownerEmail: true, logo: true },
+          });
+          if (!store) {
+            throw new WriteError(403, "Créez une boutique avant de publier un produit.");
+          }
         }
+
+        const ownerVendorId = auth.isAdmin
+          ? uuidOrNull(data.vendorId) || store?.vendorId || undefined
+          : requireActorUser(auth).id;
 
         const createdProduct = await prisma.product.create({
           data: {
             storeId: store?.id || undefined,
-            vendorId: data.vendorId || store?.vendorId || undefined,
-            storeName: data.storeName || store?.name || "FORTIA Digital Official Store",
+            vendorId: ownerVendorId,
+            storeName: store?.name || data.storeName || "FORTIA Digital Official Store",
             storeLogo: data.storeLogo || store?.logo || "",
             title: data.title || "Produit sans titre",
             slug: data.slug || "produit-" + Date.now(),
@@ -1622,15 +1645,34 @@ export async function POST(req: NextRequest) {
 
       // ============ ACHAT LIBRE ============
       case "register-free-purchase": {
-        const { userId, orderId } = data;
-        if (!userId || !orderId) {
-          return NextResponse.json({ error: "userId et orderId requis" }, { status: 400 });
+        // Réservé aux commandes GRATUITES du membre connecté : un achat payant
+        // ne peut plus ouvrir d'accès tant que le paiement n'est pas vérifié.
+        const userId = resolveTargetUserId(auth, data.userId);
+        const orderId = uuidOrNull(data.orderId);
+        if (!orderId) {
+          throw new WriteError(400, "Commande invalide.");
         }
 
         const user = await prisma.user.findUnique({ where: { id: userId } });
         const order = await prisma.marketplaceOrder.findUnique({ where: { id: orderId } });
         if (!user || !order) {
-          return NextResponse.json({ error: "Utilisateur ou commande introuvable" }, { status: 404 });
+          throw new WriteError(404, "Utilisateur ou commande introuvable.");
+        }
+        assertOrderAccess(auth, order);
+        if (Number(order.amountUsd) > 0) {
+          throw new WriteError(
+            409,
+            "Cette commande n'est pas gratuite : l'accès sera ouvert après vérification du paiement."
+          );
+        }
+        if (order.productId) {
+          const product = await prisma.product.findUnique({
+            where: { id: order.productId },
+            select: { price: true },
+          });
+          if (product && Number(product.price) > 0) {
+            throw new WriteError(409, "Ce produit est payant : accès en attente de paiement.");
+          }
         }
 
         const purchased = Array.isArray(user.purchasedProductIds) ? user.purchasedProductIds : [];
@@ -1851,6 +1893,8 @@ export async function POST(req: NextRequest) {
         const targetType = data.targetType === "product" ? "product" : "course";
         if (!uuidOrNull(data.targetId))
           return NextResponse.json({ error: "targetId (UUID) requis" }, { status: 400 });
+        // Seul le propriétaire du contenu suspendu (ou un admin) peut faire appel.
+        await assertContentOwnership(auth, targetType, data.targetId);
         const message = String(data.message || "").slice(0, 800);
         if (!message.trim())
           return NextResponse.json({ error: "Expliquez votre demande d'examen." }, { status: 400 });
@@ -1865,6 +1909,8 @@ export async function POST(req: NextRequest) {
 
       // ============ MISE À JOUR PRODUIT ============
       case "update-product": {
+        // Seul le vendeur propriétaire (ou un admin) peut modifier le produit.
+        await assertProductAccess(auth, data.id);
         const updated = await prisma.product.update({
           where: { id: data.id },
           data: {
@@ -1880,8 +1926,9 @@ export async function POST(req: NextRequest) {
             features: data.features ?? undefined,
             downloadUrl: data.downloadUrl ?? undefined,
             isPublished: data.isPublished ?? undefined,
-            isApproved: data.isApproved ?? undefined,
-            isPopular: data.isPopular ?? undefined,
+            // La modération (approbation / mise en avant) reste réservée aux admins.
+            isApproved: auth.isAdmin ? (data.isApproved ?? undefined) : undefined,
+            isPopular: auth.isAdmin ? (data.isPopular ?? undefined) : undefined,
           } as any,
         });
         return NextResponse.json({ success: true, id: updated.id });
@@ -1980,23 +2027,40 @@ export async function POST(req: NextRequest) {
       // ============ COMMANDE SERVICE AGENCE (client) ============
       case "order-service": {
         const orderNumber = "SVC-" + Date.now().toString(36).toUpperCase();
-        const serviceTitle = data.serviceTitle || data.title || "Service";
-        const clientEmail = data.clientEmail || "";
+        const serviceTitle = String(data.serviceTitle || data.title || "Service").trim();
+        const clientName = String(data.clientName || "").trim();
+        const clientEmail = String(data.clientEmail || "").trim().toLowerCase();
         const clientPhone = data.clientPhone || "";
+        if (!clientName || !EMAIL_PATTERN.test(clientEmail)) {
+          return NextResponse.json(
+            { success: false, error: "Nom et adresse e-mail valides requis." },
+            { status: 400 }
+          );
+        }
 
         const rawServiceId = data.serviceId ? String(data.serviceId) : "";
         const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawServiceId);
 
+        // Prix recalculé depuis la base quand le service existe (le montant
+        // envoyé par le navigateur n'est qu'une estimation).
+        let estimatedPrice = Math.max(0, Number(data.estimatedPrice) || 0);
+        if (isValidUuid) {
+          const service = await prisma.servicePackage
+            .findUnique({ where: { id: rawServiceId }, select: { startingPrice: true } })
+            .catch(() => null);
+          if (service) estimatedPrice = Number(service.startingPrice || 0);
+        }
+
         // 1. Créer le devis (demande de service) visible côté admin
         const created = await prisma.serviceQuote.create({
           data: {
-            clientName: data.clientName || "",
+            clientName,
             clientEmail,
             clientPhone,
             serviceTitle,
             serviceId: isValidUuid ? rawServiceId : undefined,
             details: data.details || "",
-            estimatedPrice: data.estimatedPrice || 0,
+            estimatedPrice,
             deadline: data.deadline || "",
             status: "Recu",
           } as any,
@@ -2007,7 +2071,7 @@ export async function POST(req: NextRequest) {
         const notifMsg =
           "Nouvelle commande service: " + data.clientName + " a commande " +
           serviceTitle + " (" + orderNumber + ") - montant estime " +
-          data.estimatedPrice + "$." + notifDetails;
+          estimatedPrice + "$." + notifDetails;
 
         await prisma.notification.create({
           data: {
@@ -2029,7 +2093,7 @@ export async function POST(req: NextRequest) {
           if (clientUser) {
             await notifyUser(clientUser.id, {
               title: "Commande envoyée : " + serviceTitle,
-              message: "Votre commande " + orderNumber + " a bien été reçue. Notre équipe vous contactera sous 24h pour valider le cahier des charges. Montant estimé : " + data.estimatedPrice + "$.",
+              message: "Votre commande " + orderNumber + " a bien été reçue. Notre équipe vous contactera sous 24h pour valider le cahier des charges. Montant estimé : " + estimatedPrice + "$.",
               type: "success",
               linkTab: "member",
             });
@@ -2041,7 +2105,7 @@ export async function POST(req: NextRequest) {
         let emailSent = false;
         if (resend && clientEmail) {
           try {
-            const priceUsd = Number(data.estimatedPrice || 0);
+            const priceUsd = estimatedPrice;
             const priceFcfa = (priceUsd * 600).toLocaleString("fr-FR");
             const emailHtml =
               "<div style='font-family:sans-serif;background:#010c22;color:#fff;padding:40px 16px;'>" +
@@ -2098,13 +2162,19 @@ export async function POST(req: NextRequest) {
 
       // ============ DEMANDE DE RETRAIT VENDEUR ============
       case "submit-payout": {
+        // Le vendeur ne peut demander un retrait que sur SA boutique.
+        const store = await requireStoreAccess(auth, data.storeId);
+        const amountUsd = Math.max(0, Number(data.amountUsd) || 0);
+        if (amountUsd <= 0) {
+          throw new WriteError(400, "Montant de retrait invalide.");
+        }
         const created = await prisma.payoutRequest.create({
           data: {
-            storeId: (await resolveStoreRef(data.storeId))?.id || undefined,
-            storeName: data.storeName || "",
-            vendorName: data.vendorName || "",
-            amountUsd: data.amountUsd || 0,
-            amountFcfa: data.amountFcfa || 0,
+            storeId: store.id,
+            storeName: store.name,
+            vendorName: auth.user?.name || data.vendorName || "",
+            amountUsd,
+            amountFcfa: Number(data.amountFcfa) || Math.round(amountUsd * 600),
             payoutMethod: data.payoutMethod || "",
             accountDetails: data.accountDetails || "",
             status: "En_attente",
@@ -2151,7 +2221,9 @@ export async function POST(req: NextRequest) {
         // UN COMPTE = UN SEUL CENTRE : si l'utilisateur possède déjà un centre,
         // on renvoie celui-ci au lieu d'en créer un doublon (c'est ce qui faisait
         // apparaître plusieurs centres / noms différents sur un même compte).
-        const ownerId = uuidOrNull(data.ownerId);
+        const ownerId = auth.isAdmin
+          ? uuidOrNull(data.ownerId) || undefined
+          : requireActorUser(auth).id;
         if (ownerId) {
           const existing = await prisma.trainingCenter.findFirst({
             where: { ownerId },
@@ -2244,24 +2316,15 @@ export async function POST(req: NextRequest) {
       }
 
       case "update-training-center-config": {
-        if (!uuidOrNull(data.centerId))
-          return NextResponse.json({ error: "centerId (UUID) requis" }, { status: 400 });
-        // Seul le propriétaire du centre (ou un administrateur) peut le modifier.
-        if (!adminActor) {
-          const owner = await getCurrentUser(req).catch(() => null);
-          const target = await prisma.trainingCenter
-            .findUnique({ where: { id: data.centerId }, select: { ownerId: true } })
-            .catch(() => null);
-          if (!target) return NextResponse.json({ error: "Centre introuvable" }, { status: 404 });
-          if (!owner?.id || target.ownerId !== owner.id)
-            return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
-        }
+        // Propriétaire du centre ou administrateur (vérifié en base).
+        await assertCenterAccess(auth, data.centerId);
         const updated = await prisma.trainingCenter.update({
           where: { id: data.centerId },
           data: {
-            storageQuotaGb: data.storageQuotaGb ?? undefined,
-            feeAmountUsd: data.feeAmountUsd ?? undefined,
-            status: data.status ?? undefined,
+            // Champs sensibles (quota, frais, statut) réservés à l'administration.
+            storageQuotaGb: auth.isAdmin ? (data.storageQuotaGb ?? undefined) : undefined,
+            feeAmountUsd: auth.isAdmin ? (data.feeAmountUsd ?? undefined) : undefined,
+            status: auth.isAdmin ? (data.status ?? undefined) : undefined,
             // Identité du centre (logo/photo de profil, bannière, présentation)
             centerName: typeof data.centerName === "string" && data.centerName.trim() ? data.centerName.trim() : undefined,
             description: typeof data.description === "string" ? data.description : undefined,
@@ -2275,6 +2338,8 @@ export async function POST(req: NextRequest) {
       // ============ PAIEMENT FRAIS CENTRE ============
       case "pay-training-center-fee": {
         if (!data.centerId) return NextResponse.json({ error: "centerId requis" }, { status: 400 });
+        // Seul le propriétaire du centre (ou un admin) peut régler ses frais.
+        await assertCenterAccess(auth, data.centerId);
         const updated = await prisma.trainingCenter.update({
           where: { id: data.centerId },
           data: { feePaid: true, status: "active" } as any,
@@ -2296,20 +2361,20 @@ export async function POST(req: NextRequest) {
               .catch(() => null)
           : null;
 
-        // Identifiants STRICTEMENT validés : un « center-123 » local (créé hors
-        // ligne) provoquait une erreur PostgreSQL « invalid input syntax for
-        // type uuid » et la formation n'était jamais enregistrée.
-        const instructorId = uuidOrNull(data.instructorId);
+        // Identité du formateur issue de la SESSION (un admin peut cibler).
+        // Le centerId est validé ET vérifié (propriétaire) avant écriture.
+        const instructorId = auth.isAdmin
+          ? uuidOrNull(data.instructorId)
+          : requireActorUser(auth).id;
         const centerId = uuidOrNull(data.centerId);
         if (!instructorId) {
-          return NextResponse.json(
-            {
-              success: false,
-              error:
-                "Session formateur introuvable ou expirée : reconnectez-vous puis republiez la formation.",
-            },
-            { status: 401 }
+          throw new WriteError(
+            401,
+            "Session formateur introuvable ou expirée : reconnectez-vous puis republiez la formation."
           );
+        }
+        if (centerId) {
+          await assertCenterAccess(auth, centerId);
         }
 
         const title = String(data.title || "").trim() || "Cours sans titre";
@@ -2422,15 +2487,9 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
         }
 
-        const viewer = await getCurrentUser(req).catch(() => null);
-        const rawUserId = String(data.userId || "");
-        const userId = viewer?.id || (UUID_PATTERN.test(rawUserId) ? rawUserId : "");
-        if (!userId) {
-          return NextResponse.json(
-            { error: "Connectez-vous pour noter ce produit." },
-            { status: 401 }
-          );
-        }
+        // Identité issue de la session : impossible de noter au nom d'un autre.
+        const reviewer = requireActorUser(auth);
+        const userId = reviewer.id;
 
         const clampedRating = Math.max(1, Math.min(5, Math.round(Number(data.rating))));
         if (!Number.isFinite(clampedRating)) {
@@ -2478,9 +2537,15 @@ export async function POST(req: NextRequest) {
 
       // ============ NOTATION COURS ============
       case "rate-course": {
-        const { courseId, userId, rating } = data;
-        if (!courseId || !userId || !rating) {
-          return NextResponse.json({ error: "courseId, userId et rating requis" }, { status: 400 });
+        // Identité issue de la session : impossible de noter au nom d'un autre.
+        const reviewer = requireActorUser(auth);
+        const userId = reviewer.id;
+        const { courseId, rating } = data;
+        if (!courseId || !rating) {
+          return NextResponse.json(
+            { success: false, error: "courseId et rating requis." },
+            { status: 400 }
+          );
         }
 
         const course = await prisma.course.findUnique({ where: { id: courseId } });
@@ -2542,7 +2607,8 @@ export async function POST(req: NextRequest) {
 
       // ============ SUSPENSION COURS ============
       case "suspend-course": {
-        if (!data.id) return NextResponse.json({ error: "id requis" }, { status: 400 });
+        // Propriétaire de la formation ou administrateur uniquement.
+        await assertCourseAccess(auth, data.id);
         const updated = await prisma.course.update({
           where: { id: data.id },
           data: { isPublished: false } as any,
@@ -2552,28 +2618,43 @@ export async function POST(req: NextRequest) {
 
       // ============ SUPPRESSION COURS ============
       case "delete-course": {
-        if (!data.id) return NextResponse.json({ error: "id requis" }, { status: 400 });
+        // Propriétaire (formateur / centre) ou administrateur uniquement.
+        await assertCourseAccess(auth, data.id);
         await prisma.course.delete({ where: { id: data.id } });
         return NextResponse.json({ success: true });
       }
 
       // ============ ACHAT STOCKAGE FORMATEUR ============
       case "register-instructor-purchase": {
+        // Identité issue de la session ; le centre doit appartenir à l'appelant.
+        const instructorId = auth.isAdmin
+          ? uuidOrNull(data.instructorId) || undefined
+          : requireActorUser(auth).id;
+        const centerId = uuidOrNull(data.centerId);
+        if (!instructorId) {
+          throw new WriteError(400, "Formateur invalide.");
+        }
+        if (centerId) {
+          await assertCenterAccess(auth, centerId);
+        }
         const purchase = await prisma.instructorStoragePurchase.create({
           data: {
-            instructorId: data.instructorId || "",
-            centerId: data.centerId || undefined,
-            amountGb: data.amountGb || 0,
-            amountUsd: data.amountUsd || 0,
+            instructorId,
+            centerId: centerId || undefined,
+            amountGb: Math.max(0, Number(data.amountGb) || 0),
+            amountUsd: Math.max(0, Number(data.amountUsd) || 0),
             status: "Paye",
           } as any,
         });
-        if (data.centerId) {
-          const center = await prisma.trainingCenter.findUnique({ where: { id: data.centerId } });
+        if (centerId) {
+          const center = await prisma.trainingCenter.findUnique({ where: { id: centerId } });
           if (center) {
             await prisma.trainingCenter.update({
-              where: { id: data.centerId },
-              data: { storageQuotaGb: (center.storageQuotaGb || 0) + (data.amountGb || 0) } as any,
+              where: { id: centerId },
+              data: {
+                storageQuotaGb:
+                  (center.storageQuotaGb || 0) + Math.max(0, Number(data.amountGb) || 0),
+              } as any,
             });
           }
         }
@@ -2582,9 +2663,8 @@ export async function POST(req: NextRequest) {
 
       // ============ MISE À JOUR BOUTIQUE VENDEUR (logo, bannière, infos) ============
       case "update-store": {
-        // Résolution sûre : le navigateur peut envoyer un slug ou un nom.
-        const targetStore = await resolveStoreRef(data.storeId);
-        if (!targetStore) return NextResponse.json({ error: "Boutique introuvable." }, { status: 400 });
+        // Boutique résolue et propriété vérifiée (propriétaire ou admin).
+        const targetStore = await requireStoreAccess(auth, data.storeId);
 
         const storeData: any = {};
         if (typeof data.name === "string" && data.name) storeData.name = data.name;
@@ -2604,10 +2684,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Action inconnue: " + action }, { status: 400 });
     }
   } catch (error: any) {
-    console.error("[Platform Write] Erreur:", error);
-    return NextResponse.json(
-      { success: false, error: error?.message || "Erreur serveur" },
-      { status: 500 }
-    );
+    // Détails techniques UNIQUEMENT dans les logs serveur.
+    logWriteFailure(actionName, error);
+    const { status, body } = toWriteErrorResponse(error);
+    return NextResponse.json(body, { status });
   }
 }
