@@ -180,7 +180,8 @@ export async function createInstructorCourseRecord(
 
 export async function updateCourseRecord(
   courseId: string,
-  data: CourseWriteData
+  data: CourseWriteData,
+  options: { isAdmin: boolean }
 ): Promise<string> {
   const categoryId =
     data.categoryId ?? (data.category ? await resolveCourseCategoryId(data.category) : undefined);
@@ -205,10 +206,11 @@ export async function updateCourseRecord(
         instructorRole: data.instructorRole ?? undefined,
         instructorAvatar: data.instructorAvatar ?? undefined,
         learningOutcomes: data.learningOutcomes ?? undefined,
-        rating: data.rating ?? undefined,
-        reviewsCount: data.reviewsCount ?? undefined,
+        // Champs de réputation / mise en avant : réservés à l'administration.
+        rating: options.isAdmin ? (data.rating ?? undefined) : undefined,
+        reviewsCount: options.isAdmin ? (data.reviewsCount ?? undefined) : undefined,
         isPublished: data.isPublished ?? undefined,
-        isFeatured: data.isFeatured ?? undefined,
+        isFeatured: options.isAdmin ? (data.isFeatured ?? undefined) : undefined,
       } as never,
     });
 

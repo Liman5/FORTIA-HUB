@@ -14,6 +14,7 @@
 | 8 | `approve-vendor-app` / `reject-vendor-app` pouvaient être rejoués (boutiques dupliquées). | Statut `En_attente` obligatoire ; 409 sinon. |
 | 9 | `ADMIN_EMAILS` : une adresse allowlistée non encore inscrite pouvait être créée via l'inscription publique, donnant le rôle superadmin. | L'inscription refuse désormais une adresse de la liste `ADMIN_EMAILS` ou présente dans `admin_users`. |
 | 10 | Actions authentifiées sensibles sans limite de débit (`submit-kyc`, `submit-payout`, `issue-certificate`, contenus, etc.). | Limites persistantes par utilisateur/admin dans `writeAuthorization` (KYC 5/10 min, retraits 10/min, contenus 30/min, etc.). |
+| 11 | `update-course` laissait le propriétaire modifier `rating`, `reviewsCount` et `isFeatured` (fausse réputation / mise en avant). | Ces champs sont désormais réservés aux administrateurs ; le propriétaire ne peut modifier que le contenu et la publication. |
 
 ## Points déjà correctement sécurisés (vérifiés)
 
@@ -27,7 +28,7 @@
 
 ## Tests HTTP authentifiés ajoutés
 
-`scripts/test-security-authz.mjs` — **42 vérifications** sur la chaîne HTTP complète :
+`scripts/test-security-authz.mjs` — **43 vérifications** sur la chaîne HTTP complète :
 
 - profils : soi-même / autrui / superviseur ;
 - formations, produits, boutiques, centres : autre membre → 403, propriétaire → 200 ;
@@ -50,7 +51,7 @@
 
 ## Vérifications
 
-- `npm run test:security` : 42/42
+- `npm run test:security` : 43/43
 - `npm run test:authz` : 50/50
 - `npm run test:payments` : 59/59
 - `npm run test:academy` : 25/25

@@ -43,7 +43,9 @@ export async function handleAcademyAction(
     case "update-course": {
       // Propriétaire de la formation ou administrateur uniquement.
       await assertCourseAccess(auth, data.id);
-      const id = await updateCourseRecord(String(data.id), data);
+      const id = await updateCourseRecord(String(data.id), data, {
+        isAdmin: auth.isAdmin,
+      });
       return NextResponse.json({ success: true, id });
     }
 

@@ -290,6 +290,24 @@ try {
     { cookie: owner.token }
   );
   check(ownCourse.status === 200, "propriétaire modifie sa formation", ownCourse.text);
+  await prisma.course.update({
+    where: { id: course.id },
+    data: { rating: 4.5, reviewsCount: 7 },
+  });
+  const privilegedCourseFields = await api(
+    "update-course",
+    { id: course.id, rating: 1, reviewsCount: 999, isFeatured: true },
+    { cookie: owner.token }
+  );
+  const courseAfterPrivileged = await prisma.course.findUnique({ where: { id: course.id } });
+  check(
+    privilegedCourseFields.status === 200 &&
+      Number(courseAfterPrivileged?.rating) === 4.5 &&
+      courseAfterPrivileged?.reviewsCount === 7 &&
+      courseAfterPrivileged?.isFeatured === false,
+    "propriétaire ne peut pas modifier note/avis/mise en avant",
+    privilegedCourseFields.text
+  );
 
   const foreignProduct = await api(
     "update-product",
