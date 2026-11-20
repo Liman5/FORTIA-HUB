@@ -65,10 +65,16 @@ export async function handleVendorsAction(
           );
         }
 
-        await prisma.vendorApplication.update({
-          where: { id: data.id },
+        const claimedApproval = await prisma.vendorApplication.updateMany({
+          where: { id: app.id, status: "En_attente" },
           data: { status: "Approuve" } as any,
         });
+        if (claimedApproval.count === 0) {
+          return NextResponse.json(
+            { error: "Cette candidature a déjà été traitée." },
+            { status: 409 }
+          );
+        }
 
         const baseSlug = app.storeName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
         const slug = `${baseSlug}-${Date.now().toString(36)}`;
@@ -121,10 +127,16 @@ export async function handleVendorsAction(
           );
         }
 
-        await prisma.vendorApplication.update({
-          where: { id: data.id },
+        const claimedRejection = await prisma.vendorApplication.updateMany({
+          where: { id: app.id, status: "En_attente" },
           data: { status: "Rejete" } as any,
         });
+        if (claimedRejection.count === 0) {
+          return NextResponse.json(
+            { error: "Cette candidature a déjà été traitée." },
+            { status: 409 }
+          );
+        }
 
         const sellerUser = app.userId
           ? await prisma.user.findUnique({ where: { id: app.userId } })
