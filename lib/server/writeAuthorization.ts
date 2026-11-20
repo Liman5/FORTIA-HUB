@@ -104,6 +104,32 @@ export const WRITE_POLICIES: Record<string, WritePolicy> = {
 
 export const WRITE_ACTION_NAMES = Object.keys(WRITE_POLICIES);
 
+/**
+ * Limites des actions authentifiées sensibles (par utilisateur / admin).
+ * Les actions publiques ont leur limite directement dans la politique.
+ * Les webhooks et l'idempotence ne sont pas concernés.
+ */
+const AUTHENTICATED_LIMITS: Record<string, { max: number; windowMs: number }> = {
+  "submit-kyc": { max: 5, windowMs: 10 * 60_000 },
+  "submit-payout": { max: 10, windowMs: 60_000 },
+  "issue-certificate": { max: 10, windowMs: 60_000 },
+  "sync-user-learning": { max: 60, windowMs: 60_000 },
+  "update-profile": { max: 30, windowMs: 60_000 },
+  "create-training-center": { max: 5, windowMs: 10 * 60_000 },
+  "update-training-center-config": { max: 30, windowMs: 60_000 },
+  "submit-course-by-instructor": { max: 10, windowMs: 60_000 },
+  "update-course": { max: 30, windowMs: 60_000 },
+  "suspend-course": { max: 20, windowMs: 60_000 },
+  "delete-course": { max: 10, windowMs: 60_000 },
+  "create-product": { max: 30, windowMs: 60_000 },
+  "update-product": { max: 30, windowMs: 60_000 },
+  "update-store": { max: 30, windowMs: 60_000 },
+  "register-course-media-storage": { max: 120, windowMs: 60_000 },
+  "rate-product": { max: 20, windowMs: 60_000 },
+  "rate-course": { max: 20, windowMs: 60_000 },
+  "appeal-moderation": { max: 5, windowMs: 60_000 },
+};
+
 // ============================================================
 // ERREURS MÉTIER (statuts HTTP normalisés)
 // ============================================================
@@ -244,6 +270,28 @@ export async function authorizeWriteAction(
             ? "Vos droits ne couvrent pas le domaine KYC."
             : "Vos droits ne couvrent pas ce domaine.",
         "ADMIN_DOMAIN_DENIED"
+      );
+    }
+  }
+
+  // ---- Limite de débit des actions authentifiées sensibles ----
+  const limit = AUTHENTICATED_LIMITS[action];
+  if (limit) {
+    const identity = user?.id
+      ? `user:${user.id}`
+      : admin?.id
+        ? `admin:${admin.id}`
+        : `ip:${clientIp(req)}`;
+    const wait = await rateLimitPersistent(
+      `write:${action}:${identity}`,
+      limit.max,
+      limit.windowMs
+    );
+    if (wait) {
+      throw new WriteError(
+        429,
+        `Trop de requêtes. Réessayez dans ${wait} seconde(s).`,
+        "RATE_LIMITED"
       );
     }
   }

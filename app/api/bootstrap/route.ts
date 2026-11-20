@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/services/authSession";
 import { requireAdmin } from "@/lib/server/requireAdmin";
 import { readResponseCache, writeResponseCache } from "@/lib/server/responseCache";
+import { toPublicProducts } from "@/lib/modules/marketplace/publicView";
 
 export const dynamic = "force-dynamic";
 
@@ -105,6 +106,10 @@ export async function GET(req: NextRequest) {
       const { payoutInfo, ...rest } = store || {};
       return { ...rest, payoutMethod: payoutInfo?.method || "" };
     });
+    const safeProducts = toPublicProducts(products as Record<string, any>[], {
+      viewerId: viewer?.id,
+      isAdmin: !!admin,
+    });
 
     const response = jsonSafe({
       success: true,
@@ -115,7 +120,7 @@ export async function GET(req: NextRequest) {
         catalogTotal: courseTotal,
         catalogHasMore: (courses as any[]).length < courseTotal,
         stores: publicStores,
-        products,
+        products: safeProducts,
         productTotal,
         servicePackages,
         freelances,

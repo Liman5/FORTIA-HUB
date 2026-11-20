@@ -20,6 +20,12 @@ export async function handleProfilesAction(
     case "update-freelance-profile": {
         // Identité imposée par la session (un admin peut cibler un utilisateur).
         const ownerUserId = resolveTargetUserId(auth, data.userId);
+        // La vérification KYC ne peut JAMAIS être auto-attribuée par ce formulaire.
+        const owner = await prisma.user.findUnique({
+          where: { id: ownerUserId },
+          select: { kycStatus: true },
+        });
+        const kycApproved = owner?.kycStatus === "approuve";
         // La table freelance_profiles n'a PAS de contrainte unique sur user_id :
         // on utilise findFirst + update/create (l'upsert Prisma échouerait en base).
         const existingFreelanceProfile = await prisma.freelanceProfile.findFirst({
@@ -38,6 +44,8 @@ export async function handleProfilesAction(
                 skills: data.skills ?? undefined,
                 location: data.location ?? undefined,
                 isVisible: data.isVisible ?? undefined,
+                kycVerified: kycApproved,
+                canSellServices: kycApproved,
               } as any,
             })
           : await prisma.freelanceProfile.create({
@@ -51,8 +59,8 @@ export async function handleProfilesAction(
                 hourlyRate: data.hourlyRate || 0,
                 skills: data.skills || [],
                 location: data.location || "",
-                kycVerified: true,
-                canSellServices: true,
+                kycVerified: kycApproved,
+                canSellServices: kycApproved,
                 isVisible: true,
               },
             });
@@ -81,6 +89,12 @@ export async function handleProfilesAction(
     case "update-enterprise-profile": {
         // Identité imposée par la session (un admin peut cibler un utilisateur).
         const ownerUserId = resolveTargetUserId(auth, data.userId);
+        // La vérification KYC ne peut JAMAIS être auto-attribuée par ce formulaire.
+        const owner = await prisma.user.findUnique({
+          where: { id: ownerUserId },
+          select: { kycStatus: true },
+        });
+        const kycApproved = owner?.kycStatus === "approuve";
         // La table enterprise_profiles n'a PAS de contrainte unique sur user_id :
         // on utilise findFirst + update/create (l'upsert Prisma échouerait en base).
         const existingEnterpriseProfile = await prisma.enterpriseProfile.findFirst({
@@ -100,6 +114,8 @@ export async function handleProfilesAction(
                 contactPhone: data.contactPhone ?? undefined,
                 website: data.website ?? undefined,
                 isVisible: data.isVisible ?? undefined,
+                verifiedDocuments: kycApproved,
+                canSellServices: kycApproved,
               } as any,
             })
           : await prisma.enterpriseProfile.create({
@@ -111,8 +127,8 @@ export async function handleProfilesAction(
                 logo: data.logo || "",
                 sector: data.sector || "",
                 country: data.country || "",
-                verifiedDocuments: true,
-                canSellServices: true,
+                verifiedDocuments: kycApproved,
+                canSellServices: kycApproved,
                 contactEmail: data.contactEmail || "",
                 contactPhone: data.contactPhone || "",
                 website: data.website || "",

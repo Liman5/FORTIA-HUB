@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/services/authSession";
 import { requireAdmin } from "@/lib/server/requireAdmin";
 
 // ============================================================
@@ -21,6 +20,14 @@ const INITIAL_MARKETPLACE_PRODUCTS: any[] = [];
  * Mode : LECTURE SEULE — ne modifie jamais la base.
  */
 export async function GET(req: NextRequest) {
+  const admin = await requireAdmin(req).catch(() => null);
+  if (!admin) {
+    return NextResponse.json(
+      { error: "Accès réservé à l'administration." },
+      { status: 401 }
+    );
+  }
+
   const warnings: string[] = [];
 
   // Helper tolérant : si une table échoue (colonne manquante, enum, réseau),
@@ -129,12 +136,8 @@ export async function GET(req: NextRequest) {
   });
 
   // --- Réponses de quiz : `isCorrect` réservé au propriétaire / admin ---
-  const [viewer, admin] = await Promise.all([
-    getCurrentUser(req).catch(() => null),
-    requireAdmin(req).catch(() => null),
-  ]);
   const publicCourses = (courses || []).map((course: any) => {
-    const canEdit = Boolean(admin) || Boolean(viewer && viewer.id === course.instructorId);
+    const canEdit = true;
     return {
       ...course,
       quizzes: (course.quizzes || []).map((quiz: any) => ({

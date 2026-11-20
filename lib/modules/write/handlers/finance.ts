@@ -53,13 +53,34 @@ export async function handleFinanceAction(
         if (amountUsd <= 0) {
           throw new WriteError(400, "Montant de retrait invalide.");
         }
+
+        // Solde disponible = chiffre d'affaires moins retraits en attente.
+        const [storeBalance, pending] = await Promise.all([
+          prisma.store.findUnique({
+            where: { id: store.id },
+            select: { totalRevenueUsd: true },
+          }),
+          prisma.payoutRequest.aggregate({
+            where: { storeId: store.id, status: "En_attente" },
+            _sum: { amountUsd: true },
+          }),
+        ]);
+        const revenue = Number(storeBalance?.totalRevenueUsd || 0);
+        const alreadyRequested = Number(pending._sum.amountUsd || 0);
+        const available = Math.max(0, revenue - alreadyRequested);
+        if (amountUsd > available) {
+          throw new WriteError(
+            409,
+            `Montant supérieur au solde disponible (${available.toFixed(2)} $).`
+          );
+        }
         const created = await prisma.payoutRequest.create({
           data: {
             storeId: store.id,
             storeName: store.name,
             vendorName: auth.user?.name || data.vendorName || "",
             amountUsd,
-            amountFcfa: Number(data.amountFcfa) || Math.round(amountUsd * 600),
+            amountFcfa: Math.round(amountUsd * 600),
             payoutMethod: data.payoutMethod || "",
             accountDetails: data.accountDetails || "",
             status: "En_attente",
@@ -73,25 +94,37 @@ export async function handleFinanceAction(
         if (!payout) {
           return NextResponse.json({ error: "Demande de retrait introuvable" }, { status: 404 });
         }
-
-        await prisma.payoutRequest.update({
-          where: { id: data.id },
-          data: { status: "Paye" } as any,
-        });
-
-        if (payout.storeId) {
-          const storeDoc = await prisma.store.findUnique({ where: { id: payout.storeId } });
-          if (storeDoc) {
-            const newBalance = Math.max(
-              Number(storeDoc.totalRevenueUsd || 0) - Number(payout.amountUsd || 0),
-              0
-            );
-            await prisma.store.update({
-              where: { id: payout.storeId },
-              data: { totalRevenueUsd: newBalance } as any,
-            });
-          }
+        if (payout.status !== "En_attente") {
+          return NextResponse.json(
+            { error: "Cette demande de retrait a déjà été traitée." },
+            { status: 409 }
+          );
         }
+
+        await prisma.$transaction(async (tx) => {
+          // Transition atomique : une seconde approbation simultanée échoue.
+          const approved = await tx.payoutRequest.updateMany({
+            where: { id: payout.id, status: "En_attente" },
+            data: { status: "Paye" } as any,
+          });
+          if (approved.count === 0) {
+            throw new WriteError(409, "Cette demande de retrait a déjà été traitée.");
+          }
+
+          if (payout.storeId) {
+            const storeDoc = await tx.store.findUnique({ where: { id: payout.storeId } });
+            if (storeDoc) {
+              const newBalance = Math.max(
+                Number(storeDoc.totalRevenueUsd || 0) - Number(payout.amountUsd || 0),
+                0
+              );
+              await tx.store.update({
+                where: { id: payout.storeId },
+                data: { totalRevenueUsd: newBalance } as any,
+              });
+            }
+          }
+        });
 
         return NextResponse.json({
           success: true,

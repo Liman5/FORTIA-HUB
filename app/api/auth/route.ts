@@ -20,6 +20,7 @@ import {
 import { notifyUser } from "@/lib/services/notifyUser";
 import { isRetryableDbError, withDbRetry } from "@/lib/server/dbRetry";
 import { enforceRateLimit } from "@/lib/server/rateLimits";
+import { isAdminEmailAllowlisted } from "@/lib/server/requireAdmin";
 import { requestIdOf, toErrorResponse, withApiRoute } from "@/lib/server/errors";
 import { authActionSchema } from "@/lib/validation";
 import { parseOrThrow } from "@/lib/validation/common";
@@ -343,6 +344,27 @@ async function handlePost(request: NextRequest) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
+
+      // ⚠️ SÉCURITÉ : une adresse réservée à l'administration ne peut pas être
+      // créée par l'inscription publique (sinon un visiteur s'attribuerait les
+      // droits admin simplement en connaissant l'adresse).
+      const reservedAdmin =
+        isAdminEmailAllowlisted(normalizedEmail) ||
+        (await prisma.adminUser
+          .findFirst({
+            where: { email: { equals: normalizedEmail, mode: "insensitive" }, isActive: true },
+            select: { id: true },
+          })
+          .catch(() => null)) !== null;
+      if (reservedAdmin) {
+        return NextResponse.json(
+          {
+            error:
+              "Refusé : cette adresse e-mail est réservée. Utilisez une autre adresse.",
+          },
+          { status: 400 }
+        );
+      }
 
       // Hachage BCrypt du mot de passe
       const passwordHash = await bcrypt.hash(password, 10);

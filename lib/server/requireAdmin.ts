@@ -65,6 +65,21 @@ export function isAdminRole(role?: unknown): boolean {
 }
 
 /**
+ * Un e-mail de la liste `ADMIN_EMAILS` ne doit jamais pouvoir être créé
+ * par l'inscription publique : sinon un visiteur s'attribuerait un compte
+ * administrateur simplement en connaissant l'adresse.
+ */
+export function isAdminEmailAllowlisted(email?: unknown): boolean {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized) return false;
+  return String(process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(normalized);
+}
+
+/**
  * Rôle SUPERADMINISTRATEUR : seul ce rôle peut créer/modifier/supprimer des
  * comptes administrateurs. Un superadmin ne peut jamais être supprimé.
  */

@@ -58,6 +58,12 @@ export async function handleVendorsAction(
         if (!app) {
           return NextResponse.json({ error: "Candidature introuvable" }, { status: 404 });
         }
+        if (app.status !== "En_attente") {
+          return NextResponse.json(
+            { error: "Cette candidature a déjà été traitée." },
+            { status: 409 }
+          );
+        }
 
         await prisma.vendorApplication.update({
           where: { id: data.id },
@@ -107,6 +113,12 @@ export async function handleVendorsAction(
         });
         if (!app) {
           return NextResponse.json({ error: "Candidature introuvable" }, { status: 404 });
+        }
+        if (app.status !== "En_attente") {
+          return NextResponse.json(
+            { error: "Cette candidature a déjà été traitée." },
+            { status: 409 }
+          );
         }
 
         await prisma.vendorApplication.update({

@@ -6,6 +6,7 @@ import { ProductDetail } from "@/components/pages/ProductDetail";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/services/authSession";
 import { requireAdmin } from "@/lib/server/requireAdmin";
+import { hasEntitlement } from "@/lib/modules/payments/entitlements";
 
 export const dynamic = "force-dynamic";
 
@@ -69,18 +70,33 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     notFound();
   }
 
+  // Qui regarde ? (session utilisateur + admin, via cookies HttpOnly)
+  const cookieStore = await cookies();
+  const requestLike = { cookies: cookieStore } as unknown as NextRequest;
+  const [viewer, admin] = await Promise.all([
+    getCurrentUser(requestLike).catch(() => null),
+    requireAdmin(requestLike).catch(() => null),
+  ]);
+  const isOwner = !!product.vendorId && product.vendorId === viewer?.id;
+
   // Un produit NON PUBLIÉ reste accessible à son vendeur et à l'administration,
   // mais jamais à un visiteur anonyme (ni à un autre utilisateur).
-  if (!product.isPublished) {
-    const cookieStore = await cookies();
-    const requestLike = { cookies: cookieStore } as unknown as NextRequest;
-    const [viewer, admin] = await Promise.all([
-      getCurrentUser(requestLike),
-      requireAdmin(requestLike),
-    ]);
-    const isOwner = !!product.vendorId && product.vendorId === viewer?.id;
-    if (!admin && !isOwner) notFound();
+  if (!product.isPublished && !admin && !isOwner) {
+    notFound();
   }
+
+  // Les fichiers livrables ne sont envoyés au navigateur QUE si l'accès est réel.
+  const [entitled] = viewer?.id
+    ? await Promise.all([
+        hasEntitlement(viewer.id, "product", product.id).catch(() => false),
+      ])
+    : [false];
+  const hasAccess =
+    !!admin ||
+    isOwner ||
+    (Number(product.price) === 0 && product.isPublished) ||
+    entitled ||
+    (!!viewer?.id && (viewer.purchasedProductIds || []).includes(product.id));
 
   let features: string[] = [];
   try {
@@ -110,13 +126,15 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     storeName: product.storeName || "",
     storeLogo: product.storeLogo || "",
     createdAt: product.createdAt ? product.createdAt.toISOString() : "",
-    files: (product.files || []).map((file) => ({
-      id: file.id,
-      fileName: file.fileName,
-      fileUrl: file.fileUrl,
-      fileSize: file.fileSize || "",
-      mimeType: file.mimeType || "",
-    })),
+    files: hasAccess
+      ? (product.files || []).map((file) => ({
+          id: file.id,
+          fileName: file.fileName,
+          fileUrl: file.fileUrl,
+          fileSize: file.fileSize || "",
+          mimeType: file.mimeType || "",
+        }))
+      : [],
   };
 
   return (

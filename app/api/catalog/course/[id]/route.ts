@@ -3,6 +3,7 @@ import { jsonSafe } from "@/lib/server/json";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/services/authSession";
 import { requireAdmin } from "@/lib/server/requireAdmin";
+import { hasEntitlement } from "@/lib/modules/payments/entitlements";
 
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,26 @@ export async function GET(
       requireAdmin(req).catch(() => null),
     ]);
     const canEdit = Boolean(admin) || Boolean(viewer && viewer.id === course.instructorId);
+
+    // Une formation non publiée n'existe pas pour un visiteur / un autre membre.
+    if (!course.isPublished && !canEdit) {
+      return jsonSafe({ error: "Formation introuvable." }, { status: 404 });
+    }
+
+    // Contenu des leçons : propriétaire, admin, formation gratuite, ou droit réel.
+    const [entitled, enrollment] = viewer?.id
+      ? await Promise.all([
+          hasEntitlement(viewer.id, "course", course.id).catch(() => false),
+          prisma.courseEnrollment
+            .findUnique({
+              where: { userId_courseId: { userId: viewer.id, courseId: course.id } },
+              select: { id: true },
+            })
+            .catch(() => null),
+        ])
+      : [false, null];
+    const hasCourseAccess =
+      canEdit || (Number(course.price) === 0 && course.isPublished) || entitled || !!enrollment;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const c: any = course;
@@ -101,10 +122,10 @@ export async function GET(
           title: lesson.title,
           duration: lesson.duration || "",
           type: lesson.type || "video",
-          videoUrl: lesson.videoUrl || "",
-          content: lesson.content || "",
-          videoProtected: lesson.videoProtected || false,
-          videoCodeHash: lesson.videoCodeHash || undefined,
+          videoUrl: hasCourseAccess ? lesson.videoUrl || "" : "",
+          content: hasCourseAccess ? lesson.content || "" : "",
+          videoProtected: hasCourseAccess ? lesson.videoProtected || false : false,
+          videoCodeHash: hasCourseAccess ? lesson.videoCodeHash || undefined : undefined,
         })),
       })),
       quiz: (c.quizzes || []).map((quiz: any) => ({
