@@ -197,11 +197,7 @@ export function CartPage() {
               handlePaymentSuccess(order);
               setPaymentSucceeded(true);
             }}
-            onAddSupportSubmission={addSupportSubmission}
-            vendorEmail={userProfile?.email || "commande@fortiahub.com"}
             buyerUserId={userProfile?.id}
-            marketplaceProducts={marketplaceProducts}
-            stores={stores}
             onBack={() => setStep("cart")}
           />
         ) : count === 0 ? (

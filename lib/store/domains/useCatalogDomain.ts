@@ -118,16 +118,19 @@ export function useCatalogDomain({
 
       apiWritePlatform("create-training-center", { ownerId, ...data }).then((res) => {
         if (res.success && res.id) {
+          // Le centre est créé EN ATTENTE : le statut actif exige une validation
+          // admin ou le paiement des frais via /api/payments/checkout.
           const realCenter: TrainingCenter = {
             ...tempCenter,
             id: res.id,
-            status: "active",
-            feePaid: true,
+            status: "pending",
+            feePaid: false,
           };
           setTrainingCenters((prev) => prev.map((c) => (c.id === tempCenter.id ? realCenter : c)));
           setInstructorCenter(realCenter);
-          apiWritePlatform("pay-training-center-fee", { centerId: res.id });
-          alert("🎉 Votre centre de formation a été créé et est actif !");
+          alert(
+            "Votre centre de formation a été créé. Il sera activé après validation de l'administration ou paiement des frais."
+          );
         } else {
           alert(
             "⚠️ Le centre a été créé localement mais n'a pas été enregistré en base (serveur inaccessible). " +
@@ -383,21 +386,6 @@ export function useCatalogDomain({
     apiWritePlatform("delete-course", { id: courseId });
   }, []);
 
-  const buyInstructorStorage = useCallback(
-    (center: TrainingCenter, amountGb: number, amountUsd: number) => {
-      const updated = { ...center, storageQuotaGb: center.storageQuotaGb + amountGb };
-      setInstructorCenter(updated);
-      setTrainingCenters((prev) => prev.map((c) => (c.id === center.id ? updated : c)));
-      apiWritePlatform("register-instructor-purchase", {
-        instructorId: userProfile?.id,
-        centerId: center.id,
-        amountGb,
-        amountUsd,
-      });
-    },
-    [userProfile]
-  );
-
   const adminAddInstructor = useCallback(
     (data: { email: string; centerName: string; description?: string; storageQuotaGb?: number }) => {
       const tempCenter: TrainingCenter = {
@@ -618,7 +606,6 @@ export function useCatalogDomain({
     recordCourseProgress,
     ensureCourseEnrollment,
     grantCertificate,
-    buyInstructorStorage,
     adminAddInstructor,
     catalogTotal,
     setCatalogTotal,

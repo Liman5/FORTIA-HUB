@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASE_URL = process.env.BASE_URL || "http://localhost:3100";
-const PUBLIC_ACTIONS = ["submit-quote", "submit-vendor-app", "submit-support", "order-service", "submit-order"];
+const PUBLIC_ACTIONS = ["submit-quote", "submit-vendor-app", "submit-support", "order-service"];
 const PROTECTED_ACTIONS = [
   "update-profile",
   "approve-payout",
@@ -41,11 +41,9 @@ const PROTECTED_ACTIONS = [
   "sync-user-learning",
   "mark-notification-read",
   "create-product",
-  "register-free-purchase",
   "create-course",
   "create-banner",
   "save-commission-rule",
-  "register-instructor-purchase",
   "submit-payout",
   "issue-certificate",
   "submit-kyc",
@@ -84,13 +82,34 @@ const policyActions = new Set(
   [...authSrc.matchAll(/^\s{2}"([a-z0-9-]+)":\s*\{\s*actor:/gm)].map((m) => m[1])
 );
 
-check(routeActions.size === 58, "58 actions dans la route", `trouvées: ${routeActions.size}`);
-check(policyActions.size === 58, "58 politiques déclarées", `trouvées: ${policyActions.size}`);
+/**
+ * Phase 2 : ces 4 actions simulaient un paiement. Elles ne sont plus
+ * exécutables (410) et n'ont plus de politique ; le code des `case` reste
+ * en place (inatteignable) jusqu'au découpage de la route (Phase 3).
+ */
+const DEPRECATED_ACTIONS = [
+  "submit-order",
+  "register-free-purchase",
+  "register-instructor-purchase",
+  "pay-training-center-fee",
+];
+const activeRouteActions = new Set(
+  [...routeActions].filter((action) => !DEPRECATED_ACTIONS.includes(action))
+);
 
-const missing = [...routeActions].filter((a) => !policyActions.has(a));
-const extra = [...policyActions].filter((a) => !routeActions.has(a));
+check(activeRouteActions.size === 54, "54 actions actives dans la route", `trouvées: ${activeRouteActions.size}`);
+check(policyActions.size === 54, "54 politiques déclarées", `trouvées: ${policyActions.size}`);
+
+const missing = [...activeRouteActions].filter((a) => !policyActions.has(a));
+const extra = [...policyActions].filter((a) => !activeRouteActions.has(a));
 check(missing.length === 0, "Aucune action sans politique", `manquantes: ${missing.join(", ")}`);
 check(extra.length === 0, "Aucune politique orpheline", `orphelines: ${extra.join(", ")}`);
+check(
+  routeSrc.includes("DEPRECATED_WRITE_ACTIONS") &&
+    DEPRECATED_ACTIONS.every((action) => routeSrc.includes(`"${action}"`)),
+  "Actions de paiement historiques neutralisées (410)",
+  DEPRECATED_ACTIONS.filter((action) => !routeSrc.includes(`"${action}"`)).join(", ")
+);
 
 const policyLines = authSrc
   .split("\n")
@@ -170,7 +189,6 @@ if (!health || !health.ok) {
     ["submit-vendor-app", {}],
     ["submit-support", {}],
     ["order-service", {}],
-    ["submit-order", {}],
   ];
   for (const [action, payload] of publicCases) {
     const res = await post(action, payload);
@@ -178,16 +196,14 @@ if (!health || !health.ok) {
     check(res.status !== 401, `${action} reste public (pas 401)`, `status=${res.status}`);
   }
 
-  const orderMissing = await post("submit-order", {
-    buyerEmail: "test@example.com",
-    buyerName: "Test",
-    courseIds: ["00000000-0000-0000-0000-000000000000"],
-  });
-  check(
-    orderMissing.status === 404,
-    "submit-order formation inexistante → 404 (aucune écriture)",
-    `status=${orderMissing.status}`
-  );
+  for (const action of DEPRECATED_ACTIONS) {
+    const res = await post(action, { id: "00000000-0000-0000-0000-000000000000" });
+    check(
+      res.status === 410,
+      `${action} (paiement simulé) → 410 neutralisé`,
+      `status=${res.status} body=${res.text.slice(0, 120)}`
+    );
+  }
 
   let throttled = false;
   for (let i = 0; i < 22; i += 1) {

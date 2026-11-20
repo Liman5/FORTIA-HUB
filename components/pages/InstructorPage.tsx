@@ -4,22 +4,14 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store/AppStore";
 import { clearCache } from "@/lib/services/api/http";
-import { useAuth, useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
+import { useAuth, useCatalog } from "@/lib/store/domains/contexts";
 import { InstructorDashboard } from "@/components/InstructorDashboard";
-import { CheckoutStep } from "@/components/CheckoutStep";
 import type { TrainingCenter } from "@/lib/types";
-
-interface PendingStorage {
-  center: TrainingCenter;
-  gb: number;
-  usd: number;
-}
 
 export function InstructorPage() {
   const router = useRouter();
   const { isUserLoggedIn, userProfile, sessionChecking } = useAuth();
-  const { marketplaceProducts, stores, addSupportSubmission } = useMarketplace();
-  const { courses, trainingCenters, instructorCommissions, instructorStoragePurchases, instructorCenter, createTrainingCenter, addInstructorCourse, updateInstructorCourse, suspendInstructorCourse, deleteInstructorCourse, buyInstructorStorage, loadAllCourses } = useCatalog();
+  const { courses, trainingCenters, instructorCommissions, instructorStoragePurchases, instructorCenter, createTrainingCenter, addInstructorCourse, updateInstructorCourse, suspendInstructorCourse, deleteInstructorCourse, loadAllCourses } = useCatalog();
   const { platformLoaded, refreshPlatformData } = useAppStore();
 
   // Espace formateur : le catalogue public ne contient que la première page et
@@ -35,8 +27,6 @@ export function InstructorPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUserLoggedIn]);
-
-  const [pendingStorage, setPendingStorage] = React.useState<PendingStorage | null>(null);
 
   // Anti-flash au rechargement : on n'affiche JAMAIS « créer votre centre » ou
   // « connectez-vous » tant que la session et les données ne sont pas chargées.
@@ -94,41 +84,52 @@ export function InstructorPage() {
 
   // Achat d'espace de stockage : mémorisé ici, l'étape PAIEMENT (page, sans
   // fenêtre superposée) prend alors la place du tableau de bord.
-  const handleBuyStorage = (center: TrainingCenter, gb: number, usd: number) => {
-    setPendingStorage({ center, gb, usd });
-  };
+  const handleBuyStorage = async (center: TrainingCenter, gb: number) => {
+    const planCode =
+      gb === 10 ? "storage_10gb" : gb === 25 ? "storage_25gb" : gb === 50 ? "storage_50gb" : "";
+    if (!planCode) {
+      alert("Cette offre de stockage n'existe pas.");
+      return;
+    }
+    try {
+      const providersRes = await fetch("/api/payments/providers", { cache: "no-store" });
+      const providersJson = await providersRes.json().catch(() => null);
+      const available: string[] = Array.isArray(providersJson?.data?.available)
+        ? providersJson.data.available
+        : [];
+      const provider = available.includes("stripe") ? "stripe" : available[0];
+      if (!provider) {
+        alert("Aucun moyen de paiement n'est configuré. Contactez l'administration.");
+        return;
+      }
 
-  if (pendingStorage) {
-    const { center, gb, usd } = pendingStorage;
-    return (
-      <div className="py-8 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto">
-        <CheckoutStep
-          cartItems={[
-            {
-              id: `storage-${gb}`,
-              type: "service",
-              title: `Stockage vidéo ${gb} Go (Espace Formateur)`,
-              price: usd,
-              image: "",
-              categoryLabel: "Stockage Formateur",
-            },
-          ]}
-          totalAmountUsd={usd}
-          onPaymentSuccess={() => {
-            // Paiement confirmé → on active le stockage acheté puis on revient au tableau de bord.
-            buyInstructorStorage(center, gb, usd);
-            setPendingStorage(null);
-          }}
-          onAddSupportSubmission={addSupportSubmission}
-          vendorEmail="stockage@fortiahub.com"
-          buyerUserId={userProfile?.id}
-          marketplaceProducts={marketplaceProducts as any}
-          stores={stores as any}
-          onBack={() => setPendingStorage(null)}
-        />
-      </div>
-    );
-  }
+      const response = await fetch("/api/payments/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          items: [{ type: "storage", planCode, centerId: center.id }],
+        }),
+      });
+      const json = await response.json().catch(() => null);
+      if (!response.ok || !json?.success) {
+        alert(json?.error || "Le paiement n'a pas pu être initialisé.");
+        return;
+      }
+      if (json.status === "paid") {
+        alert("Stockage activé.");
+        refreshPlatformData(true);
+        return;
+      }
+      if (json.requiresRedirect && json.checkoutUrl) {
+        window.location.href = String(json.checkoutUrl);
+        return;
+      }
+      window.location.href = `/payments/return?order_id=${json.orderId}`;
+    } catch {
+      alert("Erreur réseau : le stockage n'a pas été acheté.");
+    }
+  };
 
   return (
     <InstructorDashboard

@@ -37,14 +37,13 @@ interface WritePolicy {
   limit?: { max: number; windowMs: number };
 }
 
-/** Politique des 58 actions. Toute action absente = refus. */
+/** Politique des 54 actions. Toute action absente = refus. */
 export const WRITE_POLICIES: Record<string, WritePolicy> = {
   // ---- Public (validées + limitées) ----
   "submit-quote": { actor: "public", limit: { max: 20, windowMs: 60_000 } },
   "submit-vendor-app": { actor: "public", limit: { max: 10, windowMs: 60_000 } },
   "submit-support": { actor: "public", limit: { max: 20, windowMs: 60_000 } },
   "order-service": { actor: "public", limit: { max: 10, windowMs: 60_000 } },
-  "submit-order": { actor: "public", limit: { max: 30, windowMs: 60_000 } },
 
   // ---- Membre : identité imposée par la session ----
   "submit-kyc": { actor: "user", adminBypassDomain: "kyc" },
@@ -54,15 +53,12 @@ export const WRITE_POLICIES: Record<string, WritePolicy> = {
   "sync-user-learning": { actor: "user", adminBypassDomain: "content" },
   "issue-certificate": { actor: "user", adminBypassDomain: "content" },
   "register-course-media-storage": { actor: "user", adminBypassDomain: "content" },
-  "register-free-purchase": { actor: "user", adminBypassDomain: "content" },
   "mark-notification-read": { actor: "user", adminBypassDomain: "content" },
   "delete-notification": { actor: "user", adminBypassDomain: "content" },
   "rate-product": { actor: "user", adminBypassDomain: "content" },
   "rate-course": { actor: "user", adminBypassDomain: "content" },
   "create-training-center": { actor: "user", adminBypassDomain: "content" },
   "update-training-center-config": { actor: "user", adminBypassDomain: "content" },
-  "pay-training-center-fee": { actor: "user", adminBypassDomain: "finance" },
-  "register-instructor-purchase": { actor: "user", adminBypassDomain: "finance" },
   "submit-payout": { actor: "user", adminBypassDomain: "finance" },
 
   // ---- Propriétaire de contenu (formateur / vendeur) ----

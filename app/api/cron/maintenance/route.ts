@@ -17,6 +17,7 @@ import {
   cleanupStorage,
   purgeRateLimitCounters,
 } from "@/lib/server/maintenance";
+import { runPaymentMaintenance } from "@/lib/modules/payments/maintenance";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -52,12 +53,16 @@ async function runMaintenance(req: NextRequest) {
 
   const storage = await cleanupStorage({ dryRun: !apply, minAgeHours });
   const rateLimitDeleted = await purgeRateLimitCounters();
+  // Abonnements et droits temporaires arrivés à échéance (toujours appliqué :
+  // un droit expiré ne doit jamais rester actif).
+  const payments = await runPaymentMaintenance();
 
   return NextResponse.json({
     success: true,
     mode: apply ? "suppression" : "simulation",
     storage,
     rateLimitDeleted,
+    payments,
     executedAt: new Date().toISOString(),
   });
 }

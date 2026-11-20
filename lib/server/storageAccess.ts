@@ -15,6 +15,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/services/authSession";
 import { requireAdmin } from "@/lib/server/requireAdmin";
+import { hasEntitlement } from "@/lib/modules/payments/entitlements";
 
 /** Dossiers dont les fichiers sont librement lisibles (images publiques). */
 export const PUBLIC_FOLDERS = ["store-images", "blog-images", "site-media", "product-images"] as const;
@@ -120,10 +121,10 @@ export async function canReadPrivateKey(actor: StorageActor, parsed: ParsedKey):
       );
     }
 
-    // Livrables produits : acheteur réel, vendeur du produit, ou produit gratuit
+    // Livrables produits : acheteur réel (ENTITLEMENT), vendeur, ou produit gratuit
     case "product-files": {
       if (!isUuid(parsed.entityId)) return false;
-      if (actor.purchasedProductIds.includes(parsed.entityId)) return true;
+      if (await hasEntitlement(actor.userId, "product", parsed.entityId)) return true;
       const product = await prisma.product.findUnique({
         where: { id: parsed.entityId },
         select: { vendorId: true, price: true, isPublished: true },
@@ -133,15 +134,10 @@ export async function canReadPrivateKey(actor: StorageActor, parsed: ParsedKey):
       return Number(product.price) === 0 && product.isPublished === true;
     }
 
-    // Médias de formation : apprenant inscrit, formateur du cours, ou gratuit
+    // Médias de formation : apprenant avec ENTITLEMENT, formateur, ou gratuit
     case "course-media": {
       if (!isUuid(parsed.entityId)) return false;
-      if (actor.enrolledCourseIds.includes(parsed.entityId)) return true;
-      const enrollment = await prisma.courseEnrollment.findUnique({
-        where: { userId_courseId: { userId: actor.userId, courseId: parsed.entityId } },
-        select: { id: true },
-      });
-      if (enrollment) return true;
+      if (await hasEntitlement(actor.userId, "course", parsed.entityId)) return true;
       const course = await prisma.course.findUnique({
         where: { id: parsed.entityId },
         select: { instructorId: true, price: true, isPublished: true },

@@ -50,6 +50,22 @@
 
 ```powershell
 npm run test:authz      # 48 contrôles (matrice + HTTP anonyme + anti-fuite)
+
+## Mise à jour — Phase 2 (paiements)
+
+Cette matrice reste valable pour **54 actions**. Quatre actions ont été
+**retirées** car elles accordaient un paiement ou un accès à partir de données
+client :
+
+- `submit-order`
+- `register-free-purchase`
+- `register-instructor-purchase`
+- `pay-training-center-fee`
+
+Elles répondent désormais **410 `ENDPOINT_MOVED`** (vérifié avant toute
+authentification) et sont remplacées par `POST /api/payments/checkout`.
+Voir `docs/PHASE-2-PAYMENTS.md`.
+
 ```
 
 Tests authentifiés optionnels via cookies : voir l'en-tête de

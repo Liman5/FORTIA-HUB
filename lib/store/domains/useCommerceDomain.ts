@@ -25,7 +25,6 @@ import type {
   MarketplaceOrder,
   UserProfile,
 } from "@/lib/types";
-import { apiWritePlatform } from "@/lib/services/platformWrite";
 import { trackProductEvent } from "@/lib/services/track";
 
 /** Clé de stockage local du panier : le panier survit au rechargement de /cart. */
@@ -106,82 +105,13 @@ export function useCommerceDomain({
   // --- Validation d'un paiement : commande + historique d'achat ---
   const handlePaymentSuccess = useCallback(
     (order: MarketplaceOrder) => {
-      // Les articles sont lus AVANT de vider le panier : une formation payée
-      // doit ouvrir son accès immédiatement (et être enregistrée côté serveur).
-      const paidItems = [...cartItems];
-      const paidCourseIds = paidItems.filter((item) => item.type === "course").map((item) => item.id);
-      const paidProductIds = paidItems.filter((item) => item.type === "product").map((item) => item.id);
-
+      // Phase 2 : le SERVEUR est la seule source de vérité des droits.
+      // Aucune écriture locale de `enrolledCourseIds` / `purchasedProductIds` :
+      // les entitlements sont accordés par le webhook de paiement vérifié.
       setMarketplaceOrders((prev) => [order, ...prev]);
       setCartItems([]);
-
-      if (isUserLoggedIn && userProfile) {
-        const purchased = Array.from(
-          new Set([
-            ...(userProfile.purchasedProductIds || []),
-            ...paidProductIds,
-            ...(paidCourseIds.length === 0 && paidProductIds.length === 0 && order.productId ? [order.productId] : []),
-          ])
-        );
-        const enrolled = Array.from(
-          new Set([...(userProfile.enrolledCourseIds || []), ...paidCourseIds])
-        );
-        const progress: Record<string, number> = { ...((userProfile.courseProgress as Record<string, number>) || {}) };
-        for (const id of paidCourseIds) {
-          if (typeof progress[id] !== "number") progress[id] = 0;
-        }
-
-        const updatedProfile: UserProfile = {
-          ...userProfile,
-          enrolledCourseIds: enrolled,
-          courseProgress: progress,
-          purchasedProductIds: purchased,
-          paymentHistory: [
-            {
-              id: `pay-${Date.now()}`,
-              date: new Date().toISOString().split("T")[0],
-              amount: order.amountUsd,
-              method: order.paymentGateway,
-              items: paidItems.length > 0 ? paidItems.map((item) => item.title) : [order.productTitle],
-              status: "Validé",
-            },
-            ...(userProfile.paymentHistory || []),
-          ],
-        };
-        setUserProfile(updatedProfile);
-        try {
-          localStorage.setItem("fortia_user_profile", JSON.stringify(updatedProfile));
-        } catch (e) {}
-      }
-
-      apiWritePlatform("submit-order", {
-        orderNumber: order.orderNumber || `ORD-${Date.now()}`,
-        buyerName: order.buyerName || "",
-        buyerEmail: order.buyerEmail || "",
-        buyerPhone: order.buyerPhone || "",
-        buyerUserId: userProfile?.id || undefined,
-        storeId: order.storeId,
-        storeName: order.storeName || "",
-        productId: order.productId,
-        productTitle: order.productTitle || "",
-        amountUsd: order.amountUsd || 0,
-        platformCommissionUsd: order.platformCommissionUsd || 0,
-        vendorEarningsUsd: order.vendorEarningsUsd || 0,
-        courseIds: paidCourseIds,
-        productIds: paidProductIds.length > 0 ? paidProductIds : order.productId ? [order.productId] : [],
-        saleScope: order.saleScope || "digital_product",
-        paymentGateway: order.paymentGateway || "Wave API",
-        transactionRef: order.transactionRef || "",
-      }).then((res) => {
-        if (res.success && res.id && userProfile?.id) {
-          apiWritePlatform("register-free-purchase", {
-            userId: userProfile.id,
-            orderId: res.id,
-          });
-        }
-      });
     },
-    [isUserLoggedIn, userProfile, setMarketplaceOrders, setUserProfile, cartItems, setCartItems]
+    [setMarketplaceOrders, setCartItems]
   );
 
   // --- Commander un service freelance (passe par le panier) ---

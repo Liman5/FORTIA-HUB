@@ -160,6 +160,18 @@ function normalizeCourseLevel(raw: unknown): string {
  * l'écriture — superviseur = lecture seule, financier = finance uniquement,
  * KYC = KYC uniquement. Les parcours publics (visiteur/membre) restent inchangés.
  */
+/**
+ * ⚠️ PHASE 2 — Actions retirées : elles accordaient un paiement ou un accès
+ * à partir de données client. Remplacées par /api/payments/checkout.
+ * Elles restent listées ici pour renvoyer un 410 explicite (aucune exécution).
+ */
+const DEPRECATED_WRITE_ACTIONS = new Set<string>([
+  "submit-order",
+  "register-free-purchase",
+  "register-instructor-purchase",
+  "pay-training-center-fee",
+]);
+
 export async function POST(req: NextRequest) {
   let actionName = "";
   try {
@@ -171,6 +183,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Action et données requises." },
         { status: 400 }
+      );
+    }
+
+    // Parcours de paiement historique : refusé AVANT toute authentification.
+    if (DEPRECATED_WRITE_ACTIONS.has(actionName)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Ce parcours de paiement est remplacé par /api/payments/checkout.",
+          code: "ENDPOINT_MOVED",
+        },
+        { status: 410 }
       );
     }
 

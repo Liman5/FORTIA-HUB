@@ -93,6 +93,7 @@ enum OrderStatus {
   En_attente_API
   Echoue
   Rembourse
+  Annule
 
   @@map("order_status")
 }
@@ -104,6 +105,25 @@ enum PaymentStatus {
   Rembourse
 
   @@map("payment_status")
+}
+
+enum SubscriptionStatus {
+  pending
+  active
+  past_due
+  cancelled
+  expired
+
+  @@map("subscription_status")
+}
+
+enum EntitlementStatus {
+  active
+  suspended
+  revoked
+  expired
+
+  @@map("entitlement_status")
 }
 
 enum PaymentGatewayCode {
@@ -216,6 +236,8 @@ model User {
   trainingCenters       TrainingCenter[]     @relation("TrainingCenters")
   teachingCourses       Course[]            @relation("TeachingCourses")
   pushSubscriptions     PushSubscription[]
+  subscriptions         Subscription[]
+  entitlements          Entitlement[]
 
 
   @@index([accountType])
@@ -747,17 +769,28 @@ model MarketplaceOrder {
   paymentGateway       String      @default("Wave API") @map("payment_gateway")
   transactionRef       String      @default("") @map("transaction_ref")
   status               OrderStatus @default(En_attente_API)
+  // ===== Phase 2 — commande centralisée =====
+  currency             String      @default("USD")
+  subtotalMinor        Int         @default(0) @map("subtotal_minor")
+  totalMinor           Int         @default(0) @map("total_minor")
+  paidAt               DateTime?   @map("paid_at")
+  cancelledAt          DateTime?   @map("cancelled_at")
   createdAt            DateTime    @default(now()) @map("created_at")
   updatedAt            DateTime    @updatedAt @map("updated_at")
 
   store                Store?      @relation(fields: [storeId], references: [id], onDelete: SetNull)
   product              Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
   buyer                User?       @relation(fields: [buyerUserId], references: [id], onDelete: SetNull)
-  paymentTransaction   PaymentTransaction?
+  items                MarketplaceOrderItem[]
+  payments             PaymentTransaction[]
+  refunds              Refund[]
+  subscription         Subscription?
+  entitlements         Entitlement[]
 
   @@index([storeId])
   @@index([buyerEmail])
   @@index([buyerUserId])
+  @@index([status])
   @@map("marketplace_orders")
 }
 
@@ -1228,7 +1261,7 @@ model PaymentGateway {
 
 model PaymentTransaction {
   id             String          @id @default(uuid())
-  orderId        String?         @unique @map("order_id")
+  orderId        String?         @map("order_id")
 
   gatewayId      String?         @map("gateway_id")
   userId         String?         @map("user_id")
@@ -1236,33 +1269,187 @@ model PaymentTransaction {
   amountFcfa     Decimal         @default(0) @db.Decimal(14, 2) @map("amount_fcfa")
   currency       String          @default("USD")
   transactionRef String          @unique @map("transaction_ref")
-  providerRef    String          @default("") @map("provider_ref")
+  /** Référence fournie par la passerelle (unique par fournisseur). */
+  providerRef    String?         @map("provider_ref")
   status         PaymentStatus   @default(En_attente)
   gatewayResponse Json           @default("{}") @map("gateway_response")
+  // ===== Phase 2 — tentative de paiement centralisée =====
+  provider       String          @default("")
+  amountMinor    Int             @default(0) @map("amount_minor")
+  checkoutUrl    String          @default("") @map("checkout_url")
+  confirmedAt    DateTime?       @map("confirmed_at")
+  failureReason  String          @default("") @map("failure_reason")
+  eventId        String          @default("") @map("event_id")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
   order          MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
   gateway        PaymentGateway?   @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
   user           User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  refunds        Refund[]
 
+  @@unique([provider, providerRef])
   @@index([orderId])
   @@index([gatewayId])
+  @@index([status])
   @@map("payment_transactions")
 }
 
 model PaymentWebhook {
   id              String            @id @default(uuid())
-  gatewayCode     PaymentGatewayCode @map("gateway_code")
+  /** Code du fournisseur (stripe, sandbox, …) — texte libre. */
+  gatewayCode     String            @map("gateway_code")
+  /** Identifiant unique de l'événement chez le fournisseur (idempotence). */
+  eventId         String            @default("") @map("event_id")
   eventType       String            @default("") @map("event_type")
   payload         Json              @default("{}")
   receivedAt      DateTime          @default(now()) @map("received_at")
   processed       Boolean           @default(false)
+  processedAt     DateTime?         @map("processed_at")
   processingError String            @default("") @map("processing_error")
+  attempts        Int               @default(0)
 
+  @@unique([gatewayCode, eventId])
   @@index([gatewayCode])
   @@index([processed])
   @@map("payment_webhooks")
+}
+
+// ============================================================
+// PHASE 2 — COMMANDES, ABONNEMENTS, DROITS D'ACCÈS, REMBOURSEMENTS
+// ============================================================
+
+model MarketplaceOrderItem {
+  id             String   @id @default(uuid())
+  orderId        String   @map("order_id")
+  /** course | product | subscription | storage | service | feature */
+  itemType       String   @map("item_type")
+  resourceId     String?  @map("resource_id")
+  title          String   @default("")
+  unitPriceMinor Int      @default(0) @map("unit_price_minor")
+  quantity       Int      @default(1)
+  totalMinor     Int      @default(0) @map("total_minor")
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  order          MarketplaceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([itemType, resourceId])
+  @@map("marketplace_order_items")
+}
+
+/// Prix serveur des offres hors produits/formations (stockage, frais, …).
+model PricePlan {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  label       String
+  amountMinor Int      @map("amount_minor")
+  currency    String   @default("USD")
+  isActive    Boolean  @default(true) @map("is_active")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("price_plans")
+}
+
+model SubscriptionPlan {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String   @default("")
+  amountMinor Int      @map("amount_minor")
+  currency    String   @default("USD")
+  /** month | year */
+  interval    String   @default("month")
+  isActive    Boolean  @default(true) @map("is_active")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id                 String             @id @default(uuid())
+  userId             String             @map("user_id")
+  planId             String             @map("plan_id")
+  orderId            String?            @unique @map("order_id")
+  status             SubscriptionStatus @default(pending)
+  provider           String             @default("")
+  providerRef        String?            @map("provider_ref")
+  currentPeriodStart DateTime?          @map("current_period_start")
+  currentPeriodEnd   DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd  Boolean            @default(false) @map("cancel_at_period_end")
+  cancelledAt        DateTime?          @map("cancelled_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan           SubscriptionPlan   @relation(fields: [planId], references: [id])
+  order          MarketplaceOrder?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  entitlements   Entitlement[]
+
+  @@index([userId, status])
+  @@index([status, currentPeriodEnd])
+  @@map("subscriptions")
+}
+
+/// Source de vérité UNIQUE des droits d'accès (Phase 2).
+model Entitlement {
+  id             String            @id @default(uuid())
+  userId         String            @map("user_id")
+  /** course | product | subscription | storage | service | feature */
+  resourceType   String            @map("resource_type")
+  resourceId     String            @map("resource_id")
+  status         EntitlementStatus @default(active)
+  /** order | subscription | admin | migration | free */
+  source         String            @default("")
+  orderId        String?           @map("order_id")
+  subscriptionId String?           @map("subscription_id")
+  paymentId      String?           @map("payment_id")
+  startsAt       DateTime          @default(now()) @map("starts_at")
+  expiresAt      DateTime?         @map("expires_at")
+  revokedAt      DateTime?         @map("revoked_at")
+  metadata       Json              @default("{}")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order          MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  subscription   Subscription?     @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, resourceType, resourceId])
+  @@index([userId, status])
+  @@index([resourceType, resourceId])
+  @@index([expiresAt])
+  @@map("entitlements")
+}
+
+model Refund {
+  id          String    @id @default(uuid())
+  orderId     String    @map("order_id")
+  paymentId   String?   @map("payment_id")
+  amountMinor Int       @map("amount_minor")
+  currency    String    @default("USD")
+  reason      String    @default("")
+  /** pending | succeeded | failed */
+  status      String    @default("pending")
+  provider    String    @default("")
+  providerRef String?   @map("provider_ref")
+  createdBy   String?   @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  processedAt DateTime? @map("processed_at")
+
+  order       MarketplaceOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  payment     PaymentTransaction?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([paymentId])
+  @@map("refunds")
 }
 
 model RegistrationFeeConfig {

@@ -215,6 +215,5 @@ export interface AppStoreContextValue {
   grantCertificate: (certificate: Certificate) => void;
   /** Inscrit le membre à une formation (ajout à enrolledCourseIds + progression initiale). */
   ensureCourseEnrollment: (courseId: string) => void;
-  buyInstructorStorage: (center: TrainingCenter, amountGb: number, amountUsd: number) => void;
   adminAddInstructor: (data: { email: string; centerName: string; description?: string; storageQuotaGb?: number }) => void;
 }
