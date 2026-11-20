@@ -342,6 +342,26 @@ try {
   );
   check(ownCenter.status === 200, "propriétaire modifie son centre", ownCenter.text);
 
+  await prisma.trainingCenter.update({
+    where: { id: center.id },
+    data: { storageUsedBytes: BigInt(1000) },
+  });
+  const negativeQuota = await api(
+    "register-course-media-storage",
+    { centerId: center.id, deltaBytes: -999 },
+    { cookie: owner.token }
+  );
+  const centerAfterQuota = await prisma.trainingCenter.findUnique({
+    where: { id: center.id },
+    select: { storageUsedBytes: true },
+  });
+  check(
+    negativeQuota.status === 200 && Number(centerAfterQuota?.storageUsedBytes) === 1000,
+    "delta négatif ne libère pas le quota",
+    negativeQuota.text
+  );
+
+
   console.log("\n=== 3. KYC et flags de vérification ===");
   const freelance = await api(
     "update-freelance-profile",

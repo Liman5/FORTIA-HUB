@@ -137,8 +137,17 @@ export async function handleLearningAction(
       typeof centerDoc.storageUsedBytes === "bigint"
         ? centerDoc.storageUsedBytes
         : BigInt(Number(centerDoc.storageUsedBytes || 0));
-    const delta = BigInt(Math.round(Number(deltaBytes) || 0));
-    const next = current + delta < BigInt(0) ? BigInt(0) : current + delta;
+    const rawDelta = BigInt(Math.round(Number(deltaBytes) || 0));
+    // Un propriétaire ne peut pas « libérer » son quota en envoyant un delta négatif.
+    const requestedDelta = auth.isAdmin ? rawDelta : rawDelta > BigInt(0) ? rawDelta : BigInt(0);
+    const quotaBytes = BigInt(centerDoc.storageQuotaGb || 0) * BigInt(1024) * BigInt(1024) * BigInt(1024);
+    const rawNext = current + requestedDelta;
+    const next =
+      rawNext < BigInt(0)
+        ? BigInt(0)
+        : quotaBytes > BigInt(0) && rawNext > quotaBytes
+          ? quotaBytes
+          : rawNext;
 
     const updated = await prisma.trainingCenter.update({
       where: { id: centerId },
