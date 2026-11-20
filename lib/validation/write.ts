@@ -115,9 +115,18 @@ export const writeActionSchemas: Record<string, z.ZodTypeAny> = {
     .passthrough(),
 
   "approve-kyc": z.object({ id: uuidSchema }).passthrough(),
-  "approve-kyc-full": z.object({ id: uuidSchema }).passthrough(),
-  "kyc-set-lock": z.object({ id: uuidSchema }).passthrough(),
-  "kyc-unlock": z.object({ id: uuidSchema }).passthrough(),
+  "approve-kyc-full": z
+    .object({
+      id: uuidSchema.optional(),
+      email: emailSchema.optional(),
+    })
+    .passthrough()
+    .refine((value) => !!value.id || !!value.email, {
+      message: "id ou email requis.",
+    }),
+  "kyc-set-lock": z.object({ kycId: uuidSchema }).passthrough(),
+  "kyc-unlock": z.object({ kycId: uuidSchema }).passthrough(),
+  "kyc-remove-doc": z.object({ kycId: uuidSchema }).passthrough(),
 };
 
 export type WriteEnvelope = z.infer<typeof writeEnvelopeSchema>;

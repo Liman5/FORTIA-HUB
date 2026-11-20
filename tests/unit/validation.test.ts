@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { checkoutSchema, refundSchema, subscriptionPlanSchema } from "../../lib/validation/payments";
 import { lessonProgressSchema, quizAttemptSchema } from "../../lib/validation/academy";
+import { writeActionSchemas } from "../../lib/validation/write";
 import { parseOrThrow } from "../../lib/validation/common";
 import { AppError } from "../../lib/server/errors";
 
@@ -72,10 +73,24 @@ test("parseOrThrow produit une AppError de validation avec les chemins", () => {
     () => parseOrThrow(checkoutSchema, { items: [] }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
+
       assert.equal(error.status, 400);
       assert.equal(error.code, "VALIDATION_ERROR");
       assert.ok(Array.isArray(error.details) && error.details.length > 0);
       return true;
     }
   );
+});
+
+test("kyc-set-lock exige kycId (et non un id générique)", () => {
+  const schema = writeActionSchemas["kyc-set-lock"];
+  assert.equal(schema.safeParse({ id: COURSE_ID }).success, false);
+  assert.equal(schema.safeParse({ kycId: COURSE_ID }).success, true);
+});
+
+test("approve-kyc-full accepte un id OU un email", () => {
+  const schema = writeActionSchemas["approve-kyc-full"];
+  assert.equal(schema.safeParse({ id: COURSE_ID }).success, true);
+  assert.equal(schema.safeParse({ email: "membre@example.com" }).success, true);
+  assert.equal(schema.safeParse({}).success, false);
 });

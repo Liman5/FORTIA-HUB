@@ -12,7 +12,7 @@ import { assertCenterAccess, requireActorUser, resolveTargetUserId } from "@/lib
 import { issueCourseCertificate } from "@/lib/modules/academy/certificates";
 import { computeCourseProgress } from "@/lib/modules/academy/progress";
 
-import { UUID_PATTERN, uuidOrNull } from "../helpers";
+import { UUID_PATTERN, uuidOrNull } from "@/lib/validation/common";
 import type { WriteHandlerContext } from "../types";
 
 export async function handleLearningAction(

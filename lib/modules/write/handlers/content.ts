@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-import { uuidOrNull } from "../helpers";
+import { uuidOrNull } from "@/lib/validation/common";
 import type { WriteHandlerContext } from "../types";
 
 export async function handleContentAction(

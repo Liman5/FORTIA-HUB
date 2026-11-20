@@ -15,6 +15,25 @@ export const emailSchema = z
   .toLowerCase()
   .email("Adresse e-mail invalide.")
   .max(254);
+
+// ============================================================
+// Helpers de format partagés (Phase 6)
+// ------------------------------------------------------------
+// Utilisés par les handlers d'écriture et les modules métier :
+// une seule définition d'UUID / e-mail pour tout le projet.
+// ============================================================
+
+export const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Identifiant sûr : null si la valeur n'est pas un UUID. */
+export function uuidOrNull(value: unknown): string | null {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return raw && UUID_PATTERN.test(raw) ? raw : null;
+}
+
 export const phoneSchema = z.string().trim().max(30).optional();
 export const shortText = (min: number, max: number) => z.string().trim().min(min).max(max);
 export const optionalShortText = (max: number) => z.string().trim().max(max).optional();

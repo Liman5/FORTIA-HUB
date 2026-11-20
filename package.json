@@ -11,14 +11,16 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "tsx --conditions=react-server --test tests/unit/*.test.ts",
+    "check:boundaries": "node scripts/check-module-boundaries.mjs",
     "test:authz": "node scripts/test-write-authorization.mjs",
     "test:payments": "node scripts/test-payments-phase2.mjs",
     "test:academy": "node scripts/test-academy-certificates.mjs",
     "test:db": "node scripts/test-database-integrity.mjs",
     "test:migrations": "node scripts/test-migrations-replay.mjs",
     "test:database": "node scripts/test-migrations-replay.mjs && node scripts/test-database-integrity.mjs",
-    "test:integration": "node scripts/test-write-authorization.mjs && node scripts/test-payments-phase2.mjs && node scripts/test-academy-certificates.mjs && node scripts/test-migrations-replay.mjs && node scripts/test-database-integrity.mjs",
-    "verify": "npm run typecheck && npm run lint && npm test && npm run test:database",
+    "test:modules": "node scripts/test-module-services.mjs",
+    "test:integration": "node scripts/test-write-authorization.mjs && node scripts/test-payments-phase2.mjs && node scripts/test-academy-certificates.mjs && node scripts/test-module-services.mjs && node scripts/test-migrations-replay.mjs && node scripts/test-database-integrity.mjs",
+    "verify": "npm run typecheck && npm run lint && npm run check:boundaries && npm test && npm run test:database",
     "smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {

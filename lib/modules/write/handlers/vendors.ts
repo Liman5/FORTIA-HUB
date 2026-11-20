@@ -10,7 +10,7 @@ import { notifyUser } from "@/lib/services/notifyUser";
 
 import { requireStoreAccess } from "@/lib/server/writeAuthorization";
 
-import { EMAIL_PATTERN } from "../helpers";
+import { EMAIL_PATTERN } from "@/lib/validation/common";
 import type { WriteHandlerContext } from "../types";
 
 export async function handleVendorsAction(

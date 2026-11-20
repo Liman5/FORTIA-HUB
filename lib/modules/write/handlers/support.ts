@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-import { EMAIL_PATTERN } from "../helpers";
+import { EMAIL_PATTERN } from "@/lib/validation/common";
 import type { WriteHandlerContext } from "../types";
 
 export async function handleSupportAction(

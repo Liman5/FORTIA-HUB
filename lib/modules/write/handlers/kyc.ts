@@ -10,10 +10,13 @@ import { notifyUser } from "@/lib/services/notifyUser";
 import { requireAdmin } from "@/lib/server/requireAdmin";
 import { requireActorUser } from "@/lib/server/writeAuthorization";
 
-import { deleteFromR2 } from "@/lib/services/r2Storage";
-
 import { KYC_BLOCK_MINUTES, KYC_DOC_SLOTS, KYC_MAX_ATTEMPTS, hashKycCode, normalizeKycCode, normalizeMaskGroups, signKycUnlockToken, validateKycCode, verifyKycCode } from "@/lib/server/kycLock";
-import { r2KeyFromValue, UUID_PATTERN } from "../helpers";
+import { UUID_PATTERN, uuidOrNull } from "@/lib/validation/common";
+import { deleteFromR2, r2KeyFromValue } from "@/lib/services/r2Storage";
+import {
+  approveKycSubmissionById,
+  submitKycSubmission,
+} from "@/lib/modules/kyc/submissions";
 import type { WriteHandlerContext } from "../types";
 
 export async function handleKycAction(
@@ -24,61 +27,18 @@ export async function handleKycAction(
   const req = context.req;
   switch (action) {
     case "submit-kyc": {
-        // La colonne applicant_id est de type UUID en base.
-        // Le frontend génère parfois un ID mocké "user-..." qui n'est PAS un UUID.
-        // → On vérifie la validité et on neutralise si invalide (la relation
-        //   avec users est optionnelle : on peut lier plus tard par email).
-        // Identité imposée par la session : un membre ne peut pas déposer un
-        // dossier KYC au nom d'un autre compte.
+        // Identité imposée par la session : jamais l'identifiant du navigateur.
         const kycUser = requireActorUser(auth);
-        const rawApplicantId = kycUser.id;
-        const isValidUuid = UUID_PATTERN.test(rawApplicantId);
-
-        // Les fichiers (base64 DataURL) peuvent être très volumineux.
-        // On ne les stocke PAS dans la table (URLs externes/R2 attendues).
-        // Si un DataURL est fourni, on le remplace par un marqueur vide.
-        const sanitizeFileUrl = (val: unknown): string => {
-          if (!val) return "";
-          const s = String(val);
-          // Tronque les DataURL base64 pour ne pas saturer la colonne TEXT
-          return s.startsWith("data:") ? "" : s.slice(0, 2000);
-        };
-
-        const created = await prisma.kycSubmission.create({
-          data: {
-            applicantType: data.applicantType || "freelance",
-            applicantId: isValidUuid ? rawApplicantId : undefined,
-            applicantName: data.applicantName || "",
-            firstName: data.firstName || "",
-            lastName: data.lastName || "",
-            repRole: data.repRole || "",
-            email: kycUser.email || data.email || "",
-            phone: data.phone || "",
-            country: data.country || "",
-            address: data.address || "",
-            documentType: data.documentType || "CNI",
-            documentNumber: data.documentNumber || "",
-            idExpirationDate: data.idExpirationDate || "",
-            idRectoUrl: sanitizeFileUrl(data.idRectoUrl),
-            idVersoUrl: sanitizeFileUrl(data.idVersoUrl),
-            selfieUrl: sanitizeFileUrl(data.selfieUrl),
-            companyName: data.companyName || "",
-            legalForm: data.legalForm || "",
-            rccmNumber: data.rccmNumber || "",
-            companyDocUrl: sanitizeFileUrl(data.companyDocUrl),
-            documentFileUrl: sanitizeFileUrl(data.documentFileUrl),
-            status: "En_attente",
-          } as any,
-        });
-        return NextResponse.json({ success: true, id: created.id });
+        const id = await submitKycSubmission(
+          { id: uuidOrNull(kycUser.id), email: kycUser.email },
+          data
+        );
+        return NextResponse.json({ success: true, id });
       }
 
     case "approve-kyc": {
-        const updated = await prisma.kycSubmission.update({
-          where: { id: data.id },
-          data: { status: "Approuve" } as any,
-        });
-        return NextResponse.json({ success: true, id: updated.id });
+        const id = await approveKycSubmissionById(String(data.id));
+        return NextResponse.json({ success: true, id });
       }
 
     case "kyc-set-lock": {

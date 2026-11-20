@@ -10,7 +10,7 @@ import { notifyUser } from "@/lib/services/notifyUser";
 
 import { assertCenterAccess, requireActorUser } from "@/lib/server/writeAuthorization";
 
-import { uuidOrNull } from "../helpers";
+import { uuidOrNull } from "@/lib/validation/common";
 import type { WriteHandlerContext } from "../types";
 
 export async function handleCentersAction(

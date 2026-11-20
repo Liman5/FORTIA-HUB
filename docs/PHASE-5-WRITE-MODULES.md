@@ -16,7 +16,7 @@ app/api/platform/write/route.ts
 
 lib/modules/write/
   ├─ types.ts          contexte/handler typés
-  ├─ helpers.ts        helpers partagés (UUID, slug, boutique, Resend…)
+  ├─ helpers.ts        (supprimé en Phase 6 : helpers éclatés par domaine)
   ├─ dispatch.ts       liste ordonnée des handlers
   └─ handlers/
       ├─ kyc.ts          6 actions

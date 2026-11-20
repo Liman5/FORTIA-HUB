@@ -193,6 +193,22 @@ export function parseR2Key(key: string): R2KeyParts {
 }
 
 /** Extrait uniquement le nom de fichier (sans chemin). */
+/**
+ * Extrait la clé R2 d'une valeur stockée en base : soit déjà une clé
+ * (`dossier/entite/fichier.ext`), soit une URL publique R2.
+ */
+export function r2KeyFromValue(value: string): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (!/^https?:\/\//i.test(raw)) return raw.replace(/^\/+/, "");
+  try {
+    const url = new URL(raw);
+    return decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+  } catch {
+    return "";
+  }
+}
+
 export function getFileNameFromKey(key: string): string {
   const parts = key.split("/");
   return parts[parts.length - 1] || key;
