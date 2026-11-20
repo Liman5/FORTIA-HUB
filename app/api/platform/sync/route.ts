@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/services/authSession";
+import { requireAdmin } from "@/lib/server/requireAdmin";
 
 // ============================================================
 // Données mockées supprimées : le projet n'utilise plus de
@@ -18,7 +20,7 @@ const INITIAL_MARKETPLACE_PRODUCTS: any[] = [];
  * Utilisé par le frontend pour initialiser le store avec les données réelles.
  * Mode : LECTURE SEULE — ne modifie jamais la base.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const warnings: string[] = [];
 
   // Helper tolérant : si une table échoue (colonne manquante, enum, réseau),
@@ -126,12 +128,31 @@ export async function GET() {
     };
   });
 
+  // --- Réponses de quiz : `isCorrect` réservé au propriétaire / admin ---
+  const [viewer, admin] = await Promise.all([
+    getCurrentUser(req).catch(() => null),
+    requireAdmin(req).catch(() => null),
+  ]);
+  const publicCourses = (courses || []).map((course: any) => {
+    const canEdit = Boolean(admin) || Boolean(viewer && viewer.id === course.instructorId);
+    return {
+      ...course,
+      quizzes: (course.quizzes || []).map((quiz: any) => ({
+        ...quiz,
+        options: (quiz.options || []).map((option: any) => {
+          const { isCorrect, ...safeOption } = option;
+          return canEdit ? { ...safeOption, isCorrect } : safeOption;
+        }),
+      })),
+    };
+  });
+
   const body = JSON.stringify(
     {
       success: true,
       warnings,
       data: {
-        courses,
+        courses: publicCourses,
         courseCategories,
         trainingCenters,
         stores: publicStores,

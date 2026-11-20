@@ -536,6 +536,37 @@ model CourseEnrollment {
   @@map("course_enrollments")
 }
 
+/// Progression RÉELLE par leçon (Phase 3) : preuve serveur pour l'attestation.
+model CourseLessonProgress {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  courseId    String   @map("course_id")
+  lessonId    String   @map("lesson_id")
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  @@unique([userId, lessonId])
+  @@index([userId, courseId])
+  @@index([courseId])
+  @@map("course_lesson_progress")
+}
+
+/// Tentatives de quiz : le score est calculé côté serveur (jamais fourni par le client).
+model CourseQuizAttempt {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  courseId  String   @map("course_id")
+  score     Int      @default(0)
+  total     Int      @default(0)
+  passed    Boolean  @default(false)
+  answers   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, courseId])
+  @@index([courseId])
+  @@map("course_quiz_attempts")
+}
+
+
 model CourseReview {
   id        String   @id @default(uuid())
   courseId  String   @map("course_id")

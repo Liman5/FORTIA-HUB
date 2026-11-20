@@ -50,7 +50,10 @@ export interface QuizQuestion {
   id: string;
   question: string;
   options: string[];
-  correctAnswer: number;
+  /** Identifiants serveur des options (indispensables au quiz vérifié). */
+  optionIds?: string[];
+  /** Non exposé par l'API publique (correction renvoyée après tentative). */
+  correctAnswer?: number;
   explanation: string;
 }
 

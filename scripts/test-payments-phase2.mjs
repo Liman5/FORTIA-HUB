@@ -287,6 +287,9 @@ async function cleanup() {
         await prisma.product.deleteMany({ where: { id: state.product.id } });
       }
       await prisma.trainingCenter.deleteMany({ where: { id: { in: centerIds } } });
+      await prisma.rateLimitCounter.deleteMany({
+        where: { OR: userIds.map((id) => ({ key: { contains: id } })) },
+      });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     }
     if (state.plan) {

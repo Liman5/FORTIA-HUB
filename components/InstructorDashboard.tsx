@@ -836,7 +836,12 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                                 })),
                               }))
                             );
-                            setQuizQuestions(c.quiz || []);
+                            setQuizQuestions(
+                              (c.quiz || []).map((question) => ({
+                                ...question,
+                                correctAnswer: question.correctAnswer ?? 0,
+                              }))
+                            );
                             setActiveTab("add");
                           }}
                           className="px-2 py-1.5 bg-sky-500/20 text-sky-300 border border-sky-500/30 rounded-lg text-[10px] font-bold"
@@ -904,7 +909,12 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                           })),
                         }))
                       );
-                      setQuizQuestions(c.quiz || []);
+                      setQuizQuestions(
+                        (c.quiz || []).map((question) => ({
+                          ...question,
+                          correctAnswer: question.correctAnswer ?? 0,
+                        }))
+                      );
                       setActiveTab("add");
                     }}
                     className="px-3 py-1.5 bg-sky-500/20 text-sky-300 border border-sky-500/30 rounded-lg text-[10px] font-bold"

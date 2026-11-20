@@ -27,6 +27,11 @@ import {
   type SaleScope,
 } from "@/lib/server/commissions";
 import { invalidateResponseCache } from "@/lib/server/responseCache";
+import { issueCourseCertificate } from "@/lib/modules/academy/certificates";
+import { computeCourseProgress } from "@/lib/modules/academy/progress";
+import { writeActionSchemas, writeDataSchema, writeEnvelopeSchema } from "@/lib/validation/write";
+import { parseOrThrow } from "@/lib/validation/common";
+import { isAppError, requestIdOf, toErrorResponse } from "@/lib/server/errors";
 import { deleteFromR2 } from "@/lib/services/r2Storage";
 import {
   KYC_BLOCK_MINUTES,
@@ -176,10 +181,9 @@ export async function POST(req: NextRequest) {
   let actionName = "";
   try {
     const body = await req.json();
-    const { action, data } = body || {};
-    actionName = String(action || "");
+    actionName = String(body?.action || "");
 
-    if (!actionName || !data || typeof data !== "object" || Array.isArray(data)) {
+    if (!actionName || !body?.data || typeof body.data !== "object" || Array.isArray(body.data)) {
       return NextResponse.json(
         { success: false, error: "Action et données requises." },
         { status: 400 }
@@ -198,16 +202,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Phase 3 : enveloppe validée, puis AUTORISATION avant validation métier
+    // (un anonyme reçoit 401/403, jamais un détail de schéma).
+    const envelope = parseOrThrow(writeEnvelopeSchema, body);
+    type LegacyWriteData = Record<string, unknown> & { [key: string]: any };
+    const rawData = envelope.data as LegacyWriteData;
+
     // ⚠️ SÉCURITÉ (Phase 1A) : politique d'accès EXPLICITE avant toute
     // écriture. Action inconnue = refus. L'identité vient de la session,
     // jamais des identifiants envoyés par le navigateur.
-    const auth = await authorizeWriteAction(req, actionName, data as Record<string, unknown>);
+    const auth = await authorizeWriteAction(req, actionName, rawData);
+
+    // Validation du schéma propre à l'action (après autorisation).
+    const data = parseOrThrow(
+      writeActionSchemas[actionName] ?? writeDataSchema,
+      rawData
+    ) as LegacyWriteData;
 
     // Toute écriture AUTORISÉE invalide le cache serveur des routes publiques :
     // les visiteurs voient immédiatement la nouvelle version.
     invalidateResponseCache();
 
-    switch (action) {
+    switch (actionName) {
       // ============ DEVIS SERVICE ============
       case "submit-quote": {
         // Action publique : champs obligatoires validés (anti-spam).
@@ -966,21 +982,27 @@ export async function POST(req: NextRequest) {
 
         // ⚠️ SÉCURITÉ : les inscriptions ne sont JAMAIS acceptées depuis le
         // navigateur (elles proviennent du paiement vérifié ou d'un admin).
-        // `data.enrolledCourseIds` est volontairement ignoré.
-        const enrolled = Array.isArray(user.enrolledCourseIds) ? [...user.enrolledCourseIds] : [];
+        const legacyEnrolled = Array.isArray(user.enrolledCourseIds) ? [...user.enrolledCourseIds] : [];
+        const entitled = await prisma.entitlement.findMany({
+          where: { userId, resourceType: "course", status: "active" },
+          select: { resourceId: true },
+        });
+        const enrolled = Array.from(
+          new Set([...legacyEnrolled, ...entitled.map((row) => row.resourceId)])
+        ).filter(Boolean);
 
+        // Phase 3 : la progression est CALCULÉE À PARTIR DES LEÇONS TERMINÉES
+        // côté serveur. `data.courseProgress` n'est plus accepté.
         let progress: Record<string, number> = {};
         try {
           const parsed = JSON.parse(String(user.courseProgress || "{}"));
           if (parsed && typeof parsed === "object") progress = { ...parsed };
-        } catch {}
-        if (data.courseProgress && typeof data.courseProgress === "object") {
-          Object.entries(data.courseProgress).forEach(([cid, pct]) => {
-            // Progression acceptée uniquement pour une formation DÉJÀ suivie.
-            if (cid && enrolled.includes(cid)) {
-              progress[cid] = Math.max(0, Math.min(100, Number(pct) || 0));
-            }
-          });
+        } catch {
+          progress = {};
+        }
+        for (const courseId of enrolled) {
+          const computed = await computeCourseProgress(userId, courseId).catch(() => null);
+          if (computed) progress[courseId] = computed.progressPercent;
         }
 
         let certificates: any[] = [];
@@ -1018,119 +1040,39 @@ export async function POST(req: NextRequest) {
       // Génère un numéro UNIQUE en base (contrainte certificate_number),
       // rattaché à la personne (userId) et à la formation (courseId).
       case "issue-certificate": {
-        const { courseId, courseTitle, studentName, category, grade } = data;
-        // Un membre ne délivre QUE sa propre attestation ; un admin peut cibler.
+        // Phase 3 : délivrance vérifiée côté serveur (progression + quiz réels).
         const userId = resolveTargetUserId(auth, data.userId);
-        if (!courseTitle) {
+        const courseId = uuidOrNull(String(data.courseId || ""));
+        if (!courseId) {
           return NextResponse.json(
-            { success: false, error: "courseTitle requis." },
+            { success: false, error: "courseId requis pour délivrer une attestation." },
             { status: 400 }
           );
         }
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) {
-          return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
-        }
 
-        // ⚠️ Une attestation n'est délivrée que pour une formation réellement
-        // suivie (inscription) ou gratuite et publiée.
-        if (courseId) {
-          const courseUuid = uuidOrNull(courseId);
-          if (!courseUuid) throw new WriteError(400, "Formation invalide.");
-          const course = await prisma.course.findUnique({
-            where: { id: courseUuid },
-            select: { price: true, isPublished: true },
-          });
-          if (!course) throw new WriteError(404, "Formation introuvable.");
-          const isFree = Number(course.price) === 0 && course.isPublished;
-          const hasEnrollment =
-            (user.enrolledCourseIds || []).includes(courseUuid) ||
-            !!(await prisma.courseEnrollment
-              .findUnique({
-                where: { userId_courseId: { userId, courseId: courseUuid } },
-                select: { id: true },
-              })
-              .catch(() => null));
-          if (!isFree && !hasEnrollment) {
-            throw new WriteError(
-              403,
-              "Attestation impossible : cette formation n'est pas suivie par ce compte."
-            );
-          }
-        }
+        const certificate = await issueCourseCertificate({
+          userId,
+          courseId,
+          actorId: auth.actorId,
+          isAdmin: auth.isAdmin,
+          force: auth.isAdmin && data.force === true,
+        });
 
-        const today = new Date();
-        const cat =
-          String(category || "FORT")
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .replace(/[^a-zA-Z0-9]/g, "")
-            .toUpperCase()
-            .slice(0, 4) || "FORT";
-        const issueDate = today.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        // Le nom de l'attestation est celui du compte (un admin peut le fixer).
-        const safeName = auth.isAdmin && studentName ? String(studentName) : user.name;
-
-        let finalCertificate: any = null;
-        for (let attempt = 0; attempt < 5 && !finalCertificate; attempt++) {
-          let random = "";
-          for (let i = 0; i < 8; i++) random += chars[Math.floor(Math.random() * chars.length)];
-          const number = `FORTIA-${today.getFullYear()}-${cat}-${random}`;
-          try {
-            const row = await prisma.certificate.create({
-              data: {
-                certificateNumber: number,
-                userId,
-                courseId: courseId || undefined,
-                studentName: safeName,
-                courseTitle,
-                category,
-                issueDate,
-                grade: grade || "Mention Excellent (98%)",
-                qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                  "FORTIA-HUB-CERT:" + number
-                )}`,
-                verified: true,
-              } as any,
-            });
-            finalCertificate = {
-              id: number,
-              studentName: safeName,
-              courseTitle,
-              category,
-              issueDate,
-              grade: grade || "Mention Excellent (98%)",
-              qrCodeUrl: row.qrCodeUrl,
-              verified: true,
-              courseId: courseId || undefined,
-              userId,
-            };
-          } catch (e: any) {
-            const msg = String(e?.message || "");
-            // Collision sur certificate_number (P2002) → on regénère un numéro
-            if (!msg.includes("P2002") && !msg.toLowerCase().includes("unique")) throw e;
-          }
-        }
-        if (!finalCertificate) {
-          return NextResponse.json({ error: "Impossible de générer un numéro unique" }, { status: 409 });
-        }
-
-        // Ajoute l'attestation au compte membre (earnedCertificates)
-        let certificates: any[] = [];
-        try {
-          const parsed = JSON.parse(String(user.earnedCertificates || "[]"));
-          if (Array.isArray(parsed)) certificates = parsed;
-        } catch {}
-        if (!certificates.some((c: any) => c.id === finalCertificate.id)) {
-          certificates = [finalCertificate, ...certificates];
+        const account = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { earnedCertificates: true },
+        });
+        const existing = Array.isArray(account?.earnedCertificates)
+          ? (account?.earnedCertificates as Array<{ id?: string }>)
+          : [];
+        if (!existing.some((entry) => entry?.id === certificate.id)) {
           await prisma.user.update({
             where: { id: userId },
-            data: { earnedCertificates: certificates as any } as any,
+            data: { earnedCertificates: [certificate, ...existing] as never },
           });
         }
 
-        return NextResponse.json({ success: true, certificate: finalCertificate });
+        return NextResponse.json({ success: true, certificate });
       }
 
   // ============ STOCKAGE FORMATEUR ============
@@ -2705,11 +2647,18 @@ export async function POST(req: NextRequest) {
       }
 
       default:
-        return NextResponse.json({ error: "Action inconnue: " + action }, { status: 400 });
+        return NextResponse.json({ error: "Action inconnue: " + actionName }, { status: 400 });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Détails techniques UNIQUEMENT dans les logs serveur.
     logWriteFailure(actionName, error);
+    if (isAppError(error)) {
+      return toErrorResponse(error, {
+        requestId: requestIdOf(req),
+        route: req.nextUrl.pathname,
+        method: req.method,
+      });
+    }
     const { status, body } = toWriteErrorResponse(error);
     return NextResponse.json(body, { status });
   }

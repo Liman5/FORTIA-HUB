@@ -20,7 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/services/authSession";
 import { requireAdmin, type AdminContext } from "@/lib/server/requireAdmin";
 import { canWriteDomain, isReadOnlyAdmin, normalizeAdminRole } from "@/lib/server/adminRoles";
-import { clientIp, rateLimit } from "@/lib/server/rateLimit";
+import { clientIp, rateLimitPersistent } from "@/lib/server/rateLimit";
 
 export type WriteAdminDomain = "content" | "finance" | "kyc";
 
@@ -183,7 +183,7 @@ export async function authorizeWriteAction(
   // ---- Actions publiques : limitées en débit, aucune donnée privée ----
   if (policy.actor === "public") {
     if (policy.limit) {
-      const wait = rateLimit(
+      const wait = await rateLimitPersistent(
         `write:${action}:${clientIp(req)}`,
         policy.limit.max,
         policy.limit.windowMs

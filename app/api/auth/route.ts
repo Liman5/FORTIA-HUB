@@ -19,10 +19,26 @@ import {
 } from "@/lib/services/twoFactor";
 import { notifyUser } from "@/lib/services/notifyUser";
 import { isRetryableDbError, withDbRetry } from "@/lib/server/dbRetry";
-import { clientIp, rateLimitPersistent } from "@/lib/server/rateLimit";
+import { enforceRateLimit } from "@/lib/server/rateLimits";
+import { requestIdOf, toErrorResponse, withApiRoute } from "@/lib/server/errors";
+import { authActionSchema } from "@/lib/validation";
+import { parseOrThrow } from "@/lib/validation/common";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
+
+const AUTH_ACTIONS = new Set([
+  "check-email",
+  "send-otp",
+  "verify-otp",
+  "register",
+  "login",
+  "delete-account",
+  "verify-2fa",
+  "get-2fa-status",
+  "2fa-setup",
+  "toggle-2fa",
+]);
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
@@ -132,30 +148,25 @@ export async function GET() {
 }
 
 // POST /api/auth - unified auth endpoint (action-based routing)
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
     const body = await request.json();
+    const actionName = String(body?.action || "");
 
-    // ===== Protection anti-abus (force brute / robots) =====
-    // Connexion : 10 essais / 5 min par IP. Inscription & OTP : 8 / 10 min.
-    const ip = clientIp(request);
-    const guardedActions = ["login", "register", "verify-otp", "send-otp"];
-    if (guardedActions.includes(String(body?.action))) {
-      const isLogin = body.action === "login";
-      const wait = await rateLimitPersistent(
-        `${body.action}:${ip}`,
-        isLogin ? 10 : 8,
-        isLogin ? 5 * 60 * 1000 : 10 * 60 * 1000
-      );
-      if (wait) {
-        return NextResponse.json(
-          {
-            error: `Trop de tentatives. Réessayez dans ${wait} seconde(s).`,
-            code: "RATE_LIMITED",
-          },
-          { status: 429, headers: { "Retry-After": String(wait) } }
-        );
-      }
+    // ===== Validation centralisée + protection anti-abus =====
+    // Le schéma Zod décrit chaque action ; les limites sont partagées
+    // (table rate_limit_counters, repli mémoire documenté).
+    if (AUTH_ACTIONS.has(actionName)) {
+      parseOrThrow(authActionSchema, body);
+      const scope =
+        actionName === "login"
+          ? "authLogin"
+          : actionName === "register"
+            ? "authRegister"
+            : actionName === "verify-2fa" || actionName === "toggle-2fa"
+              ? "authTwoFactor"
+              : "authOtp";
+      await enforceRateLimit(scope, request);
     }
 
     // ====== CHECK-EMAIL ======
@@ -751,10 +762,13 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ error: "Action inconnue." }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: "Erreur serveur.", details: err.message },
-      { status: 500 }
-    );
+  } catch (err: unknown) {
+    return toErrorResponse(err, {
+      requestId: requestIdOf(request),
+      route: request.nextUrl.pathname,
+      method: request.method,
+    });
   }
 }
+
+export const POST = withApiRoute(handlePost);

@@ -22,7 +22,7 @@ const nextConfig = {
     ],
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   /**
    * Anti-cache agressif : le script du service worker (`/sw.js`) doit toujours

@@ -5,59 +5,52 @@ import {
   supabaseEnsureAuthUser,
   isSupabaseAuthConfigured,
 } from "@/lib/services/supabaseAuth";
+import { forgotPasswordSchema } from "@/lib/validation";
+import { parseOrThrow } from "@/lib/validation/common";
+import { logger } from "@/lib/server/logger";
+import { withApiRoute } from "@/lib/server/errors";
+import { enforceRateLimit } from "@/lib/server/rateLimits";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/auth/forgot-password
- * Body : { email }
- * Envoie un email de réinitialisation via Supabase Auth.
- * Préparé pour être adapté plus tard à l'API Resend.
+ * Réponse toujours générique : ne révèle jamais l'existence d'un compte.
  */
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const email = String(body?.email || "").trim().toLowerCase();
+export const POST = withApiRoute(async (req: NextRequest) => {
+  await enforceRateLimit("authPasswordReset", req);
+  const body = parseOrThrow(forgotPasswordSchema, await req.json().catch(() => null));
 
-    if (!email) {
-      return NextResponse.json({ error: "L'adresse e-mail est obligatoire." }, { status: 400 });
-    }
+  const user = await prisma.user.findUnique({
+    where: { email: body.email },
+    select: { id: true },
+  });
 
-    // 1. Vérifier que le compte existe dans la table users (Supabase)
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return NextResponse.json(
-        { error: "Aucun compte n'est associé à cette adresse e-mail." },
-        { status: 404 }
-      );
-    }
-
-    // 2. S'assurer que le compte existe aussi dans auth.users (Supabase Auth)
-    //    pour que l'email de réinitialisation puisse être envoyé.
+  if (user) {
     if (isSupabaseAuthConfigured()) {
       try {
-        // Mot de passe provisoire (le login reste basé sur la table users)
         const tempPassword = `fh_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-        await supabaseEnsureAuthUser(email, tempPassword);
-      } catch (e: any) {
-        console.warn("[FORGOT PASSWORD] Création du compte auth.users:", e?.message);
+        await supabaseEnsureAuthUser(body.email, tempPassword);
+      } catch (error) {
+        logger.warn("auth_forgot_password_supabase_user", {
+          message: (error as Error)?.message,
+        });
       }
     }
 
-    // 3. Envoi de l'email de réinitialisation par Supabase Auth
-    const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    await supabaseSendPasswordReset(email, `${origin}/reset-password`);
-
-    return NextResponse.json({
-      success: true,
-      message:
-        "Un email de réinitialisation vous a été envoyé. Suivez le lien reçu pour définir un nouveau mot de passe.",
-    });
-  } catch (err: any) {
-    console.error("[FORGOT PASSWORD] Erreur:", err);
-    return NextResponse.json(
-      { error: err?.message || "Erreur lors de l'envoi de l'email de réinitialisation." },
-      { status: 500 }
-    );
+    const origin =
+      req.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    try {
+      await supabaseSendPasswordReset(body.email, `${origin}/reset-password`);
+    } catch (error) {
+      logger.error("auth_forgot_password_send", { message: (error as Error)?.message });
+    }
   }
-}
+
+  return NextResponse.json({
+    success: true,
+    message:
+      "Si un compte existe pour cette adresse, un email de réinitialisation a été envoyé.",
+  });
+});
+

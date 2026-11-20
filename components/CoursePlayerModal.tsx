@@ -24,6 +24,32 @@ import {
   Star
 } from 'lucide-react';
 
+interface QuizCorrectionState {
+  correctOptionIndex: number;
+  explanation: string;
+  isCorrect: boolean;
+}
+
+/** Appel aux routes académie : les erreurs serveur sont explicites. */
+async function postAcademy<T extends Record<string, unknown>>(
+  path: string,
+  payload: unknown
+): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json = (await response.json().catch(() => null)) as
+    | (T & { success?: boolean; error?: string })
+    | null;
+  if (!response.ok || !json?.success) {
+    throw new Error(json?.error || "Opération impossible. Réessayez.");
+  }
+  return json;
+}
+
+
 interface CoursePlayerModalProps {
   course: Course;
   onClose: () => void;
@@ -128,6 +154,9 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   });
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [quizCorrections, setQuizCorrections] = useState<Record<string, QuizCorrectionState>>({});
+  const [serverCertificate, setServerCertificate] = useState<Certificate | null>(null);
+  const [issuingCertificate, setIssuingCertificate] = useState(false);
   const [rulesAccepted, setRulesAccepted] = useState(false);
   const [certificateGranted, setCertificateGranted] = useState(false);
   const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
@@ -350,18 +379,87 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
   const currentIsVideoFile =
     !!currentLesson?.videoUrl && currentLesson?.type === "video" && !currentYoutubeEmbed;
 
-  const toggleLessonComplete = (lessonId: string) => {
-    if (completedLessonIds.includes(lessonId)) {
-      setCompletedLessonIds(completedLessonIds.filter(id => id !== lessonId));
-    } else {
-      setCompletedLessonIds([...completedLessonIds, lessonId]);
+  const toggleLessonComplete = async (lessonId: string) => {
+    if (!lessonId) return;
+    const nextCompleted = !completedLessonIds.includes(lessonId);
+
+    // Preuve serveur obligatoire pour l'attestation (si membre connecté).
+    if (userAccountId) {
+      try {
+        await postAcademy("/api/academy/lessons/progress", {
+          courseId: course.id,
+          lessonId,
+          completed: nextCompleted,
+        });
+      } catch (error) {
+        alert((error as Error)?.message || "Impossible d'enregistrer la progression.");
+        return;
+      }
     }
+
+    setCompletedLessonIds((previous) =>
+      nextCompleted ? [...previous, lessonId] : previous.filter((id) => id !== lessonId)
+    );
   };
 
-  const markAllComplete = () => {
-    const allIds = chapters.flatMap(ch => (ch.lessons || []).map(l => l.id));
-    setCompletedLessonIds(allIds);
-    triggerCelebrationConfetti();
+  const submitQuiz = async () => {
+    if (!userAccountId) {
+      alert("Connectez-vous pour valider le quiz et obtenir votre attestation.");
+      return;
+    }
+    const quiz = course.quiz || [];
+    const answers = quiz.map((question) => {
+      const index = quizAnswers[question.id];
+      const optionId = question.optionIds?.[index] || "";
+      return { quizId: question.id, optionId };
+    });
+
+    if (answers.some((answer) => !answer.optionId)) {
+      alert("Réponses incomplètes ou obsolètes. Rechargez la formation puis réessayez.");
+      return;
+    }
+
+    try {
+      const result = await postAcademy<{
+        data?: {
+          score: number;
+          total: number;
+          percent: number;
+          passed: boolean;
+          corrections: Array<{
+            quizId: string;
+            correctOptionIndex: number;
+            explanation: string;
+            isCorrect: boolean;
+          }>;
+        };
+      }>("/api/academy/quizzes/attempt", { courseId: course.id, answers });
+
+      const data = result.data;
+      if (!data) throw new Error("Réponse serveur invalide.");
+
+      const corrections: Record<string, QuizCorrectionState> = {};
+      for (const correction of data.corrections) {
+        corrections[correction.quizId] = {
+          correctOptionIndex: correction.correctOptionIndex,
+          explanation: correction.explanation,
+          isCorrect: correction.isCorrect,
+        };
+      }
+      setQuizCorrections(corrections);
+
+      if (!data.passed) {
+        alert(
+          `Score ${data.score}/${data.total} (${data.percent} %). Il faut au moins 70 % pour valider.`
+        );
+        return;
+      }
+
+      setQuizSubmitted(true);
+      triggerCelebrationConfetti();
+    } catch (error) {
+      alert((error as Error)?.message || "Impossible de valider le quiz.");
+    }
   };
 
   // Attestation à numéro UNIQUE & stable (cours + apprenant) — affichée ensuite
@@ -384,16 +482,38 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
     verified: true,
   } as Certificate & { courseId?: string };
 
+  const displayCertificate = serverCertificate || currentCertificate;
+
   const handleDownloadCertificate = () => {
     triggerCelebrationConfetti();
-    generatePDFCertificate(currentCertificate);
+    generatePDFCertificate(displayCertificate);
   };
 
-  const handleGrantCertificate = () => {
-    if (!certificateUnlocked || !rulesAccepted || certificateGranted) return;
-    setCertificateGranted(true);
-    triggerCelebrationConfetti();
-    if (onCertificateEarned) onCertificateEarned(currentCertificate as Certificate);
+  const handleGrantCertificate = async () => {
+    if (!certificateUnlocked || !rulesAccepted || certificateGranted || issuingCertificate) return;
+    if (!userAccountId) {
+      alert("Connectez-vous pour obtenir votre attestation officielle.");
+      return;
+    }
+
+    setIssuingCertificate(true);
+    try {
+      const result = await postAcademy<{ certificate?: Certificate }>(
+        "/api/academy/certificates/issue",
+        { courseId: course.id }
+      );
+      const certificate = result.certificate;
+      if (!certificate) throw new Error("Attestation non retournée par le serveur.");
+
+      setServerCertificate(certificate);
+      setCertificateGranted(true);
+      triggerCelebrationConfetti();
+      if (onCertificateEarned) onCertificateEarned(certificate);
+    } catch (error) {
+      alert((error as Error)?.message || "L'attestation n'a pas pu être délivrée.");
+    } finally {
+      setIssuingCertificate(false);
+    }
   };
 
   // ===== Aperçu gratuit (sans achat) =====
@@ -666,17 +786,6 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
             <span>Certificat Officiel {isCourseCompleted && '🏆'}</span>
           </button>
 
-          {/* Quick Mark All Button for Demo */}
-          {!isCourseCompleted && (
-            <button
-              type="button"
-              onClick={markAllComplete}
-              className="hidden"
-              aria-hidden="true"
-            >
-              ⚡ Simuler fin de formation
-            </button>
-          )}
         </div>
 
         {/* Main Classroom Body */}
@@ -995,7 +1104,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                           <div className="space-y-2">
                             {q.options.map((opt, oIdx) => {
                               const isSelected = quizAnswers[q.id] === oIdx;
-                              const isCorrect = q.correctAnswer === oIdx;
+                              const isCorrect = quizCorrections[q.id]?.correctOptionIndex === oIdx;
                               let optClass = 'bg-white border-slate-200 text-slate-700 hover:border-slate-400';
                               if (quizSubmitted) {
                                 if (isCorrect) optClass = 'bg-emerald-50 border-emerald-500 text-emerald-900 font-bold';
@@ -1066,10 +1175,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                       <button
                         type="button"
                         disabled={!course.quiz.every((q) => quizAnswers[q.id] !== undefined)}
-                        onClick={() => {
-                          setQuizSubmitted(true);
-                          markAllComplete();
-                        }}
+                        onClick={submitQuiz}
                         className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-700 text-white font-black text-xs rounded-lg shadow transition disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Valider mes réponses ✓
@@ -1184,26 +1290,26 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                     FORTIA HUB • ATTESTATION
                   </span>
                   <span className="text-[9px] sm:text-[10px] text-slate-300 font-mono truncate">
-                    N° {currentCertificate.id}
+                    N° {displayCertificate.id}
                   </span>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center gap-5">
                   <div className="flex-1 space-y-1 py-1 text-center sm:text-left">
                     <p className="text-[11px] text-slate-300">Décerné à :</p>
-                    <p className="text-lg sm:text-xl font-black text-white tracking-wide uppercase">{currentCertificate.studentName}</p>
+                    <p className="text-lg sm:text-xl font-black text-white tracking-wide uppercase">{displayCertificate.studentName}</p>
                     <p className="text-xs text-[#D69E25] font-semibold pt-1">
-                      « {currentCertificate.courseTitle} »
+                      « {displayCertificate.courseTitle} »
                     </p>
                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-0.5 pt-2 border-t border-[#D69E25]/30 text-[10px] text-slate-300">
-                      <span>Délivré le : {currentCertificate.issueDate}</span>
+                      <span>Délivré le : {displayCertificate.issueDate}</span>
                       <span className="text-emerald-400 font-bold">✓ Authenticité Vérifiée</span>
                     </div>
                   </div>
                   <div className="shrink-0 bg-white rounded-lg p-1.5 shadow-md">
                     <img
-                      src={currentCertificate.qrCodeUrl}
-                      alt={`QR Code attestation ${currentCertificate.id}`}
+                      src={displayCertificate.qrCodeUrl}
+                      alt={`QR Code attestation ${displayCertificate.id}`}
                       className="w-20 h-20 object-contain"
                       loading="lazy"
                     />

@@ -1,23 +1,18 @@
 // ============================================================
 // FORTIA HUB — RÉPONSES HTTP DU DOMAINE PAIEMENTS
+// ------------------------------------------------------------
+// Délègue à la gestion d'erreurs centralisée (même format, requestId,
+// aucun détail interne exposé).
 // ============================================================
 
-import { NextResponse } from "next/server";
-import { PaymentError } from "./types";
+import { randomUUID } from "node:crypto";
+import { requestIdOf, toErrorResponse } from "@/lib/server/errors";
 
-/** Convertit une erreur métier en réponse HTTP (jamais de détail interne). */
-export function paymentErrorResponse(error: unknown): NextResponse {
-  if (error instanceof PaymentError) {
-    return NextResponse.json(
-      { success: false, error: error.message, code: error.code },
-      { status: error.status }
-    );
-  }
-  console.error("[PAYMENTS] Erreur interne:", error);
-  return NextResponse.json(
-    { success: false, error: "Erreur interne. Veuillez réessayer." },
-    { status: 500 }
-  );
+export function paymentErrorResponse(error: unknown, request?: Request) {
+  return toErrorResponse(error, {
+    requestId: request ? requestIdOf(request) : randomUUID(),
+    route: request ? new URL(request.url).pathname : "payments",
+    method: request?.method,
+  });
 }
 
-export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

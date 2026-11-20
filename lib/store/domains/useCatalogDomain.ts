@@ -484,56 +484,25 @@ export function useCatalogDomain({
 
   const grantCertificate = useCallback(
     (certificate: Certificate) => {
-      if (!certificate?.courseTitle || !userProfile) return;
-      // Candidat local (utilisé uniquement si le serveur est indisponible)
-      const candidate: Certificate = {
-        ...certificate,
-        courseId: certificate.courseId || undefined,
-        userId: userProfile.id,
-      };
+      // Phase 3 : l'attestation est délivrée par le serveur (vérification
+      // progression + quiz). Ici on l'enregistre localement pour l'affichage,
+      // sans jamais fabriquer de certificat de secours.
+      if (!certificate?.id || !userProfile) return;
+      const existing = userProfile.earnedCertificates || [];
+      if (existing.some((entry) => entry.id === certificate.id)) return;
 
-      const applyCertificate = (finalCert: Certificate) => {
-        const existing = userProfile.earnedCertificates || [];
-        if (existing.some((c) => c.id === finalCert.id)) return;
-        const updated: UserProfile = {
-          ...userProfile,
-          earnedCertificates: [...existing, finalCert],
-        };
-        setUserProfile(updated);
-        try {
-          localStorage.setItem("fortia_user_profile", JSON.stringify(updated));
-        } catch (e) {}
-        if (userProfile.id) {
-          apiWritePlatform("sync-user-learning", {
-            userId: userProfile.id,
-            courseProgress: updated.courseProgress || {},
-            enrolledCourseIds: updated.enrolledCourseIds || [],
-            earnedCertificates: updated.earnedCertificates || [],
-          });
-        }
+      const updated: UserProfile = {
+        ...userProfile,
+        earnedCertificates: [...existing, certificate],
       };
-
-      if (userProfile.id) {
-        // Voie officielle : le serveur génère un numéro UNIQUE enregistré en base
-        apiWritePlatform("issue-certificate", {
-          userId: userProfile.id,
-          courseId: certificate.courseId || undefined,
-          courseTitle: certificate.courseTitle,
-          studentName: certificate.studentName,
-          category: certificate.category || "",
-          grade: certificate.grade || "",
-        }).then((res) => {
-          if (res.success && res.certificate) {
-            applyCertificate(res.certificate as unknown as Certificate);
-          } else {
-            applyCertificate(candidate);
-          }
-        });
-      } else {
-        applyCertificate(candidate);
+      setUserProfile(updated);
+      try {
+        localStorage.setItem("fortia_user_profile", JSON.stringify(updated));
+      } catch {
+        /* stockage local indisponible : l'attestation reste en base */
       }
     },
-    [userProfile]
+    [userProfile, setUserProfile]
   );
 
   const ensureCourseEnrollment = useCallback(

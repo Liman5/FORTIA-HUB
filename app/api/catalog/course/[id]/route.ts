@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { jsonSafe } from "@/lib/server/json";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/services/authSession";
+import { requireAdmin } from "@/lib/server/requireAdmin";
+
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +17,7 @@ export const dynamic = "force-dynamic";
  * `id` accepte l'identifiant OU le slug de la formation.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -41,6 +44,13 @@ export async function GET(
     if (!course) {
       return jsonSafe({ error: "Formation introuvable." }, { status: 404 });
     }
+
+    // Bonnes réponses réservées au propriétaire de la formation / admin.
+    const [viewer, admin] = await Promise.all([
+      getCurrentUser(req).catch(() => null),
+      requireAdmin(req).catch(() => null),
+    ]);
+    const canEdit = Boolean(admin) || Boolean(viewer && viewer.id === course.instructorId);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const c: any = course;
@@ -102,7 +112,14 @@ export async function GET(
         question: quiz.question,
         explanation: quiz.explanation || "",
         options: (quiz.options || []).map((option: any) => option.optionText),
-        correctAnswer: (quiz.options || []).findIndex((option: any) => option.isCorrect),
+        optionIds: (quiz.options || []).map((option: any) => option.id),
+        ...(canEdit
+          ? {
+              correctAnswer: (quiz.options || []).findIndex(
+                (option: any) => option.isCorrect
+              ),
+            }
+          : {}),
       })),
       isLite: false,
     };

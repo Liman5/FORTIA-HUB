@@ -120,6 +120,7 @@ export function usePlatformDomain({
                 question: q.question,
                 explanation: q.explanation || "",
                 options: (q.options || []).map((o: any) => o.optionText),
+                optionIds: (q.options || []).map((o: any) => o.id),
                 correctAnswer: (q.options || []).findIndex((o: any) => o.isCorrect),
               })) ||
               [],
