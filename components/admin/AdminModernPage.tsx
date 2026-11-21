@@ -14,7 +14,7 @@ import { AdminBlogPanel } from "./AdminBlogPanel";
 import { AdminModerationPanel } from "./AdminModerationPanel";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 import type { DigitalProduct } from "@/lib/types";
-import { normalizeAdminRole } from "@/lib/server/adminRoles";
+import { normalizeAdminRole } from "@/lib/shared/adminRoles";
 import { AdminDashboard } from "@/components/AdminDashboard";
 import { FloatingAiAssistant } from "@/components/FloatingAiAssistant";
 import { Menu, Lock, ShieldCheck } from "lucide-react";

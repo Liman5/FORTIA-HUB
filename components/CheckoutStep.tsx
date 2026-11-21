@@ -24,6 +24,10 @@ import {
 } from "lucide-react";
 import type { CartItem, MarketplaceOrder } from "@/lib/types";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
+import {
+  createCheckout,
+  fetchPaymentProviders,
+} from "@/lib/services/paymentsClient";
 
 type PaymentMethodId =
   | "wave"
@@ -77,13 +81,9 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
   // Moyens de paiement réellement configurés côté serveur (aucune simulation).
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/payments/providers", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((json) => {
+    fetchPaymentProviders()
+      .then(({ available }) => {
         if (cancelled) return;
-        const available = Array.isArray(json?.data?.available)
-          ? (json.data.available as string[])
-          : [];
         setAvailableProviders(available);
         if (available.includes("stripe")) setSelectedMethod("card");
         else if (available.includes("paystack")) setSelectedMethod("paystack");
@@ -167,34 +167,29 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
         throw new Error("Aucun article payable dans le panier.");
       }
 
-      const response = await fetch("/api/payments/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items,
-          provider: method.provider,
-          buyer: { name: fullBuyerName, email: buyerEmail, phone: buyerPhone },
-        }),
+      const result = await createCheckout({
+        items,
+        provider: method.provider,
+        buyer: { name: fullBuyerName, email: buyerEmail, phone: buyerPhone },
       });
-      const json = await response.json().catch(() => null);
-      if (!response.ok || !json?.success) {
-        throw new Error(json?.error || "Le paiement n'a pas pu être initialisé.");
+      if (!result.success) {
+        throw new Error(result.error || "Le paiement n'a pas pu être initialisé.");
       }
 
-      if (json.status === "paid") {
+      if (result.status === "paid") {
         const order: MarketplaceOrder = {
-          id: json.orderId,
-          orderNumber: json.orderNumber,
+          id: String(result.orderId || ""),
+          orderNumber: String(result.orderNumber || ""),
           buyerName: fullBuyerName,
           buyerEmail,
           buyerPhone,
           buyerUserId,
           storeName: "FORTIA HUB",
           productTitle: cartItems[0]?.title || "Commande",
-          amountUsd: Number(json.totalMinor || 0) / 100,
+          amountUsd: Number(result.totalMinor || 0) / 100,
           platformCommissionUsd: 0,
           vendorEarningsUsd: 0,
-          paymentGateway: "Wave API",
+          paymentGateway: result.provider || "FORTIA",
           transactionRef: "",
           status: "Payé",
           createdAt: new Date().toISOString().split("T")[0],
@@ -205,17 +200,17 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
         return;
       }
 
-      if (json.requiresRedirect && json.checkoutUrl) {
-        window.location.href = String(json.checkoutUrl);
+      if (result.requiresRedirect && result.checkoutUrl) {
+        window.location.href = String(result.checkoutUrl);
         return;
       }
 
       // Paiement en attente : AUCUN accès tant que le webhook n'a pas confirmé.
       setPendingOrder({
-        orderId: json.orderId,
-        orderNumber: json.orderNumber,
-        totalMinor: Number(json.totalMinor || 0),
-        currency: String(json.currency || "USD"),
+        orderId: String(result.orderId || ""),
+        orderNumber: String(result.orderNumber || ""),
+        totalMinor: Number(result.totalMinor || 0),
+        currency: String(result.currency || "USD"),
       });
     } catch (error) {
       alert((error as Error)?.message || "Le paiement a échoué. Aucun accès n'a été accordé.");

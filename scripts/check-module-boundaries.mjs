@@ -89,11 +89,15 @@ for (const [file, edges] of graph) {
   }
 }
 
-// 3. Composants frontend → modules serveur
+// 3. Composants frontend → modules serveur / Prisma / server
 for (const file of walk(path.join(ROOT, "components"))) {
   if (!file.endsWith(".tsx")) continue;
   for (const edge of importsOf(file)) {
-    if (edge.specifier.startsWith("@/lib/modules/")) {
+    if (
+      edge.specifier.startsWith("@/lib/modules/") ||
+      edge.specifier === "@/lib/prisma" ||
+      edge.specifier.startsWith("@/lib/server/")
+    ) {
       violations.push({
         rule: "frontend-server-module",
         detail: `${path.relative(ROOT, file)} → ${edge.specifier}`,

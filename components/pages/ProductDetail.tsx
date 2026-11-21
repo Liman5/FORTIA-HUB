@@ -18,6 +18,7 @@ import {
 import { useAuth, useCommerce } from "@/lib/store/domains/contexts";
 import { trackProductEvent } from "@/lib/services/track";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
+import { requestSignedDownloadUrl } from "@/lib/services/paymentsClient";
 export interface ProductDetailData {
   id: string;
   slug: string;
@@ -122,24 +123,18 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
     setDownloadError("");
     setDownloading(file.id);
     try {
-      const res = await fetch("/api/storage/signed-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: file.fileUrl }),
-      });
-      const json = await res.json().catch(() => ({}));
-
-      if (!res.ok || !json?.url) {
+      const result = await requestSignedDownloadUrl(file.fileUrl);
+      if (!result.ok || !result.url) {
         setDownloadError(
-          res.status === 401
+          result.status === 401
             ? "Connectez-vous pour télécharger ce fichier."
-            : res.status === 403
+            : result.status === 403
               ? "Vous devez acheter ce produit avant de le télécharger."
-              : json?.error || "Téléchargement indisponible pour le moment."
+              : result.error || "Téléchargement indisponible pour le moment."
         );
         return;
       }
-      window.open(json.url, "_blank", "noopener,noreferrer");
+      window.open(result.url, "_blank", "noopener,noreferrer");
     } catch {
       setDownloadError("Connexion impossible. Réessayez.");
     } finally {

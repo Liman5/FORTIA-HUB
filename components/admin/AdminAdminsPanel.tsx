@@ -11,8 +11,8 @@
 // ============================================================
 
 import React, { useCallback, useEffect, useState } from "react";
-import type { AdminRoleKey } from "@/lib/server/adminRoles";
-import { ADMIN_ROLE_LABELS, normalizeAdminRole } from "@/lib/server/adminRoles";
+import type { AdminRoleKey } from "@/lib/shared/adminRoles";
+import { ADMIN_ROLE_LABELS, normalizeAdminRole } from "@/lib/shared/adminRoles";
 import {
   ShieldCheck,
   Plus,
