@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { clientIp, rateLimit } from "@/lib/server/rateLimit";
+import { clientIp, rateLimitPersistent } from "@/lib/server/rateLimit";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +15,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest) {
   try {
-    // Anti-abus : 120 événements / minute par IP (largement suffisant).
-    if (rateLimit(`track:${clientIp(req)}`, 120, 60_000)) {
+    // Anti-abus : 120 événements / minute par IP (compteur persistant).
+    if (await rateLimitPersistent(`track:${clientIp(req)}`, 120, 60_000)) {
       return NextResponse.json({ success: true, ignored: true });
     }
 

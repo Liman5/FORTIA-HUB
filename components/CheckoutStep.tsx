@@ -25,7 +25,15 @@ import {
 import type { CartItem, MarketplaceOrder } from "@/lib/types";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 
-type PaymentMethodId = "wave" | "om" | "card" | "paypal" | "crypto" | "sandbox";
+type PaymentMethodId =
+  | "wave"
+  | "om"
+  | "card"
+  | "paystack"
+  | "flutterwave"
+  | "paypal"
+  | "crypto"
+  | "sandbox";
 
 export interface CheckoutStepProps {
   cartItems: CartItem[];
@@ -78,6 +86,8 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
           : [];
         setAvailableProviders(available);
         if (available.includes("stripe")) setSelectedMethod("card");
+        else if (available.includes("paystack")) setSelectedMethod("paystack");
+        else if (available.includes("flutterwave")) setSelectedMethod("flutterwave");
         else if (available.includes("sandbox")) setSelectedMethod("sandbox");
       })
       .catch(() => {
@@ -377,6 +387,24 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
       available: availableProviders.includes("sandbox"),
     },
     {
+      id: "paystack",
+      label: "Paystack",
+      hint: availableProviders.includes("paystack") ? "Carte / Mobile Money" : "Indisponible",
+      icon: CreditCard,
+      accent: "bg-sky-500/10 border-sky-500 ring-sky-500/40",
+      provider: "paystack",
+      available: availableProviders.includes("paystack"),
+    },
+    {
+      id: "flutterwave",
+      label: "Flutterwave",
+      hint: availableProviders.includes("flutterwave") ? "Carte / Mobile Money" : "Indisponible",
+      icon: Globe,
+      accent: "bg-amber-500/10 border-amber-500 ring-amber-500/40",
+      provider: "flutterwave",
+      available: availableProviders.includes("flutterwave"),
+    },
+    {
       id: "wave",
       label: "Wave",
       hint: "Bientôt disponible",
@@ -416,6 +444,8 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
 
   const selectedMethodHint: Record<string, string> = {
     card: "Vous serez redirigé vers le formulaire de paiement sécurisé Stripe. La confirmation est vérifiée côté serveur.",
+    paystack: "Vous serez redirigé vers Paystack. La confirmation est vérifiée côté serveur (signature + montant).",
+    flutterwave: "Vous serez redirigé vers Flutterwave. La confirmation est vérifiée côté serveur (hash + API).",
     sandbox: "Paiement de test : aucun débit. L'accès n'est accordé qu'après un webhook signé (tests d'intégration).",
     wave: "Ce moyen de paiement n'est pas encore activé sur le serveur.",
     om: "Ce moyen de paiement n'est pas encore activé sur le serveur.",

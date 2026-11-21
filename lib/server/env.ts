@@ -27,6 +27,9 @@ const envSchema = z.object({
 
   STRIPE_SECRET_KEY: z.string().startsWith("sk_").optional().or(z.literal("")),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_").optional().or(z.literal("")),
+  PAYSTACK_SECRET_KEY: optionalSecret,
+  FLUTTERWAVE_SECRET_KEY: optionalSecret,
+  FLUTTERWAVE_WEBHOOK_SECRET: optionalSecret,
   PAYMENTS_SANDBOX_ENABLED: z.enum(["true", "false"]).optional(),
   PAYMENTS_SANDBOX_ALLOW_PROD: z.enum(["true", "false"]).optional(),
   SANDBOX_WEBHOOK_SECRET: optionalSecret,

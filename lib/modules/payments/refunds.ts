@@ -8,7 +8,7 @@
 // ============================================================
 
 import { prisma } from "@/lib/prisma";
-import { revokeEntitlementsByPayment } from "./entitlements";
+import { revokeEntitlementsByOrder, revokeEntitlementsByPayment } from "./entitlements";
 import { getPaymentProvider } from "./providers";
 import { PaymentError } from "./types";
 
@@ -128,6 +128,7 @@ export async function refundOrder(input: RefundOrderInput) {
           data: { status: "Rembourse" },
         });
         await revokeEntitlementsByPayment(payment.id, tx);
+        await revokeEntitlementsByOrder(order.id, tx);
       }
 
       return row;

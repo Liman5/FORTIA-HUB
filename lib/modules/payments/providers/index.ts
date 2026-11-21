@@ -4,9 +4,16 @@
 
 import type { PaymentProvider } from "../types";
 import { stripeProvider } from "./stripe";
+import { paystackProvider } from "./paystack";
+import { flutterwaveProvider } from "./flutterwave";
 import { sandboxProvider } from "./sandbox";
 
-const PROVIDERS: PaymentProvider[] = [stripeProvider, sandboxProvider];
+const PROVIDERS: PaymentProvider[] = [
+  stripeProvider,
+  paystackProvider,
+  flutterwaveProvider,
+  sandboxProvider,
+];
 
 export function getPaymentProvider(code: string): PaymentProvider | null {
   const normalized = String(code || "").trim().toLowerCase();
@@ -31,4 +38,4 @@ export function getDefaultProviderCode(): string | null {
   return configured?.code ?? null;
 }
 
-export { stripeProvider, sandboxProvider };
+export { stripeProvider, paystackProvider, flutterwaveProvider, sandboxProvider };

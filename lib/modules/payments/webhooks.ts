@@ -8,7 +8,7 @@
 // ============================================================
 
 import { prisma } from "@/lib/prisma";
-import { revokeEntitlementsByPayment } from "./entitlements";
+import { revokeEntitlementsByOrder, revokeEntitlementsByPayment } from "./entitlements";
 import { sameAmount } from "./money";
 import { markOrderFailed, markOrderPaid } from "./orders";
 import { findPaymentByProviderRef, sanitizeGatewayPayload } from "./payments";
@@ -214,6 +214,7 @@ async function processRefundEvent(event: ParsedProviderEvent) {
       data: { status: "Rembourse" },
     });
     await revokeEntitlementsByPayment(refund.paymentId);
+    await revokeEntitlementsByOrder(refund.orderId);
   }
 }
 

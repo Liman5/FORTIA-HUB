@@ -131,6 +131,52 @@ export function InstructorPage() {
     }
   };
 
+  const handlePayCenterFee = async (center: TrainingCenter) => {
+    try {
+      const providersRes = await fetch("/api/payments/providers", { cache: "no-store" });
+      const providersJson = await providersRes.json().catch(() => null);
+      const available: string[] = Array.isArray(providersJson?.data?.available)
+        ? providersJson.data.available
+        : [];
+      const provider = available.includes("stripe")
+        ? "stripe"
+        : available.includes("paystack")
+          ? "paystack"
+          : available.includes("flutterwave")
+            ? "flutterwave"
+            : available[0];
+      if (!provider) {
+        alert("Aucun moyen de paiement n'est configuré. Contactez l'administration.");
+        return;
+      }
+      const response = await fetch("/api/payments/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          items: [{ type: "feature", planCode: "center_fee", centerId: center.id }],
+        }),
+      });
+      const json = await response.json().catch(() => null);
+      if (!response.ok || !json?.success) {
+        alert(json?.error || "Le paiement des frais n'a pas pu être initialisé.");
+        return;
+      }
+      if (json.status === "paid") {
+        alert("Frais d'ouverture réglés : votre centre est activé.");
+        refreshPlatformData(true);
+        return;
+      }
+      if (json.requiresRedirect && json.checkoutUrl) {
+        window.location.href = String(json.checkoutUrl);
+        return;
+      }
+      window.location.href = `/payments/return?order_id=${json.orderId}`;
+    } catch {
+      alert("Erreur réseau : les frais n'ont pas été réglés.");
+    }
+  };
+
   return (
     <InstructorDashboard
       center={myCenter}
@@ -147,6 +193,7 @@ export function InstructorPage() {
       onSuspendCourse={suspendInstructorCourse}
       onDeleteCourse={deleteInstructorCourse}
       onBuyStorage={handleBuyStorage}
+      onPayCenterFee={handlePayCenterFee}
       onOpenAuthModal={() => router.push("/login")}
     />
   );

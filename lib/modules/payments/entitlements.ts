@@ -165,6 +165,37 @@ export async function revokeEntitlementsByPayment(
   return updated.count;
 }
 
+/**
+ * Révoque aussi les droits rattachés à la COMMANDE (y compris ceux créés avant
+ * l'ajout du lien paymentId, par migration). Utilisé lors d'un remboursement total.
+ */
+export async function revokeEntitlementsByOrder(
+  orderId: string,
+  db: EntitlementDb = prisma
+) {
+  const rows = await db.entitlement.findMany({
+    where: { orderId, status: { in: ["active", "suspended"] } },
+    select: { userId: true, resourceType: true, resourceId: true },
+  });
+  if (rows.length === 0) return 0;
+
+  const updated = await db.entitlement.updateMany({
+    where: { orderId, status: { in: ["active", "suspended"] } },
+    data: { status: "revoked", revokedAt: new Date() },
+  });
+
+  for (const row of rows) {
+    await syncLegacyAccessCache(
+      row.userId,
+      row.resourceType as ResourceType,
+      row.resourceId,
+      false,
+      db
+    );
+  }
+  return updated.count;
+}
+
 /** Révoque les droits liés à un abonnement (expiration / annulation). */
 export async function revokeEntitlementsBySubscription(
   subscriptionId: string,

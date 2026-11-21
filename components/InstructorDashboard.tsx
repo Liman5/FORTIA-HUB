@@ -62,6 +62,7 @@ interface InstructorDashboardProps {
   onSuspendCourse: (courseId: string) => void;
   onDeleteCourse: (courseId: string) => void;
   onBuyStorage: (center: TrainingCenter, amountGb: number, amountUsd: number) => void;
+  onPayCenterFee?: (center: TrainingCenter) => void;
   onOpenAuthModal: () => void;
 }
 
@@ -80,6 +81,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   onSuspendCourse,
   onDeleteCourse,
   onBuyStorage,
+  onPayCenterFee,
   onOpenAuthModal,
 }) => {
   const [activeTab, setActiveTab] = useState<"overview" | "lectures" | "add" | "storage">("overview");
@@ -709,6 +711,23 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
         {/* Overview */}
         {activeTab === "overview" && (
           <div className="space-y-6">
+            {!center.feePaid && (
+              <div className="bg-amber-500/10 border border-amber-500/40 rounded-3xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-amber-200">Centre en attente d'activation</p>
+                  <p className="text-xs text-amber-100/80">
+                    Réglez les frais d'ouverture (2 $ US) pour activer votre centre.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onPayCenterFee?.(center)}
+                  className="shrink-0 px-4 py-2.5 rounded-xl bg-[#D69E25] text-[#021231] font-black text-xs hover:bg-amber-400 transition"
+                >
+                  Payer les frais (2 $ US)
+                </button>
+              </div>
+            )}
             <div className="bg-[#011D46] border border-slate-800 rounded-3xl p-6 space-y-4">
               <h3 className="font-bold text-sm flex items-center gap-2">
                 <HardDrive className="w-4 h-4 text-[#D69E25]" /> Stockage Vidéo (4 GB inclus)

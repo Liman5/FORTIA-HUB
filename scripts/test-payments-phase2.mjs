@@ -566,6 +566,38 @@ async function run() {
     });
     check(!!purchase, "Achat de stockage tracé");
 
+    console.log("\n=== 6bis. Frais d'ouverture du centre ===");
+    await prisma.trainingCenter.update({
+      where: { id: state.centerA.id },
+      data: { feePaid: false, status: "pending" },
+    });
+    const feeCheckout = await api("/api/payments/checkout", {
+      method: "POST",
+      token: state.tokenA,
+      body: {
+        provider: "sandbox",
+        items: [{ type: "feature", planCode: "center_fee", centerId: state.centerA.id }],
+      },
+    });
+    check(feeCheckout.json?.totalMinor === 200, "Prix frais de centre serveur (200)", `total=${feeCheckout.json?.totalMinor}`);
+    state.orderIds.push(feeCheckout.json?.orderId);
+    const feeWebhook = await sendWebhook({
+      id: `evt-${tag}-center-fee`,
+      type: "payment.succeeded",
+      paymentId: feeCheckout.json?.paymentId,
+      amountMinor: 200,
+      currency: "USD",
+    });
+    check(feeWebhook.status === 200, "Paiement des frais de centre confirmé", `status=${feeWebhook.status}`);
+    const centerAfterFee = await prisma.trainingCenter.findUnique({
+      where: { id: state.centerA.id },
+    });
+    check(
+      centerAfterFee?.feePaid === true && centerAfterFee?.status === "active",
+      "Centre activé après paiement des frais",
+      `feePaid=${centerAfterFee?.feePaid} status=${centerAfterFee?.status}`
+    );
+
     console.log("\n=== 7. Remboursements ===");
     const memberRefund = await adminApi("/api/admin/refunds", {
       method: "POST",
@@ -609,6 +641,28 @@ async function run() {
       !(await entitlementActive(state.userA.id, "product", state.product.id)),
       "Droit produit révoqué après remboursement"
     );
+
+    // Un rachat légitime après révocation doit réactiver le droit (upsert).
+    const repurchase = await api("/api/payments/checkout", {
+      method: "POST",
+      token: state.tokenA,
+      body: { provider: "sandbox", items: [{ type: "product", id: state.product.id }] },
+    });
+    state.orderIds.push(repurchase.json?.orderId);
+    const repurchaseWebhook = await sendWebhook({
+      id: `evt-${tag}-repurchase`,
+      type: "payment.succeeded",
+      paymentId: repurchase.json?.paymentId,
+      amountMinor: 500,
+      currency: "USD",
+    });
+    check(
+      repurchaseWebhook.status === 200 &&
+        (await entitlementActive(state.userA.id, "product", state.product.id)),
+      "Rachat après remboursement réactive le droit",
+      `status=${repurchaseWebhook.status}`
+    );
+
 
     console.log("\n=== 8. Sécurité (aucun contournement) ===");
     const otherStatus = await api(`/api/payments/status/${order1}`, { token: state.tokenB });

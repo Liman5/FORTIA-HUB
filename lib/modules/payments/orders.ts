@@ -60,12 +60,21 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
   const pricing = await resolveOrderItems(input.items);
 
-  // Achat de stockage : le centre ciblé doit appartenir à l'acheteur.
+  // Achat de stockage ou frais de centre : le centre doit appartenir à l'acheteur.
   for (const item of pricing.items) {
-    if (item.type !== "storage") continue;
-    const centerId = String((item.metadata as { centerId?: string })?.centerId || "");
+    const metadata = item.metadata as { centerId?: string; planCode?: string };
+    const isStorage = item.type === "storage";
+    const isCenterFee = item.type === "feature" && metadata?.planCode === "center_fee";
+    if (!isStorage && !isCenterFee) continue;
+    const centerId = String(metadata?.centerId || "");
     if (!UUID_PATTERN.test(centerId)) {
-      throw new PaymentError(400, "CENTER_REQUIRED", "Centre de formation requis pour ce stockage.");
+      throw new PaymentError(
+        400,
+        "CENTER_REQUIRED",
+        isCenterFee
+          ? "Centre de formation requis pour ces frais."
+          : "Centre de formation requis pour ce stockage."
+      );
     }
     const center = await prisma.trainingCenter.findUnique({
       where: { id: centerId },
@@ -274,6 +283,37 @@ async function grantOrderEntitlements(
 ) {
   for (const item of items) {
     const metadata = (item.metadata || {}) as Record<string, unknown>;
+
+    // Frais d'ouverture d'un centre : activation du centre, pas un simple droit.
+    if (item.itemType === "feature" && metadata.planCode === "center_fee") {
+      const centerId = String(metadata.centerId || "");
+      if (!UUID_PATTERN.test(centerId)) continue;
+      const alreadyGranted = await db.entitlement.findFirst({
+        where: { orderId, resourceType: "feature", resourceId: `center_fee:${centerId}` },
+        select: { id: true },
+      });
+      await grantEntitlement(
+        {
+          userId,
+          resourceType: "feature",
+          resourceId: `center_fee:${centerId}`,
+          source: "order",
+          orderId,
+          paymentId: paymentId || null,
+          metadata: { ...metadata, centerId },
+        },
+        db
+      );
+      if (!alreadyGranted) {
+        await db.trainingCenter
+          .update({
+            where: { id: centerId },
+            data: { feePaid: true, status: "active" },
+          })
+          .catch(() => null);
+      }
+      continue;
+    }
 
     if (
       item.itemType === "course" ||
