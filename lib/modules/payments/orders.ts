@@ -292,25 +292,31 @@ async function grantOrderEntitlements(
         where: { orderId, resourceType: "feature", resourceId: `center_fee:${centerId}` },
         select: { id: true },
       });
-      await grantEntitlement(
-        {
-          userId,
-          resourceType: "feature",
-          resourceId: `center_fee:${centerId}`,
-          source: "order",
-          orderId,
-          paymentId: paymentId || null,
-          metadata: { ...metadata, centerId },
-        },
-        db
-      );
       if (!alreadyGranted) {
-        await db.trainingCenter
-          .update({
-            where: { id: centerId },
-            data: { feePaid: true, status: "active" },
-          })
-          .catch(() => null);
+        await grantEntitlement(
+          {
+            userId,
+            resourceType: "feature",
+            resourceId: `center_fee:${centerId}`,
+            source: "order",
+            orderId,
+            paymentId: paymentId || null,
+            metadata: { ...metadata, centerId },
+          },
+          db
+        );
+      }
+      // Idempotence basée sur l'état réel du centre : une reprise après échec
+      // peut réactiver le centre même si l'entitlement existe déjà.
+      const currentCenter = await db.trainingCenter.findUnique({
+        where: { id: centerId },
+        select: { feePaid: true, status: true },
+      });
+      if (currentCenter && (!currentCenter.feePaid || currentCenter.status !== "active")) {
+        await db.trainingCenter.update({
+          where: { id: centerId },
+          data: { feePaid: true, status: "active" },
+        });
       }
       continue;
     }
