@@ -208,6 +208,11 @@ model User {
   badgeLabel            String   @default("") @map("badge_label")
   kycStatus             KycStatus @default(non_soumis) @map("kyc_status")
   isActive              Boolean  @default(true) @map("is_active")
+  /** active | suspended | blocked | deletion_pending | anonymized */
+  accountStatus         String   @default("active") @map("account_status")
+  statusReason          String   @default("") @map("status_reason")
+  suspendedUntil        DateTime? @map("suspended_until")
+  statusUpdatedAt       DateTime @default(now()) @map("status_updated_at")
   enrolledCourseIds     String[] @default([]) @map("enrolled_course_ids")
   courseProgress        Json     @default("{}") @map("course_progress")
   purchasedProductIds   String[] @default([]) @map("purchased_product_ids")
@@ -247,6 +252,8 @@ model User {
   @@index([accountType])
   @@index([badge])
   @@index([kycStatus])
+  @@index([accountStatus])
+  @@index([deletionScheduledFor])
   @@map("users")
 }
 
@@ -324,13 +331,42 @@ model PendingDeletion {
   requestedAt DateTime @default(now()) @map("requested_at")
   deleteAt    DateTime @map("delete_at")
   processed   Boolean  @default(false)
+  /** user | admin */
+  origin      String   @default("user")
+  reason      String   @default("")
+  /** pending | cancelled | processing | completed | failed */
+  status      String   @default("pending")
+  adminId     String?  @map("admin_id")
+  cancelledAt DateTime? @map("cancelled_at")
+  processedAt DateTime? @map("processed_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
   createdAt   DateTime @default(now()) @map("created_at")
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([deleteAt])
   @@index([processed])
+  @@index([status])
+  @@index([userId])
   @@map("pending_deletions")
+}
+
+/// Journal des actions administratives sensibles (non modifiable par le client).
+model AdminAuditLog {
+  id           String   @id @default(uuid())
+  actorId      String   @default("") @map("actor_id")
+  actorEmail   String   @default("") @map("actor_email")
+  actorRole    String   @default("") @map("actor_role")
+  action       String
+  targetUserId String?  @map("target_user_id")
+  targetEmail  String   @default("") @map("target_email")
+  reason       String   @default("")
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([targetUserId, createdAt])
+  @@index([action, createdAt])
+  @@map("admin_audit_logs")
 }
 
 // ============================================================

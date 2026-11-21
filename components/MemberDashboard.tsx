@@ -307,12 +307,26 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     setIsDeleting(false);
     if (res.success) {
       setDeletionSuccessNotice(
-        "Votre demande de suppression de compte a bien été prise en compte ! Votre accès est désormais bloqué pour la période de 24 heures avant la suppression définitive."
+        "Votre demande de suppression est enregistrée. La suppression définitive interviendra après un délai de rétention de 7 jours minimum. Vous pouvez annuler la demande pendant ce délai."
       );
-      setTimeout(() => {
-        setIsDeleteModalOpen(false);
-        if (onLogout) onLogout();
-      }, 3500);
+    }
+  };
+
+  const handleCancelAccountDeletion = async () => {
+    setIsDeleting(true);
+    try {
+      const response = await fetch("/api/account/deletion", { method: "DELETE" });
+      const data = await response.json().catch(() => null);
+      if (response.ok && data?.success) {
+        setDeletionSuccessNotice("Votre demande de suppression a été annulée.");
+        setConfirmCheckbox(false);
+      } else {
+        setDeletionSuccessNotice(data?.error || "Annulation impossible.");
+      }
+    } catch {
+      setDeletionSuccessNotice("Annulation impossible. Vérifiez votre connexion.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1003,15 +1017,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 </div>
                 <div>
                   <h4 className="font-extrabold text-sm text-white">Zone de Danger : Suppression du Compte</h4>
-                  <p className="text-xs text-red-400">Procédure de suppression définitive sous 24h</p>
+                  <p className="text-xs text-red-400">Procédure de suppression définitive sous 7 jours</p>
                 </div>
               </div>
 
               <div className="bg-white/[0.03] p-4 rounded-xl border border-red-500/20 text-xs text-slate-400 space-y-2">
                 <p className="font-semibold text-red-400">⚠️ Règles de suppression :</p>
                 <ul className="list-disc pl-5 space-y-1 text-[11px] text-slate-400">
-                  <li>Délai de <strong className="text-white">24 heures</strong> commence immédiatement.</li>
-                  <li><strong className="text-white">Blocage d'accès</strong> pendant ces 24 heures.</li>
+                  <li>Délai de <strong className="text-white">7 jours</strong> avant toute suppression.</li>
+                  <li>Vous pouvez <strong className="text-white">annuler la demande</strong> pendant ce délai.</li>
                   <li>Suppression <strong className="text-white">définitive</strong> de toutes vos données.</li>
                 </ul>
               </div>
@@ -1021,7 +1035,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 className="px-5 py-3 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-2 shadow-lg shadow-red-500/20"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>Demander la suppression définitive (Délai 24h)</span>
+                <span>Demander la suppression définitive (Délai 7 jours)</span>
               </button>
             </div>
           </div>
@@ -1054,25 +1068,33 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 <div className="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 border border-red-500/40 flex items-center justify-center mx-auto">
                   <Trash2 className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-black text-white">Confirmation de Suppression (24h)</h3>
+                <h3 className="text-lg font-black text-white">Confirmation de Suppression (7 jours)</h3>
                 <p className="text-xs text-slate-300">
                   Vous êtes sur le point d'initier la suppression irréversible du compte <strong className="text-amber-300">{user.email}</strong>.
                 </p>
               </div>
 
               {deletionSuccessNotice ? (
-                <div className="p-4 bg-emerald-950/90 border border-emerald-500 rounded-2xl text-emerald-200 text-xs space-y-2 text-center animate-pulse">
+                <div className="p-4 bg-emerald-950/90 border border-emerald-500 rounded-2xl text-emerald-200 text-xs space-y-2 text-center">
                   <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto" />
                   <p className="font-bold">{deletionSuccessNotice}</p>
+                  <button
+                    type="button"
+                    onClick={handleCancelAccountDeletion}
+                    disabled={isDeleting}
+                    className="mt-2 px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white font-bold text-[11px] hover:bg-white/20 disabled:opacity-40"
+                  >
+                    Annuler ma demande de suppression
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-4">
                   <div className="p-3.5 bg-red-950/80 border border-red-500/60 rounded-xl text-red-200 text-xs space-y-1.5">
                     <p className="font-bold flex items-center gap-1.5 text-red-300">
-                      <Lock className="w-4 h-4" /> Blocage immédiat des accès
+                      <Lock className="w-4 h-4" /> Délai de rétention obligatoire
                     </p>
                     <p className="text-[11px] text-red-200/90 leading-relaxed">
-                      Pendant le délai de 24h, vous serez déconnecté et <strong>aucun accès/connexion ne sera possible</strong> jusqu'à la destruction complète du compte.
+                      Votre compte reste accessible pendant <strong>7 jours</strong>. Vous pouvez annuler la demande à tout moment pendant ce délai. La suppression définitive interviendra au plus tôt après ces 7 jours.
                     </p>
                   </div>
 
@@ -1084,7 +1106,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       className="mt-0.5 rounded border-slate-600 text-red-600 focus:ring-red-500"
                     />
                     <span className="text-[11px] text-slate-300 leading-snug">
-                      Je confirme vouloir supprimer mon compte et j'accepte le blocage d'accès immédiat de 24h.
+                      Je confirme vouloir supprimer mon compte et je comprends qu'un délai de rétention de 7 jours s'applique.
                     </span>
                   </label>
 
@@ -1110,7 +1132,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       ) : (
                         <>
                           <Trash2 className="w-4 h-4" />
-                          <span>Confirmer (24h)</span>
+                          <span>Confirmer (7 jours)</span>
                         </>
                       )}
                     </button>

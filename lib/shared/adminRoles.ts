@@ -83,6 +83,21 @@ export function canWriteDomain(role: unknown, domain: AdminDomain): boolean {
   return domains.includes(domain);
 }
 
+/**
+ * Gestion des comptes de la plateforme (liste complète, suspension, suppression).
+ * Réservée aux rôles disposant de tous les droits ; jamais au superviseur,
+ * au financier ni au vérificateur KYC.
+ */
+export function canManagePlatformUsers(role?: unknown): boolean {
+  const normalized = normalizeAdminRole(role);
+  return normalized === "superadmin" || normalized === "general";
+}
+
+/** Seul un superadministrateur peut supprimer un autre administrateur. */
+export function canDeleteAdministrator(role?: unknown): boolean {
+  return normalizeAdminRole(role) === "superadmin";
+}
+
 /** Actions d'écriture du domaine FINANCE. */
 export const FINANCE_ACTIONS = new Set([
   "submit-order",

@@ -22,6 +22,8 @@ const files = [
   "20261120120000_phase3_academy_progress/migration.sql",
   "20261120150000_phase4_integrity/migration.sql",
   "20261120160000_phase4_order_trigger/migration.sql",
+  "20261121090000_phase_admin_users/migration.sql",
+  "20261121091000_drop_legacy_deletion_trigger/migration.sql",
 ];
 
 function toTestSchema(sql) {

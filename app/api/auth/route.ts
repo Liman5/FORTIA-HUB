@@ -21,6 +21,7 @@ import { notifyUser } from "@/lib/services/notifyUser";
 import { isRetryableDbError, withDbRetry } from "@/lib/server/dbRetry";
 import { enforceRateLimit } from "@/lib/server/rateLimits";
 import { isAdminEmailAllowlisted } from "@/lib/server/requireAdmin";
+import { requestAccountDeletion } from "@/lib/modules/admin/platformDeletion";
 import { requestIdOf, toErrorResponse, withApiRoute } from "@/lib/server/errors";
 import { authActionSchema } from "@/lib/validation";
 import { parseOrThrow } from "@/lib/validation/common";
@@ -48,11 +49,6 @@ const FROM_EMAIL = process.env.SENDER_EMAIL || "Fortia Hub <onboarding@resend.de
 const activeOtpsStore = new Map<
   string,
   { otpCode: string; expiresAt: number; sender: string }
->();
-
-const pendingDeletionsStore = new Map<
-  string,
-  { email: string; requestedAt: number; deleteAt: number }
 >();
 
 function generateOtpEmailHtml(otpCode: string, recipientEmail: string) {
@@ -467,26 +463,6 @@ async function handlePost(request: NextRequest) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
-      const pendingDeletion = pendingDeletionsStore.get(normalizedEmail);
-      if (pendingDeletion) {
-        const now = Date.now();
-        if (now >= pendingDeletion.deleteAt) {
-          pendingDeletionsStore.delete(normalizedEmail);
-          return NextResponse.json(
-            { error: "Connexion impossible : Votre compte a été définitivement supprimé à l'issue du délai de 24 heures." },
-            { status: 403 }
-          );
-        } else {
-          const remainingMs = pendingDeletion.deleteAt - now;
-          const hours = Math.floor(remainingMs / (1000 * 60 * 60));
-          const mins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-          return NextResponse.json(
-            { error: `Connexion impossible : Votre demande de suppression définitive de compte est en cours. Temps restant : ${hours}h ${mins}min. La connexion est strictement interdite durant ce délai.` },
-            { status: 403 }
-          );
-        }
-      }
-
       // Connexion via Supabase (Prisma + bcrypt)
       try {
         // Lecture résiliente : si le pool est saturé (P2039), on réessaie
@@ -522,6 +498,23 @@ async function handlePost(request: NextRequest) {
           return NextResponse.json(
             { error: "Connexion refusée : Adresse e-mail ou mot de passe incorrect." },
             { status: 401 }
+          );
+        }
+
+        // Compte suspendu, bloqué ou anonymisé : aucune session ne doit être créée.
+        if (
+          !user.isActive ||
+          ["suspended", "blocked", "anonymized"].includes(String(user.accountStatus || ""))
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                user.accountStatus === "suspended"
+                  ? "Connexion impossible : votre compte est temporairement suspendu. Contactez l'administration."
+                  : "Connexion impossible : votre compte est bloqué. Contactez l'administration.",
+              code: "ACCOUNT_BLOCKED",
+            },
+            { status: 403 }
           );
         }
 
@@ -602,28 +595,28 @@ async function handlePost(request: NextRequest) {
       }
     }
 
-    // ====== DELETE-ACCOUNT ======
+    // ====== DELETE-ACCOUNT (demande différée 7 jours) ======
     if (body.action === "delete-account") {
-      const { email } = body;
-      if (!email || typeof email !== "string") {
+      // Identité imposée par la session : l'email du body n'est jamais utilisé.
+      const currentUser = await getCurrentUser(request).catch(() => null);
+      if (!currentUser) {
         return NextResponse.json(
-          { success: false, error: "L'adresse e-mail est obligatoire pour demander la suppression." },
-          { status: 400 }
+          { success: false, error: "Authentification requise." },
+          { status: 401 }
         );
       }
-
-      const normalizedEmail = email.trim().toLowerCase();
-      const requestedAt = Date.now();
-      const deleteAt = requestedAt + 24 * 60 * 60 * 1000;
-
-      pendingDeletionsStore.set(normalizedEmail, { email: normalizedEmail, requestedAt, deleteAt });
-
+      const result = await requestAccountDeletion({
+        userId: currentUser.id,
+        origin: "user",
+        reason: body.reason,
+      });
       return NextResponse.json({
         success: true,
+        requestedAt: result.requestedAt,
+        deleteAt: result.deleteAt,
+        alreadyRequested: result.alreadyRequested,
         message:
-          "Demande de suppression définitive enregistrée. Le processus prend 24 heures avant la suppression irréversible. Durant ce délai, la connexion est strictement impossible.",
-        requestedAt: new Date(requestedAt).toISOString(),
-        deleteAt: new Date(deleteAt).toISOString(),
+          "Demande enregistrée. La suppression définitive interviendra après un délai de rétention de 7 jours minimum.",
       });
     }
 
@@ -659,6 +652,12 @@ async function handlePost(request: NextRequest) {
         return NextResponse.json(
           { success: false, error: "Compte introuvable." },
           { status: 404 }
+        );
+      }
+      if (!user.isActive || ["suspended", "blocked", "anonymized"].includes(String(user.accountStatus || ""))) {
+        return NextResponse.json(
+          { success: false, error: "Connexion impossible : ce compte n'est pas actif.", code: "ACCOUNT_BLOCKED" },
+          { status: 403 }
         );
       }
 

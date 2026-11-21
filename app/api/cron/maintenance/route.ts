@@ -18,6 +18,10 @@ import {
   purgeRateLimitCounters,
 } from "@/lib/server/maintenance";
 import { runPaymentMaintenance } from "@/lib/modules/payments/maintenance";
+import {
+  processDueDeletions,
+} from "@/lib/modules/admin/platformDeletion";
+import { processExpiredSuspensions } from "@/lib/modules/admin/platformUserStatus";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -56,6 +60,8 @@ async function runMaintenance(req: NextRequest) {
   // Abonnements et droits temporaires arrivés à échéance (toujours appliqué :
   // un droit expiré ne doit jamais rester actif).
   const payments = await runPaymentMaintenance();
+  const deletions = await processDueDeletions();
+  const suspensions = await processExpiredSuspensions();
 
   return NextResponse.json({
     success: true,
@@ -63,6 +69,8 @@ async function runMaintenance(req: NextRequest) {
     storage,
     rateLimitDeleted,
     payments,
+    deletions,
+    suspensions,
     executedAt: new Date().toISOString(),
   });
 }

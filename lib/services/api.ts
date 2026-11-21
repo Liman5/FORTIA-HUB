@@ -366,18 +366,18 @@ export async function apiToggleTwoFactor(
 }
 
 /**
- * Request permanent 24-hour delayed account deletion (/api/auth)
+ * Demande de suppression différée (7 jours) du compte connecté.
+ * Le paramètre email est conservé pour compatibilité d'appel mais n'est
+ * JAMAIS utilisé : le serveur identifie l'utilisateur par sa session.
  */
 export async function apiDeleteAccount(
-  email: string
+  _email: string
 ): Promise<ApiResponse<{ requestedAt: string; deleteAt: string }>> {
-  const normalizedEmail = email.trim().toLowerCase();
-
   try {
     const response = await fetch("/api/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "delete-account", email: normalizedEmail }),
+      body: JSON.stringify({ action: "delete-account" }),
     });
     const data = await response.json();
     if (response.ok && data.success) {

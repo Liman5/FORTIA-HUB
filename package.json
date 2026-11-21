@@ -20,7 +20,8 @@
     "test:database": "node scripts/test-migrations-replay.mjs && node scripts/test-database-integrity.mjs",
     "test:modules": "node scripts/test-module-services.mjs",
     "test:security": "node scripts/test-security-authz.mjs",
-    "test:integration": "node scripts/test-write-authorization.mjs && node scripts/test-payments-phase2.mjs && node scripts/test-academy-certificates.mjs && node scripts/test-module-services.mjs && node scripts/test-security-authz.mjs && node scripts/test-migrations-replay.mjs && node scripts/test-database-integrity.mjs",
+    "test:admin-users": "node scripts/test-admin-users.mjs",
+    "test:integration": "node scripts/test-write-authorization.mjs && node scripts/test-payments-phase2.mjs && node scripts/test-academy-certificates.mjs && node scripts/test-module-services.mjs && node scripts/test-security-authz.mjs && node scripts/test-admin-users.mjs && node scripts/test-migrations-replay.mjs && node scripts/test-database-integrity.mjs",
     "verify": "npm run typecheck && npm run lint && npm run check:boundaries && npm test && npm run test:database",
     "smoke": "node scripts/smoke-test.mjs"
   },
