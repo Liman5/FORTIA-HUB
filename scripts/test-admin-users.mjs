@@ -89,6 +89,17 @@ try {
   r = await request("PATCH", `/api/admin/platform-users/${target.id}`, general.token, { action: "reactivate", reason: "Fin test" });
   check(r.status === 200 && r.json?.data?.user?.isActive === true, "Réactivation", `${r.status}`);
 
+  // Un compte bloqué qui demande une suppression puis l'annule doit rester bloqué.
+  r = await request("PATCH", `/api/admin/platform-users/${target.id}`, general.token, { action: "block", reason: "Modération sécurité" });
+  check(r.status === 200 && r.json?.data?.user?.accountStatus === "blocked", "Blocage avant demande de suppression", `${r.status}`);
+  r = await request("POST", `/api/admin/platform-users/${target.id}/deletion`, general.token, { reason: "Suppression pendant blocage" });
+  const blockedDeletionId = r.json?.data?.id;
+  r = await request("DELETE", `/api/admin/platform-users/${target.id}/deletion`, general.token, { requestId: blockedDeletionId });
+  const restoredBlocked = await prisma.user.findUnique({ where: { id: target.id } });
+  check(r.status === 200 && restoredBlocked?.accountStatus === "blocked" && restoredBlocked?.isActive === false, "Annulation restaure le statut bloqué", `${restoredBlocked?.accountStatus}/${restoredBlocked?.isActive}`);
+  r = await request("PATCH", `/api/admin/platform-users/${target.id}`, general.token, { action: "reactivate", reason: "Reprise test" });
+  check(r.status === 200 && r.json?.data?.user?.accountStatus === "active", "Réactivation après restauration", `${r.status}`);
+
   r = await request("POST", `/api/admin/platform-users/${target.id}/deletion`, general.token, { reason: "Test suppression admin" });
   check(r.status === 200 && new Date(r.json?.data?.deleteAt).getTime() - Date.now() >= 6.9 * 86400000, "Suppression admin différée 7 jours", `${r.status}`);
   const requestId = r.json?.data?.id;

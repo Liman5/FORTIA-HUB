@@ -20,7 +20,14 @@ export async function requestAccountDeletion(input: {
 }) {
   const target = await prisma.user.findUnique({
     where: { id: input.userId },
-    select: { id: true, email: true, accountType: true, accountStatus: true },
+    select: {
+      id: true,
+      email: true,
+      accountType: true,
+      accountStatus: true,
+      isActive: true,
+      suspendedUntil: true,
+    },
   });
   if (!target) throw new PlatformUserError(404, "USER_NOT_FOUND", "Utilisateur introuvable.");
   if (target.accountStatus === "anonymized") {
@@ -54,6 +61,9 @@ export async function requestAccountDeletion(input: {
         origin: input.origin,
         reason: String(input.reason || "").slice(0, 500),
         status: "pending",
+        previousStatus: target.accountStatus === "deletion_pending" ? "active" : target.accountStatus,
+        previousIsActive: target.isActive,
+        previousSuspendedUntil: target.suspendedUntil,
         adminId: input.actor?.id || null,
       },
     });
@@ -110,6 +120,17 @@ export async function cancelAccountDeletion(input: {
   }
 
   const now = new Date();
+  // Restaure exactement l'état antérieur : un compte bloqué/suspendu ne doit
+  // jamais être réactivé par une simple annulation de suppression.
+  const restoreStatus =
+    pending.previousStatus && pending.previousStatus !== "deletion_pending"
+      ? pending.previousStatus
+      : "active";
+  const restoreIsActive =
+    restoreStatus === "active" ? pending.previousIsActive !== false : false;
+  const restoreSuspendedUntil =
+    restoreStatus === "suspended" ? pending.previousSuspendedUntil : null;
+
   await prisma.$transaction(async (tx) => {
     const cancelled = await tx.pendingDeletion.updateMany({
       where: { id: pending.id, status: "pending" },
@@ -123,14 +144,17 @@ export async function cancelAccountDeletion(input: {
       data: {
         deletionRequestedAt: null,
         deletionScheduledFor: null,
-        accountStatus:
-          target.accountStatus === "deletion_pending" ? "active" : target.accountStatus,
+        accountStatus: restoreStatus,
+        isActive: restoreIsActive,
+        suspendedUntil: restoreSuspendedUntil,
+        ...(restoreStatus === "active" ? { statusReason: "" } : {}),
         statusUpdatedAt: now,
       },
     });
     if (input.actor) {
       await writeAdminAudit(tx, input.actor, "user.deletion_cancelled", target, input.reason || "", {
         requestId: pending.id,
+        restoredStatus: restoreStatus,
       });
     }
   });

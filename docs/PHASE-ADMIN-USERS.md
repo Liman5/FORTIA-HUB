@@ -92,10 +92,55 @@ colonnes de statut, index, colonnes de suivi des demandes, table `admin_audit_lo
 `prisma/migrations/20261121091000_drop_legacy_deletion_trigger/migration.sql`
 (appliquée) : retrait du trigger de suppression immédiate.
 
-## 7. Tests
+## 8. Finalisation du dashboard
 
-`npm run test:admin-users` exécute 22 vérifications HTTP réelles : accès refusés,
+`components/AdminDashboard.tsx` est passé de **2 751 à 1 218 lignes**. Tous les onglets
+fonctionnels sont désormais extraits :
+
+| Onglet | Composant |
+|---|---|
+| Utilisateurs | `components/admin/users/AdminUsersTab.tsx` |
+| CMS du site | `components/admin/content/AdminSiteContentTab.tsx` |
+| Marketplace | `components/admin/marketplace/AdminMarketplaceTab.tsx` |
+| Formations | `components/admin/courses/AdminCoursesTab.tsx` |
+| Produits | `components/admin/products/AdminProductsTab.tsx` |
+| KYC | `components/admin/kyc/AdminKycTab.tsx` + `KycViewer.tsx` |
+| Frais | `components/admin/fees/AdminFeesTab.tsx` |
+| Formateurs | `components/admin/instructors/AdminInstructorsTab.tsx` |
+| Support | `components/admin/tabs/AdminSupportTab.tsx` |
+| Devis | `components/admin/tabs/AdminQuotesTab.tsx` |
+
+Le dashboard ne conserve plus que la navigation, l'onglet « Vue d'ensemble », les
+modales de création/édition globales et le passage des props aux modules.
+
+## 9. Restauration du statut après annulation d'une suppression
+
+`PendingDeletion` conserve désormais un instantané du compte :
+
+- `previous_status`
+- `previous_is_active`
+- `previous_suspended_until`
+
+Lors d'une annulation :
+
+- un compte `blocked` reste **bloqué** (`is_active=false`) ;
+- un compte `suspended` retrouve sa date de fin de suspension ;
+- un compte `active` redevient actif ;
+- aucune réactivation automatique d'un compte de modération.
+
+Migration : `20261121100000_phase_admin_deletion_snapshot` (appliquée).
+Les demandes antérieures sont rétro-remplies depuis l'état réel du compte associé.
+
+Test de régression : `test-admin-users` vérifie blocage → demande → annulation →
+compte toujours bloqué et inactif.
+
+## 10. Tests
+
+`npm run test:admin-users` exécute 25 vérifications HTTP réelles : accès refusés,
 recherche, pagination, fiche, suspension, session révoquée, blocage, réactivation,
-suppression différée ≥ 7 jours, idempotence, refus avant échéance, annulation,
-parcours utilisateur, identité imposée par la session, anonymisation, conservation
-de l'historique financier et journal d'audit.
+restauration du statut bloqué après annulation, suppression différée ≥ 7 jours,
+idempotence, refus avant échéance, annulation, parcours utilisateur, identité
+imposée par la session, anonymisation, conservation de l'historique financier et
+journal d'audit.
+
+

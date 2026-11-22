@@ -336,6 +336,10 @@ model PendingDeletion {
   reason      String   @default("")
   /** pending | cancelled | processing | completed | failed */
   status      String   @default("pending")
+  /** Statut du compte AVANT la demande (restauré si annulation). */
+  previousStatus String @default("active") @map("previous_status")
+  previousIsActive Boolean @default(true) @map("previous_is_active")
+  previousSuspendedUntil DateTime? @map("previous_suspended_until")
   adminId     String?  @map("admin_id")
   cancelledAt DateTime? @map("cancelled_at")
   processedAt DateTime? @map("processed_at")
