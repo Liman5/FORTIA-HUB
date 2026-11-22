@@ -1,0 +1,226 @@
+/* ==========================================================================
+   IBX MINIMAL — DESIGN SYSTEM GLOBAL
+   Tokens sémantiques communs. Compatible html.light / html.dark.
+   ========================================================================== */
+
+:root,
+html.light {
+  --ibx-bg: #f5f6f8;
+  --ibx-surface: #ffffff;
+  --ibx-surface-muted: #f0f2f5;
+  --ibx-surface-strong: #e8ebef;
+  --ibx-fg: #222b38;
+  --ibx-fg-muted: #687386;
+  --ibx-fg-subtle: #8a95a5;
+  --ibx-border: #dfe3e9;
+  --ibx-border-strong: #c8ced8;
+  --ibx-accent: #d5a02b;
+  --ibx-accent-strong: #b7831b;
+  --ibx-accent-soft: #fbf3df;
+  --ibx-success: #218653;
+  --ibx-success-soft: #e8f5ee;
+  --ibx-warning: #a97111;
+  --ibx-warning-soft: #fdf4e3;
+  --ibx-danger: #d64545;
+  --ibx-danger-soft: #fdecec;
+  --ibx-info: #3b82c4;
+  --ibx-info-soft: #eaf3fb;
+  --ibx-focus: #3b82c4;
+  --ibx-shadow-sm: 0 1px 2px rgba(18, 28, 45, 0.05);
+  --ibx-shadow-md: 0 10px 30px rgba(18, 28, 45, 0.07);
+  --ibx-radius-sm: 8px;
+  --ibx-radius-md: 12px;
+  --ibx-radius-lg: 18px;
+}
+
+html.dark {
+  --ibx-bg: #171b22;
+  --ibx-surface: #222832;
+  --ibx-surface-muted: #2a313c;
+  --ibx-surface-strong: #333b47;
+  --ibx-fg: #f1f3f6;
+  --ibx-fg-muted: #aab4c2;
+  --ibx-fg-subtle: #8792a1;
+  --ibx-border: #343c48;
+  --ibx-border-strong: #46505f;
+  --ibx-accent: #e0b34c;
+  --ibx-accent-strong: #f0c76a;
+  --ibx-accent-soft: #352c1b;
+  --ibx-success: #5fbd8b;
+  --ibx-success-soft: #1d3329;
+  --ibx-warning: #e0b34c;
+  --ibx-warning-soft: #352c1b;
+  --ibx-danger: #ef7b7b;
+  --ibx-danger-soft: #3a2224;
+  --ibx-info: #7ab8e8;
+  --ibx-info-soft: #1d2c3a;
+  --ibx-focus: #7ab8e8;
+  --ibx-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --ibx-shadow-md: 0 14px 32px rgba(0, 0, 0, 0.26);
+}
+
+.ibx-ui {
+  color: var(--ibx-fg) !important;
+  background-color: var(--ibx-bg) !important;
+}
+
+.ibx-profile-page {
+  background-color: var(--ibx-bg) !important;
+  color: var(--ibx-fg) !important;
+}
+
+.ibx-surface {
+  background-color: var(--ibx-surface) !important;
+  color: var(--ibx-fg) !important;
+  border: 1px solid var(--ibx-border) !important;
+  box-shadow: var(--ibx-shadow-sm);
+}
+
+.ibx-surface-muted {
+  background-color: var(--ibx-surface-muted) !important;
+  color: var(--ibx-fg) !important;
+  border: 1px solid var(--ibx-border) !important;
+}
+
+.ibx-fg { color: var(--ibx-fg) !important; }
+.ibx-fg-muted { color: var(--ibx-fg-muted) !important; }
+.ibx-fg-subtle { color: var(--ibx-fg-subtle) !important; }
+.ibx-border { border-color: var(--ibx-border) !important; }
+.ibx-divider { border-top: 1px solid var(--ibx-border) !important; }
+
+.ibx-label {
+  color: var(--ibx-fg-muted) !important;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ibx-input {
+  width: 100%;
+  border-radius: var(--ibx-radius-sm) !important;
+  border: 1px solid var(--ibx-border) !important;
+  background-color: var(--ibx-surface) !important;
+  color: var(--ibx-fg) !important;
+  padding: 0.625rem 0.75rem;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.ibx-input::placeholder { color: var(--ibx-fg-subtle) !important; }
+.ibx-input:focus {
+  border-color: var(--ibx-focus) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ibx-focus) 18%, transparent);
+}
+.ibx-input:disabled {
+  background-color: var(--ibx-surface-muted) !important;
+  color: var(--ibx-fg-muted) !important;
+}
+
+.ibx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--ibx-radius-sm) !important;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0.625rem 0.875rem;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+  cursor: pointer;
+}
+.ibx-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ibx-btn:focus-visible { outline: 2px solid var(--ibx-focus); outline-offset: 2px; }
+.ibx-btn-primary { background-color: var(--ibx-fg) !important; color: var(--ibx-surface) !important; }
+.ibx-btn-primary:hover { background-color: var(--ibx-accent-strong) !important; color: #1c1a12 !important; }
+.ibx-btn-secondary { background-color: var(--ibx-surface-muted) !important; color: var(--ibx-fg) !important; border-color: var(--ibx-border) !important; }
+.ibx-btn-secondary:hover { background-color: var(--ibx-surface-strong) !important; }
+.ibx-btn-outline { background-color: transparent !important; color: var(--ibx-fg) !important; border-color: var(--ibx-border-strong) !important; }
+.ibx-btn-outline:hover { background-color: var(--ibx-surface-muted) !important; }
+.ibx-btn-ghost { background-color: transparent !important; color: var(--ibx-fg-muted) !important; }
+.ibx-btn-ghost:hover { background-color: var(--ibx-surface-muted) !important; color: var(--ibx-fg) !important; }
+.ibx-btn-danger { background-color: var(--ibx-danger-soft) !important; color: var(--ibx-danger) !important; border-color: color-mix(in srgb, var(--ibx-danger) 35%, transparent) !important; }
+.ibx-btn-danger:hover { background-color: var(--ibx-danger) !important; color: #fff !important; }
+
+.ibx-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  border: 1px solid var(--ibx-border);
+  background-color: var(--ibx-surface-muted);
+  color: var(--ibx-fg-muted);
+  padding: 0.2rem 0.55rem;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ibx-badge-success { border-color: color-mix(in srgb, var(--ibx-success) 32%, transparent); background-color: var(--ibx-success-soft); color: var(--ibx-success); }
+.ibx-badge-warning { border-color: color-mix(in srgb, var(--ibx-warning) 32%, transparent); background-color: var(--ibx-warning-soft); color: var(--ibx-warning); }
+.ibx-badge-danger { border-color: color-mix(in srgb, var(--ibx-danger) 32%, transparent); background-color: var(--ibx-danger-soft); color: var(--ibx-danger); }
+.ibx-badge-info { border-color: color-mix(in srgb, var(--ibx-info) 32%, transparent); background-color: var(--ibx-info-soft); color: var(--ibx-info); }
+
+.ibx-section-title { color: var(--ibx-fg) !important; font-size: 13px; font-weight: 800; letter-spacing: -0.01em; }
+.ibx-section-subtitle { color: var(--ibx-fg-muted) !important; font-size: 11px; line-height: 1.5; }
+.ibx-help { color: var(--ibx-fg-subtle) !important; font-size: 10px; }
+.ibx-error { color: var(--ibx-danger) !important; font-size: 11px; font-weight: 600; }
+.ibx-success-text { color: var(--ibx-success) !important; font-size: 11px; font-weight: 600; }
+
+.ibx-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background-color: var(--ibx-surface-strong);
+  border: 1px solid var(--ibx-border);
+  transition: background-color 150ms ease;
+}
+.ibx-switch[data-on="true"] { background-color: var(--ibx-success); border-color: var(--ibx-success); }
+.ibx-switch-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #fff;
+  transform: translateX(2px);
+  transition: transform 150ms ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.ibx-switch[data-on="true"] .ibx-switch-thumb { transform: translateX(18px); }
+
+.ibx-tab { border-bottom: 2px solid transparent; color: var(--ibx-fg-muted); font-weight: 700; font-size: 12px; padding: 0.65rem 0.25rem; }
+.ibx-tab[data-active="true"] { color: var(--ibx-fg); border-bottom-color: var(--ibx-accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ibx-btn, .ibx-input, .ibx-switch, .ibx-switch-thumb { transition: none; }
+}
+
+/* Le Profil membre réutilise les anciennes cartes de paramètres : on les
+   aligne sur les tokens sombres sans toucher à leur logique. */
+html.dark .ibx-profile-page [class*="bg-white"],
+html.dark .ibx-profile-page [class*="bg-slate-50"] {
+  background-color: var(--ibx-surface) !important;
+}
+html.dark .ibx-profile-page [class*="border-slate-200"],
+html.dark .ibx-profile-page [class*="border-slate-100"] {
+  border-color: var(--ibx-border) !important;
+}
+html.dark .ibx-profile-page [class*="text-slate-900"],
+html.dark .ibx-profile-page [class*="text-slate-800"],
+html.dark .ibx-profile-page [class*="text-slate-700"] {
+  color: var(--ibx-fg) !important;
+}
+html.dark .ibx-profile-page [class*="text-slate-600"],
+html.dark .ibx-profile-page [class*="text-slate-500"] {
+  color: var(--ibx-fg-muted) !important;
+}
+html.light .ibx-profile-page [class*="bg-white"] {
+  background-color: var(--ibx-surface) !important;
+}
+html.light .ibx-profile-page [class*="text-slate-900"] {
+  color: var(--ibx-fg) !important;
+}
+
+

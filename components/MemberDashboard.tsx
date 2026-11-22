@@ -407,7 +407,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   }
 
   return (
-    <section className="py-10 bg-[#021231] min-h-[600px] relative overflow-hidden fortia-flat">
+    <section className={`py-10 min-h-[600px] relative overflow-hidden fortia-flat ${activeTab === 'settings' ? 'ibx-profile-page' : 'bg-[#021231]'}`}>
       {/* Background decorations */}
       <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/20 to-transparent" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(214,158,37,0.04)_0%,transparent_50%)]" />
