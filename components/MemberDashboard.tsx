@@ -49,6 +49,8 @@ import {
   Check,
   Library,
 } from 'lucide-react';
+import { ProfileHeader } from '@/components/member/ProfileHeader';
+import { ProfilePersonalCard } from '@/components/member/ProfilePersonalCard';
 import { useTheme } from '../lib/store/ThemeProvider';
 
 interface MemberDashboardProps {
@@ -413,94 +415,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       <div className="absolute inset-0 bg-grid-pattern opacity-10" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 relative z-10">
-        {/* ===== USER PROFILE CARD ===== */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="relative bg-white/[0.04] backdrop-blur-xl border border-[#D69E25]/30 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden"
-        >
-          {/* Glow effects */}
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/50 to-transparent" />
-          <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-[#D69E25]/5 blur-3xl" />
-          <div className="absolute -bottom-20 -left-20 w-64 h-64 rounded-full bg-sky-500/5 blur-3xl" />
-
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
-            <div className="flex items-center gap-5">
-              <div className="relative shrink-0">
-                {user?.avatar ? (
-                  <img
-                    src={user.avatar}
-                    alt={user?.name || 'Membre'}
-                    className="w-20 h-20 rounded-2xl object-cover border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20"
-                  />
-                ) : (
-                  <div className="w-20 h-20 rounded-2xl border-2 border-[#D69E25] bg-[#011D46] flex items-center justify-center shadow-lg shadow-[#D69E25]/20">
-                    <User className="w-8 h-8 text-[#D69E25]" />
-                  </div>
-                )}
-                {badgeType === 'gold' && (
-                  <motion.div
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center shadow-lg"
-                    title="Badge Doré"
-                  >
-                    <BadgeCheck className="w-4 h-4 text-[#021231]" />
-                  </motion.div>
-                )}
-                {badgeType === 'green' && (
-                  <motion.div
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg"
-                    title="Badge Vert"
-                  >
-                    <BadgeCheck className="w-4 h-4 text-white" />
-                  </motion.div>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-xl sm:text-2xl font-black text-white">{user?.name || 'Membre'}</h2>
-                  <span className="bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow">
-                    Membre VIP
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400">{user.email} • {user.phone}</p>
-                <div className="flex items-center gap-2 text-[11px] text-slate-300">
-                  <Sparkles className="w-3.5 h-3.5 text-[#D69E25]" />
-                  <span>Membre FORTIA HUB depuis 2026</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Stats */}
-            <div className="grid grid-cols-3 gap-3 w-full md:w-auto">
-              {[
-                { icon: BookOpen, value: enrolledCourses.length, label: 'Formations', color: '#D69E25' },
-                { icon: FileCheck2, value: earnedCertificates.length, label: 'Certificats', color: '#10B981' },
-                { icon: ShoppingBag, value: purchasedProducts.length, label: 'Achats', color: '#F59E0B' },
-              ].map((stat, i) => {
-                const Icon = stat.icon;
-                return (
-                  <motion.div
-                    key={stat.label}
-                    whileHover={{ y: -3 }}
-                    onClick={() => router.push('/library')}
-                    role="button"
-                    title="Ouvrir ma bibliothèque"
-                    className="bg-white/[0.04] border border-white/10 rounded-2xl p-3.5 text-center min-w-[90px] cursor-pointer hover:border-[#D69E25]/40 transition"
-                  >
-                    <Icon className="w-4 h-4 mx-auto mb-1.5" style={{ color: stat.color }} />
-                    <p className="text-lg font-black text-white">{stat.value}</p>
-                    <p className="text-[9px] text-slate-400 uppercase font-semibold mt-0.5">{stat.label}</p>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
-        </motion.div>
+        <ProfileHeader
+          user={user}
+          badgeType={badgeType}
+          kycStatus={user.kycStatus}
+          isProviderApproved={isProviderApproved}
+          stats={{
+            courses: enrolledCourses.length,
+            certificates: earnedCertificates.length,
+            purchases: purchasedProducts.length,
+          }}
+          onEdit={() => setActiveTab('settings')}
+          onOpenKyc={onOpenKyc}
+        />
 
         {/* ===== NAVIGATION BUTTONS : Profil Freelance / Boutique / Formateur ===== */}
         <motion.div
@@ -774,107 +701,28 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         {/* Tab 5: Paramètres */}
         {activeTab === 'settings' && (
           <div className="space-y-5">
-            {/* ===== SECTION CHANGER PHOTO DE PROFIL ===== */}
-            <div className="bg-white/[0.04] backdrop-blur-xl border border-[#D69E25]/30 rounded-3xl p-6 shadow-xl space-y-5">
-              <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                <ImageUp className="w-4 h-4 text-[#D69E25]" />
-                <span>Photo de Profil</span>
-              </h3>
-
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-                {/* Aperçu de l'avatar */}
-                <div className="relative shrink-0">
-                  {user.avatar ? (
-                    <img
-                      src={user.avatar}
-                      alt={user?.name || 'Membre'}
-                      className="w-24 h-24 rounded-2xl object-cover border-2 border-[#D69E25] shadow-lg shadow-[#D69E25]/20"
-                    />
-                  ) : (
-                    <div className="w-24 h-24 rounded-2xl border-2 border-[#D69E25] bg-[#011D46] flex items-center justify-center shadow-lg shadow-[#D69E25]/20">
-                      <User className="w-10 h-10 text-[#D69E25]" />
-                    </div>
-                  )}
-                  {isUploadingAvatar && (
-                    <div className="absolute inset-0 rounded-2xl bg-black/60 flex items-center justify-center">
-                      <Loader2 className="w-6 h-6 text-[#D69E25] animate-spin" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3 flex-1">
-                  <p className="text-xs text-slate-400">
-                    Cliquez sur le bouton pour choisir une nouvelle photo. Formats acceptés : JPG, PNG, WebP. Taille max : 5 Mo.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarChange}
-                      className="hidden"
-                      id="avatar-upload-input"
-                    />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploadingAvatar}
-                      className="px-5 py-2.5 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-bold text-xs rounded-xl hover:brightness-110 transition flex items-center gap-2 shadow-lg shadow-[#D69E25]/20 disabled:opacity-50"
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span>{isUploadingAvatar ? 'Upload en cours...' : 'Changer ma photo'}</span>
-                    </button>
-                  </div>
-
-                  {avatarError && (
-                    <p className="text-[11px] text-red-400 font-semibold flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      {avatarError}
-                    </p>
-                  )}
-                  {avatarSuccess && (
-                    <p className="text-[11px] text-emerald-400 font-bold flex items-center gap-1.5">
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      Photo de profil mise à jour avec succès !
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* ===== INFORMATION DU COMPTE ===== */}
-            <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl space-y-4">
-              <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                <User className="w-4 h-4 text-[#D69E25]" />
-                <span>Informations du Compte</span>
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                {[
-                  { label: 'Nom complet', value: user?.name || 'Membre' },
-                  { label: 'Adresse e-mail', value: user?.email || 'Non renseigné' },
-                  { label: 'Téléphone', value: user?.phone || 'Non renseigné' },
-                  { label: 'Type de compte', value: (user?.accountType || 'buyer').toUpperCase() },
-                ].map((field) => (
-                  <div key={field.label} className="bg-white/[0.03] p-3.5 rounded-xl border border-white/10">
-                    <span className="text-slate-500 text-[11px] block font-medium">{field.label}</span>
-                    <span className="font-bold text-white text-sm truncate block">{field.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ProfilePersonalCard
+              user={user}
+              onSaved={(updates) => onUpdateProfile?.(updates)}
+              fileInputRef={fileInputRef}
+              onAvatarChange={handleAvatarChange}
+              isUploadingAvatar={isUploadingAvatar}
+              avatarError={avatarError}
+              avatarSuccess={avatarSuccess}
+            />
 
             {/* ===== SECTION NOTIFICATIONS & APPLICATION ===== */}
-            <div className="bg-white/[0.04] backdrop-blur-xl border border-[#D69E25]/30 rounded-3xl p-6 shadow-xl space-y-4">
-              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                 <Bell className="w-4 h-4 text-[#D69E25]" />
                 <span>Notifications & Application</span>
               </h3>
 
               {/* Statut permission */}
-              <div className="flex items-center justify-between gap-3 bg-white/[0.03] p-4 rounded-xl border border-white/10">
+              <div className="flex items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-white">Notifications système</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-xs font-bold text-slate-900">Notifications système</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
                     {notifPermission === 'granted'
                       ? isPushSupported()
                         ? 'Autorisées + Web Push actif : alertes même lorsque l\u2019app est fermée.'
@@ -900,17 +748,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               </div>
 
               {/* Toggle réception des alertes */}
-              <div className="flex items-center justify-between gap-3 bg-white/[0.03] p-4 rounded-xl border border-white/10">
+              <div className="flex items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-white">Recevoir les alertes</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Activer ou désactiver les notifications de l'application.</p>
+                  <p className="text-xs font-bold text-slate-900">Recevoir les alertes</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Activer ou désactiver les notifications de l'application.</p>
                 </div>
                 <button
                   onClick={handleToggleNotifEnabled}
                   className={`shrink-0 px-4 py-2 rounded-xl text-[10px] font-black transition border ${
                     notifSettings.enabled
                       ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                      : 'bg-white/5 border-white/15 text-slate-300'
+                      : 'bg-white/5 border-white/15 text-slate-600'
                   }`}
                 >
                   {notifSettings.enabled ? 'Activé' : 'Désactivé'}
@@ -918,17 +766,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               </div>
 
               {/* Toggle sonnerie */}
-              <div className="flex items-center justify-between gap-3 bg-white/[0.03] p-4 rounded-xl border border-white/10">
+              <div className="flex items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-white">Sonnerie personnalisée</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Jouer la sonnerie FORTIA lors de chaque notification.</p>
+                  <p className="text-xs font-bold text-slate-900">Sonnerie personnalisée</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Jouer la sonnerie FORTIA lors de chaque notification.</p>
                 </div>
                 <button
                   onClick={() => updateNotifSetting({ sound: !notifSettings.sound })}
                   className={`shrink-0 px-4 py-2 rounded-xl text-[10px] font-black transition border ${
                     notifSettings.sound
                       ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                      : 'bg-white/5 border-white/15 text-slate-300'
+                      : 'bg-white/5 border-white/15 text-slate-600'
                   }`}
                 >
                   {notifSettings.sound ? 'Son activé' : 'Silencieux'}
@@ -940,7 +788,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 <div className="flex items-center justify-between gap-3 bg-[#D69E25]/5 p-4 rounded-xl border border-[#D69E25]/30">
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-[#D69E25]">Application FORTIA HUB</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <p className="text-[11px] text-slate-500 mt-0.5">
                       Téléchargez l'app pour un accès rapide et les notifications système.
                     </p>
                   </div>
@@ -961,16 +809,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             </div>
 
             {/* ===== SECTION SÉCURITÉ : 2FA ===== */}
-            <div className="bg-white/[0.04] backdrop-blur-xl border border-[#D69E25]/30 rounded-3xl p-6 shadow-xl space-y-4">
-              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-[#D69E25]" />
                 <span>Sécurité : Authentification à deux facteurs (2FA)</span>
               </h3>
 
-              <div className="flex items-center justify-between gap-3 bg-white/[0.03] p-4 rounded-xl border border-white/10">
+              <div className="flex items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-white">Protection 2FA du compte</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-xs font-bold text-slate-900">Protection 2FA du compte</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
                     {twoFactorEnabled
                       ? 'Activée — un code par e-mail vous sera demandé à chaque connexion.'
                       : 'Désactivée — vos connexions ne demandent que le mot de passe.'}
@@ -1010,29 +858,29 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               )}
             </div>
 
-            <div className="bg-red-500/5 border-2 border-red-500/40 rounded-3xl p-6 space-y-4">
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-5 space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/40 text-red-400 flex items-center justify-center shrink-0">
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="font-extrabold text-sm text-white">Zone de Danger : Suppression du Compte</h4>
+                  <h4 className="font-extrabold text-sm text-slate-900">Zone de Danger : Suppression du Compte</h4>
                   <p className="text-xs text-red-400">Procédure de suppression définitive sous 7 jours</p>
                 </div>
               </div>
 
-              <div className="bg-white/[0.03] p-4 rounded-xl border border-red-500/20 text-xs text-slate-400 space-y-2">
+              <div className="bg-white/[0.03] p-4 rounded-xl border border-red-200 text-xs text-slate-500 space-y-2">
                 <p className="font-semibold text-red-400">⚠️ Règles de suppression :</p>
-                <ul className="list-disc pl-5 space-y-1 text-[11px] text-slate-400">
-                  <li>Délai de <strong className="text-white">7 jours</strong> avant toute suppression.</li>
-                  <li>Vous pouvez <strong className="text-white">annuler la demande</strong> pendant ce délai.</li>
-                  <li>Suppression <strong className="text-white">définitive</strong> de toutes vos données.</li>
+                <ul className="list-disc pl-5 space-y-1 text-[11px] text-slate-500">
+                  <li>Délai de <strong className="text-slate-900">7 jours</strong> avant toute suppression.</li>
+                  <li>Vous pouvez <strong className="text-slate-900">annuler la demande</strong> pendant ce délai.</li>
+                  <li>Suppression <strong className="text-slate-900">définitive</strong> de toutes vos données.</li>
                 </ul>
               </div>
 
               <button
                 onClick={() => { setConfirmCheckbox(false); setIsDeleteModalOpen(true); }}
-                className="px-5 py-3 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-2 shadow-lg shadow-red-500/20"
+                className="px-5 py-3 bg-red-600 hover:bg-red-500 text-slate-900 font-extrabold text-xs rounded-xl transition flex items-center gap-2 shadow-lg shadow-red-500/20"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Demander la suppression définitive (Délai 7 jours)</span>

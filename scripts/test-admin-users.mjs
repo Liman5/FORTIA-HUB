@@ -79,6 +79,14 @@ try {
   r = await request("GET", `/api/admin/platform-users/${target.id}`, general.token);
   check(r.status === 200 && r.json?.data?.user?.purchases?.length >= 1, "Fiche détaillée et historique", `${r.status}`);
 
+  // Mise à jour du profil membre via la même API que l'écran Profil.
+  r = await request("POST", "/api/platform/write", other.token, {
+    action: "update-profile",
+    data: { name: "Membre Modifié", phone: "+22501020304" },
+  });
+  const updatedOther = await prisma.user.findUnique({ where: { id: other.id }, select: { name: true, phone: true } });
+  check(r.status === 200 && updatedOther?.name === "Membre Modifié" && updatedOther?.phone === "+22501020304", "Mise à jour du profil membre", `${r.status}`);
+
   r = await request("PATCH", `/api/admin/platform-users/${target.id}`, general.token, { action: "suspend", reason: "Test suspension" });
   check(r.status === 200 && r.json?.data?.user?.isActive === false && r.json?.data?.user?.accountStatus === "suspended", "Suspension réelle", `${r.status}`);
   r = await request("GET", "/api/me", target.token);

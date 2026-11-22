@@ -24,6 +24,7 @@ import {
 
 export type AdminModuleKey =
   | "stats"
+  | "users"
   | "formations"
   | "produits"
   | "services"
@@ -50,6 +51,8 @@ interface AdminSidebarProps {
   allowAdmins?: boolean;
   /** Modules visibles pour ce profil (undefined = tous). */
   allowedModules?: AdminModuleKey[];
+  /** Affiche le module Utilisateurs (gestion des comptes de la plateforme). */
+  allowUsers?: boolean;
 }
 
 const MODULES: {
@@ -65,6 +68,13 @@ const MODULES: {
     icon: LayoutDashboard,
     color: "text-[#D69E25]",
     activeBg: "bg-[#D69E25] text-[#021231]",
+  },
+  {
+    key: "users",
+    label: "Utilisateurs",
+    icon: Users,
+    color: "text-sky-400",
+    activeBg: "bg-sky-500 text-white",
   },
   {
     key: "formations",
@@ -181,7 +191,7 @@ const MODULES: {
   },
 ];
 
-export function AdminSidebar({ activeModule, onModuleChange, isOpen, onClose, badges = {}, allowAdmins = false, allowedModules }: AdminSidebarProps) {
+export function AdminSidebar({ activeModule, onModuleChange, isOpen, onClose, badges = {}, allowAdmins = false, allowedModules, allowUsers = true }: AdminSidebarProps) {
   return (
     <>
       {/* Backdrop mobile */}
@@ -217,6 +227,7 @@ export function AdminSidebar({ activeModule, onModuleChange, isOpen, onClose, ba
             {MODULES.filter(
               (mod) =>
                 (mod.key !== "admins" || allowAdmins) &&
+                (mod.key !== "users" || allowUsers) &&
                 (!allowedModules || allowedModules.includes(mod.key))
             ).map((mod) => {
               const Icon = mod.icon;

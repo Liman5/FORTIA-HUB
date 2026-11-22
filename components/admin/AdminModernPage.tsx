@@ -131,6 +131,7 @@ export function AdminModernPage() {
   // Superadministrateur ? (comparaison normalisée : superadmin, super_admin…)
   const roleKey = normalizeAdminRole(adminRole);
   const canManageAdmins = roleKey === "superadmin";
+  const canManageUsers = roleKey === "superadmin" || roleKey === "general";
 
   // Modules visibles selon le profil :
   //   superviseur / général / superadmin → tous (le serveur refuse les écritures
@@ -282,8 +283,9 @@ export function AdminModernPage() {
   };
 
   // Mapping AdminModuleKey -> ancien activeTab AdminDashboard
-  const moduleToLegacyTab: Record<AdminModuleKey, "stats" | "site_content" | "courses" | "products" | "services" | "quotes" | "kyc" | "fees" | "marketplace" | "support" | "instructors"> = {
+  const moduleToLegacyTab: Record<AdminModuleKey, "stats" | "users" | "site_content" | "courses" | "products" | "services" | "quotes" | "kyc" | "fees" | "marketplace" | "support" | "instructors"> = {
     stats: "stats",
+    users: "users",
     formations: "courses",
     produits: "products",
     services: "services",
@@ -308,6 +310,10 @@ export function AdminModernPage() {
 
   const MODULE_TITLES: Record<AdminModuleKey, { title: string; subtitle: string }> = {
     stats: { title: "Statistiques Globales", subtitle: "Vue d'ensemble de toute la plateforme FORTIA HUB" },
+    users: {
+      title: "Utilisateurs de la plateforme",
+      subtitle: "Membres, formateurs, vendeurs, freelances, entreprises et administrateurs",
+    },
     formations: { title: "Gestion des Formations", subtitle: "Catalogue des formations certifiantes de l'académie" },
     produits: { title: "Gestion des Produits Numériques", subtitle: "Produits digitaux disponibles sur la marketplace" },
     services: { title: "Services Agence", subtitle: "Packages de services proposés par l'agence FORTIA" },
@@ -371,6 +377,7 @@ export function AdminModernPage() {
           badges={badges}
           allowAdmins={canManageAdmins}
           allowedModules={allowedModules}
+          allowUsers={canManageUsers}
         />
 
         {/* Contenu principal */}
