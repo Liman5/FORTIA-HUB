@@ -12,6 +12,7 @@ import { AdminVendorVerificationsPanel } from "./AdminVendorVerificationsPanel";
 import { AdminAdminsPanel } from "./AdminAdminsPanel";
 import { AdminBlogPanel } from "./AdminBlogPanel";
 import { AdminModerationPanel } from "./AdminModerationPanel";
+import { AdminDemoDataPanel } from "./demo/AdminDemoDataPanel";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 import type { DigitalProduct } from "@/lib/types";
 import { normalizeAdminRole } from "@/lib/shared/adminRoles";
@@ -306,6 +307,8 @@ export function AdminModernPage() {
     admins: "site_content",
     blog: "site_content",
     moderation: "support",
+    // Le module « Données de démonstration » rend son propre panneau.
+    demo: "stats",
   };
 
   const MODULE_TITLES: Record<AdminModuleKey, { title: string; subtitle: string }> = {
@@ -343,6 +346,10 @@ export function AdminModernPage() {
     moderation: {
       title: "Modération des contenus",
       subtitle: "Formations et produits suspendus : motif, fonds gelés, demande d'examen et rétablissement",
+    },
+    demo: {
+      title: "Données de démonstration",
+      subtitle: "Contenus créés par le seed : comptage réel et suppression complète",
     },
   };
 
@@ -480,6 +487,9 @@ export function AdminModernPage() {
           ) : activeModule === "admins" ? (
             /* ===== COMPTES ADMINISTRATEURS (superadmin uniquement) ===== */
             <AdminAdminsPanel />
+          ) : activeModule === "demo" ? (
+            /* ===== DONNEES DE DEMONSTRATION (seed) ===== */
+            <AdminDemoDataPanel />
           ) : (
             <>
               {/* Catégories de formations : créées/modifiées en base */}

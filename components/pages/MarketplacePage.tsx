@@ -2,18 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "motion/react";
 import { useAppStore } from "@/lib/store/AppStore";
 import { useMarketplace, useCommerce, useAuth, useUi } from "@/lib/store/domains/contexts";
 import { DigitalShop } from "@/components/DigitalShop";
 import { FreelanceMarketplace } from "@/components/FreelanceMarketplace";
 import { EnterpriseDirectory } from "@/components/EnterpriseDirectory";
-import {
-  ShoppingBag,
-  Users,
-  Building2,
-  Loader2,
-} from "lucide-react";
+import { ShoppingBag, Users, Building2, Loader2, LayoutGrid } from "lucide-react";
 
 function getStoreSlug(store: { slug?: string; name?: string }): string {
   const base = store.slug && store.slug.trim() ? store.slug : (store.name || "boutique");
@@ -124,69 +118,76 @@ export function MarketplacePage() {
 
   if (!platformLoaded) {
     return (
-      <div className="min-h-screen bg-[#021231] text-white flex items-center justify-center">
+      <div className="ibx-page flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[#D69E25]" />
-          <p className="text-xs text-slate-400">Chargement de la marketplace...</p>
+          <Loader2 className="h-7 w-7 animate-spin" style={{ color: "var(--ibx-accent)" }} />
+          <p className="ibx-small">Chargement de la marketplace…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#021231] text-white selection:bg-[#D69E25]/30">
-      {/* ==================== HERO SECTION ==================== */}
-      <section className="relative overflow-hidden pt-10 pb-6">
-        {/* Background decorations */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(214,158,37,0.1)_0%,transparent_50%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(16,185,129,0.06)_0%,transparent_50%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(14,165,233,0.06)_0%,transparent_50%)]" />
-        <div className="absolute inset-0 bg-grid-pattern opacity-15" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/40 to-transparent" />
+    <div className="ibx-page ibx-catalogue">
+      {/* ==================== EN-TETE ==================== */}
+      <header className="border-b" style={{ borderColor: "var(--ibx-border)" }}>
+        <div className="ibx-container py-7 sm:py-9">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0 space-y-2">
+              <p className="ibx-label">Marketplace numérique</p>
+              <h1 className="ibx-h1">Produits numériques, freelances et entreprises</h1>
+              <p className="ibx-body max-w-2xl">
+                Ebooks, templates, packs et documents prêts à télécharger, ainsi que des
+                prestataires et des entreprises identifiés sur la plateforme.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => router.push("/marketplace/categories")}
+                className="ibx-btn ibx-btn-outline"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+                Catégories de produits
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/marketplace/ressources")}
+                className="ibx-btn ibx-btn-ghost"
+              >
+                Ressources numériques
+              </button>
+            </div>
+          </div>
 
-        {/* Floating shapes */}
-        <motion.div
-          className="absolute top-14 right-10 w-16 h-16 rounded-2xl border border-[#D69E25]/20 bg-[#D69E25]/5 rotate-12 pointer-events-none"
-          animate={{ y: [0, -12, 0], rotate: [12, 24, 12] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute bottom-8 left-10 w-12 h-12 rounded-full border border-emerald-400/20 bg-emerald-400/5 pointer-events-none"
-          animate={{ y: [0, 10, 0], x: [0, -6, 0] }}
-          transition={{ duration: 9, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        />
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          {/* Section Tabs */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.45, ease: "easeOut" }}
-            className="relative flex items-center justify-center gap-2 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 max-w-md mx-auto"
+          {/* Sections : produits / freelances / entreprises */}
+          <div
+            className="ibx-scroll-x mt-5"
+            role="tablist"
+            aria-label="Sections de la marketplace"
           >
-            <div className="absolute inset-0 bg-[#D69E25]/5 blur-xl rounded-2xl opacity-0" />
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeSection === tab.id;
               return (
                 <button
                   key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
                   onClick={() => handleSectionChange(tab.id)}
-                  className={`relative flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all duration-300 ${
-                    isActive
-                      ? "bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] shadow-lg shadow-[#D69E25]/20"
-                      : "text-slate-300 hover:bg-white/10 hover:text-white"
-                  }`}
+                  className="ibx-chip"
+                  data-active={isActive ? "true" : "false"}
                 >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  <span className={`sm:hidden ${isActive ? "text-[#021231]" : "text-slate-400"}`}>{tab.label}</span>
+                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                  {tab.label}
                 </button>
               );
             })}
-          </motion.div>
+          </div>
         </div>
-      </section>
+      </header>
+
 
       {/* ==================== ACTIVE SECTION ==================== */}
       <div className="relative">

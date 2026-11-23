@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -14,11 +14,14 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  ZoomIn,
 } from "lucide-react";
 import { useAuth, useCommerce } from "@/lib/store/domains/contexts";
 import { trackProductEvent } from "@/lib/services/track";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 import { requestSignedDownloadUrl } from "@/lib/services/paymentsClient";
+import { IbxLightbox } from "@/components/ui/IbxLightbox";
+
 export interface ProductDetailData {
   id: string;
   slug: string;
@@ -45,10 +48,15 @@ export interface ProductDetailData {
 const FCFA_RATE = 600;
 
 /**
- * Fiche produit interactive.
- * • Ajout au panier via le domaine Panier (`useCommerce`)
- * • Téléchargement des livrables via URL SIGNÉE : le serveur vérifie que
- *   l'utilisateur a réellement acheté le produit (ou que celui-ci est gratuit).
+ * Fiche produit.
+ *
+ * • Galerie : image principale + miniatures + visualisation plein écran
+ *   (lightbox accessible au clavier). Aucune image inventée : seules les
+ *   images réellement renseignées sur le produit sont affichées.
+ * • Achat : panier et paiement passent par les services existants.
+ * • Téléchargement : URL SIGNÉE délivrée par le serveur après vérification
+ *   réelle de l'achat (jamais de contenu payant exposé avant autorisation).
+ * • Thème clair et sombre : uniquement des tokens IBX (aucune couleur dure).
  */
 export function ProductDetail({ product }: { product: ProductDetailData }) {
   const router = useRouter();
@@ -57,10 +65,15 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
 
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string>("");
-  const galleryImages = Array.from(new Set([product.bannerImage, product.image].filter(Boolean)));
-  const [activeImage, setActiveImage] = useState(galleryImages[0] || "");
 
-  // ---- Notation du produit (une note par membre) ----
+  const galleryImages = useMemo(
+    () => Array.from(new Set([product.bannerImage, product.image].filter(Boolean))) as string[],
+    [product.bannerImage, product.image]
+  );
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  /* ---- Notation : une note par membre, calcul serveur ---- */
   const [ratingValue, setRatingValue] = useState(Number(product.rating) || 0);
   const [reviewsCountValue, setReviewsCountValue] = useState(Number(product.reviewsCount) || 0);
   const [myRating, setMyRating] = useState(0);
@@ -83,8 +96,12 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
     });
     setRatingBusy(false);
     if (res.success) {
-      if (typeof (res as any).rating === "number") setRatingValue((res as any).rating);
-      if (typeof (res as any).reviewsCount === "number") setReviewsCountValue((res as any).reviewsCount);
+      if (typeof (res as { rating?: number }).rating === "number") {
+        setRatingValue(Number((res as { rating?: number }).rating));
+      }
+      if (typeof (res as { reviewsCount?: number }).reviewsCount === "number") {
+        setReviewsCountValue(Number((res as { reviewsCount?: number }).reviewsCount));
+      }
       setRatingMsg(res.message || "Merci, votre note a été enregistrée.");
     } else {
       setMyRating(0);
@@ -92,12 +109,12 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
     }
   };
 
-  // Statistique vendeur : une vue par produit et par session.
+  /* Statistique vendeur : une vue par produit et par session. */
   useEffect(() => {
     trackProductEvent("view", product.id, (product as { storeId?: string }).storeId);
   }, [product.id, (product as { storeId?: string }).storeId]);
 
-  const isFree = product.price === 0;
+  const isFree = Number(product.price) === 0;
   const purchased = userProfile?.purchasedProductIds || [];
   const owned = isFree || purchased.includes(product.id) || purchased.includes(product.slug);
 
@@ -115,7 +132,6 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
       router.push("/login");
       return;
     }
-    // Un seul chemin d'achat : ajout au panier puis étape paiement de la page /cart.
     addToCart(cartItem);
     router.push("/cart?payer=1");
   };
@@ -144,86 +160,117 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
     }
   };
 
+  const lightboxImages = galleryImages.map((src) => ({ src, alt: product.title }));
+
   return (
-    <div className="min-h-screen bg-[#021231] text-white">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+    <div className="ibx-page">
+      <div className="ibx-container py-6 sm:py-10">
         <button
+          type="button"
           onClick={() => router.back()}
-          className="inline-flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-[#D69E25] transition"
+          className="ibx-btn ibx-btn-ghost mb-5 !px-0"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
           Retour
         </button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Visuel */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-10">
+          {/* ---------------------------- GALERIE ---------------------------- */}
           <div className="space-y-3">
-            <div className="rounded-3xl overflow-hidden border border-[#D69E25]/30 bg-[#011D46] aspect-video product-visual">
-              {activeImage ? (
-                <img
-                  src={activeImage}
-                  alt={product.title}
-                  className="w-full h-full object-contain p-2"
-                />
+            <button
+              type="button"
+              onClick={() => galleryImages.length > 0 && setLightboxIndex(activeIndex)}
+              className="ibx-media ibx-media-contain block aspect-[4/3] w-full cursor-zoom-in rounded-[var(--ibx-radius-lg)] border border-[var(--ibx-border)]"
+              aria-label={`Agrandir l'image de ${product.title}`}
+              disabled={galleryImages.length === 0}
+            >
+              {galleryImages.length > 0 ? (
+                <>
+                  <img
+                    src={galleryImages[activeIndex] || galleryImages[0]}
+                    alt={product.title}
+                    className="h-full w-full object-contain"
+                  />
+                  <span className="ibx-media-zoom" aria-hidden="true">
+                    <ZoomIn className="h-4 w-4" />
+                  </span>
+                </>
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">
-                  Aperçu non disponible
-                </div>
+                <span className="flex h-full w-full items-center justify-center">
+                  <span className="ibx-small">Aucun aperçu disponible</span>
+                </span>
               )}
-            </div>
+            </button>
+
             {galleryImages.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto">
-                {galleryImages.map((image) => (
-                  <button key={image} type="button" onClick={() => setActiveImage(image)} className={`h-16 w-20 shrink-0 overflow-hidden rounded-xl border ${activeImage === image ? "border-[#D69E25]" : "border-slate-700"}`} aria-label="Afficher cette image">
+              <div className="ibx-scroll-x" role="list" aria-label="Miniatures du produit">
+                {galleryImages.map((image, index) => (
+                  <button
+                    key={image}
+                    type="button"
+                    role="listitem"
+                    onClick={() => setActiveIndex(index)}
+                    aria-label={`Afficher l'image ${index + 1} sur ${galleryImages.length}`}
+                    aria-pressed={activeIndex === index}
+                    className="ibx-media h-16 w-20 shrink-0 overflow-hidden rounded-[var(--ibx-radius-sm)] border"
+                    style={{
+                      borderColor:
+                        activeIndex === index ? "var(--ibx-accent)" : "var(--ibx-border)",
+                    }}
+                  >
                     <img src={image} alt="" className="h-full w-full object-cover" />
                   </button>
                 ))}
               </div>
             )}
-            <div className="flex flex-wrap gap-2 text-[10px] font-bold">
-              <span className="px-3 py-1.5 rounded-full bg-[#D69E25]/15 border border-[#D69E25]/40 text-[#D69E25]">
-                {product.typeLabel}
-              </span>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="ibx-badge ibx-badge-warning">{product.typeLabel}</span>
               {product.fileFormat && (
-                <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/15 text-slate-300 inline-flex items-center gap-1.5">
-                  <FileText className="w-3 h-3" />
+                <span className="ibx-badge">
+                  <FileText className="h-3 w-3" aria-hidden="true" />
                   {product.fileFormat}
                 </span>
               )}
-              {product.fileSize && (
-                <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/15 text-slate-300">
-                  {product.fileSize}
+              {product.fileSize && <span className="ibx-badge">{product.fileSize}</span>}
+              {Number(product.salesCount) > 0 && (
+                <span className="ibx-badge">
+                  {Number(product.salesCount).toLocaleString("fr-FR")} téléchargements
                 </span>
               )}
             </div>
           </div>
 
-          {/* Informations & achat */}
+          {/* ------------------------ INFORMATIONS ------------------------ */}
           <div className="space-y-5">
             <div className="space-y-2">
-              <h1 className="text-2xl sm:text-3xl font-black leading-tight">{product.title}</h1>
+              <h1 className="ibx-h1">{product.title}</h1>
               {product.storeName && (
-                <p className="text-xs text-slate-400 inline-flex items-center gap-1.5">
-                  <Store className="w-3.5 h-3.5 text-[#D69E25]" />
+                <p className="ibx-small inline-flex items-center gap-1.5">
+                  <Store className="h-3.5 w-3.5" aria-hidden="true" />
                   {product.storeName}
                 </p>
               )}
-              {/* Notation : moyenne réelle + étoiles cliquables (un vote par membre) */}
-              <div className="rounded-2xl border border-[#D69E25]/30 bg-[#011D46]/60 product-rating-card px-3 py-2.5 space-y-1.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-300">
-                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                    {reviewsCountValue > 0 ? (
-                      <span>
-                        <b className="text-white">{ratingValue.toFixed(1)}</b> / 5
-                        <span className="text-slate-400"> ({reviewsCountValue} avis)</span>
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">Aucun avis pour le moment</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-0.5" aria-label="Noter ce produit">
-                    {[1, 2, 3, 4, 5].map((star) => (
+            </div>
+
+            {/* Notation réelle : moyenne affichée seulement si des avis existent */}
+            <div className="ibx-card-muted px-3.5 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="ibx-small inline-flex items-center gap-1.5">
+                  <Star className="h-3.5 w-3.5" aria-hidden="true" style={{ color: "var(--ibx-accent)" }} />
+                  {reviewsCountValue > 0 ? (
+                    <span>
+                      <b style={{ color: "var(--ibx-fg)" }}>{ratingValue.toFixed(1)}</b> / 5
+                      <span> ({reviewsCountValue} avis)</span>
+                    </span>
+                  ) : (
+                    <span>Aucun avis pour le moment</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-0.5" aria-label="Noter ce produit">
+                  {[1, 2, 3, 4, 5].map((star) => {
+                    const filled = star <= (myRating || Math.round(ratingValue));
+                    return (
                       <button
                         key={star}
                         type="button"
@@ -231,129 +278,128 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
                         disabled={ratingBusy}
                         title={`Donner ${star} étoile${star > 1 ? "s" : ""}`}
                         aria-label={`Donner ${star} étoile${star > 1 ? "s" : ""}`}
-                        className="p-0.5 transition hover:scale-125 disabled:opacity-50"
+                        className="p-0.5 transition hover:scale-110 disabled:opacity-50"
                       >
                         <Star
-                          className={`w-5 h-5 ${
-                            star <= (myRating || Math.round(ratingValue))
-                              ? "text-[#D69E25] fill-[#D69E25]"
-                              : "text-slate-500"
-                          }`}
+                          className="h-4 w-4"
+                          style={{
+                            color: filled ? "var(--ibx-accent)" : "var(--ibx-fg-subtle)",
+                            fill: filled ? "var(--ibx-accent)" : "transparent",
+                          }}
                         />
                       </button>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-                <p className="text-[10px] text-slate-400">
-                  {ratingMsg
-                    ? ratingMsg
-                    : isUserLoggedIn
-                      ? "Touchez les étoiles pour noter ce produit."
-                      : "Connectez-vous pour noter ce produit."}
-                </p>
               </div>
+              <p className="ibx-tiny mt-1.5">
+                {ratingMsg
+                  ? ratingMsg
+                  : isUserLoggedIn
+                    ? "Touchez les étoiles pour noter ce produit."
+                    : "Connectez-vous pour noter ce produit."}
+              </p>
             </div>
 
-            <div className="flex items-end gap-3 flex-wrap">
-              <span className="text-3xl font-black text-[#D69E25]">
+            <div className="flex flex-wrap items-end gap-3">
+              <span className="ibx-price !text-2xl">
                 {isFree ? "Gratuit" : `${product.price} $`}
               </span>
               {!isFree && (
-                <span className="text-xs text-slate-400 font-semibold">
+                <span className="ibx-small">
                   ≈ {(product.price * FCFA_RATE).toLocaleString("fr-FR")} FCFA
                 </span>
               )}
-              {product.originalPrice && product.originalPrice > product.price && (
-                <span className="text-sm text-slate-500 line-through">
-                  {product.originalPrice} $
-                </span>
+              {product.originalPrice && Number(product.originalPrice) > Number(product.price) && (
+                <span className="ibx-price-old">{product.originalPrice} $</span>
               )}
             </div>
 
-            {product.description && (
-              <p className="text-sm text-slate-300 leading-relaxed">{product.description}</p>
-            )}
+            {product.description && <p className="ibx-body">{product.description}</p>}
+
 
             {(product.features || []).length > 0 && (
               <ul className="space-y-2">
                 {(product.features || []).map((feature, index) => (
-                  <li key={index} className="flex items-start gap-2 text-xs text-slate-300">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <li key={index} className="ibx-small flex items-start gap-2">
+                    <CheckCircle2
+                      className="mt-0.5 h-4 w-4 shrink-0"
+                      aria-hidden="true"
+                      style={{ color: "var(--ibx-success)" }}
+                    />
                     <span>{feature}</span>
                   </li>
                 ))}
               </ul>
             )}
 
-            <div className="flex flex-wrap gap-3 pt-2">
-              <button
-                onClick={() => addToCart(cartItem)}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white/5 border border-[#D69E25]/40 text-slate-100 hover:bg-[#D69E25]/10 text-xs font-black transition"
-              >
-                <ShoppingCart className="w-4 h-4 text-[#D69E25]" />
+            <div className="flex flex-wrap gap-2.5 pt-1">
+              <button type="button" onClick={() => addToCart(cartItem)} className="ibx-btn ibx-btn-outline">
+                <ShoppingCart className="h-4 w-4" aria-hidden="true" />
                 Ajouter au panier
               </button>
               {!isFree && (
-                <button
-                  onClick={handleBuyNow}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] text-xs font-black hover:brightness-110 transition"
-                >
+                <button type="button" onClick={handleBuyNow} className="ibx-btn ibx-btn-primary">
                   Acheter maintenant
                 </button>
               )}
+              {isFree && (
+                <span className="ibx-badge ibx-badge-success">Produit gratuit — accès immédiat</span>
+              )}
             </div>
 
-            {/* Livrables protégés */}
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
-              <p className="text-xs font-black text-slate-200 inline-flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#D69E25]" />
+            {/* Livrables : contenu payant jamais exposé avant autorisation */}
+            <div className="ibx-card p-4">
+              <p className="ibx-h3 inline-flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" style={{ color: "var(--ibx-accent)" }} />
                 Fichiers livrables ({product.files.length})
               </p>
 
               {product.files.length === 0 && (
-                <p className="text-[11px] text-slate-400">
-                  Aucun fichier n'est encore attaché à ce produit.
-                </p>
+                <p className="ibx-tiny mt-2">Aucun fichier n&apos;est encore attaché à ce produit.</p>
               )}
 
               {product.files.length > 0 && !owned && (
-                <p className="text-[11px] text-slate-400 inline-flex items-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-amber-400" />
-                  Les fichiers sont débloqués après l'achat.
+                <p className="ibx-tiny mt-2 inline-flex items-center gap-2">
+                  <Lock className="h-3.5 w-3.5" aria-hidden="true" style={{ color: "var(--ibx-warning)" }} />
+                  Les fichiers sont débloqués après l&apos;achat.
                 </p>
               )}
 
-              {product.files.map((file) => (
-                <div
-                  key={file.id}
-                  className="flex items-center justify-between gap-3 text-[11px] bg-[#021231]/60 border border-white/10 rounded-xl px-3 py-2"
-                >
-                  <span className="truncate text-slate-300">{file.fileName}</span>
-                  {owned ? (
-                    <button
-                      onClick={() => handleDownload(file)}
-                      disabled={downloading === file.id}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D69E25] text-[#021231] font-black disabled:opacity-50"
-                    >
-                      {downloading === file.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Download className="w-3.5 h-3.5" />
-                      )}
-                      Télécharger
-                    </button>
-                  ) : (
-                    <span className="text-slate-500 inline-flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5" />
-                      Verrouillé
-                    </span>
-                  )}
-                </div>
-              ))}
+              <div className="mt-3 space-y-2">
+                {product.files.map((file) => (
+                  <div
+                    key={file.id}
+                    className="ibx-card-muted flex items-center justify-between gap-3 px-3 py-2"
+                  >
+                    <span className="ibx-small truncate">{file.fileName}</span>
+                    {owned ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(file)}
+                        disabled={downloading === file.id}
+                        className="ibx-btn ibx-btn-primary shrink-0 !px-3 !py-1.5"
+                      >
+                        {downloading === file.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
+                        Télécharger
+                      </button>
+                    ) : (
+                      <span className="ibx-tiny inline-flex items-center gap-1.5">
+                        <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                        Verrouillé
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
 
               {downloadError && (
-                <p className="text-[11px] text-amber-300 inline-flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5" />
+                <p className="ibx-error mt-3 inline-flex items-center gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
                   {downloadError}
                 </p>
               )}
@@ -362,14 +408,25 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
         </div>
 
         {product.fullDescription && (
-          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 space-y-3">
-            <h2 className="text-sm font-black text-white">Description complète</h2>
-            <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
-              {product.fullDescription}
-            </p>
+          <section className="ibx-card mt-6 p-5 sm:p-6">
+            <h2 className="ibx-h2">Description complète</h2>
+            <p className="ibx-body mt-3 whitespace-pre-line">{product.fullDescription}</p>
           </section>
         )}
       </div>
+
+      <IbxLightbox
+        images={lightboxImages}
+        index={lightboxIndex ?? 0}
+        open={lightboxIndex !== null}
+        onClose={() => setLightboxIndex(null)}
+        onIndexChange={(next) => {
+          setLightboxIndex(next);
+          setActiveIndex(next);
+        }}
+        label={`Aperçu de ${product.title}`}
+      />
     </div>
   );
 }
+

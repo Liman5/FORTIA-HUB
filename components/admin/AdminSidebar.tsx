@@ -20,6 +20,7 @@ import {
   BadgeCheck,
   FileText,
   ShieldAlert,
+  Database,
 } from "lucide-react";
 
 export type AdminModuleKey =
@@ -39,7 +40,8 @@ export type AdminModuleKey =
   | "cms"
   | "blog"
   | "moderation"
-  | "admins";
+  | "admins"
+  | "demo";
 
 interface AdminSidebarProps {
   activeModule: AdminModuleKey;
@@ -188,6 +190,14 @@ const MODULES: {
     icon: ShieldCheck,
     color: "text-[#D69E25]",
     activeBg: "bg-[#D69E25] text-[#021231]",
+  },
+  {
+    // Données de démonstration : comptage réel et suppression complète du seed.
+    key: "demo",
+    label: "Données de démonstration",
+    icon: Database,
+    color: "text-sky-400",
+    activeBg: "bg-sky-500 text-white",
   },
 ];
 

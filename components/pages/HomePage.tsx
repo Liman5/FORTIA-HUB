@@ -21,6 +21,7 @@ import {
   Loader2,
   BookOpen,
   Download,
+  ZoomIn,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store/AppStore";
 import { useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
@@ -28,6 +29,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { COURSE_CATEGORY_FAMILIES, sortByPopularity } from "@/lib/data/courseCategories";
 import { REFERENCE_PRODUCT_CATEGORIES } from "@/components/CategorySelect";
 import { OptimizedImage } from "@/components/OptimizedImage";
+import { IbxLightbox } from "@/components/ui/IbxLightbox";
 
 /* =====================================================================
    FORTIA HUB — Interface d'accueil (routes "/" et "/home")
@@ -549,49 +551,88 @@ function ProductCard({
 }) {
   const price = Number(product.price) || 0;
   const reviewsCount = Number(product.reviewsCount) || 0;
+  const [zoomOpen, setZoomOpen] = useState(false);
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="snap-start shrink-0 w-[190px] sm:w-[210px] text-left rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden hover:border-[#D69E25] hover:shadow-md transition cursor-pointer"
-    >
-      <div className="relative h-28 bg-slate-100">
-        <Thumb src={product.image} alt={product.title} className="w-full h-full" />
+    <article className="ibx-card-flat ibx-interactive flex w-[190px] shrink-0 snap-start flex-col overflow-hidden sm:w-[210px]">
+      {/* Visuel : le clic agrandit l'image (distinct du clic qui ouvre la fiche) */}
+      <div className="ibx-media relative h-28">
+        {product.image ? (
+          <>
+            <img
+              src={product.image}
+              alt={product.title}
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+            <button
+              type="button"
+              onClick={() => setZoomOpen(true)}
+              className="ibx-media-zoom"
+              style={{ opacity: 1 }}
+              aria-label={`Agrandir l'image de ${product.title}`}
+              title="Agrandir l'image"
+            >
+              <ZoomIn className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </>
+        ) : (
+          <span className="flex h-full w-full items-center justify-center">
+            <Download
+              className="h-5 w-5"
+              aria-hidden="true"
+              style={{ color: "var(--ibx-fg-subtle)" }}
+            />
+          </span>
+        )}
         {product.typeLabel && (
-          <span className="product-type-badge absolute top-2 left-2 text-[9px] font-black px-2 py-0.5 rounded-full max-w-[80%] truncate">
+          <span className="ibx-badge absolute left-2 top-2 max-w-[80%] truncate">
             {product.typeLabel}
           </span>
         )}
-        <span className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-[#D69E25] text-white flex items-center justify-center shadow">
-          <Download className="w-3.5 h-3.5" />
-        </span>
       </div>
-      <div className="p-3 space-y-2">
-        <h3 className="text-xs font-black text-slate-900 leading-snug line-clamp-2 min-h-[32px]">
-          {product.title}
-        </h3>
-        <div className="flex items-center justify-between gap-2 text-[10px]">
-          <span className="truncate text-slate-500 font-semibold">
-            {product.storeName || "FORTIA HUB"}
-          </span>
+
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <button type="button" onClick={onOpen} className="text-left">
+          <h3 className="ibx-h3 line-clamp-2 min-h-[32px]">{product.title}</h3>
+        </button>
+        <div className="flex items-center justify-between gap-2">
+          <span className="ibx-tiny truncate">{product.storeName || "FORTIA HUB"}</span>
           {reviewsCount > 0 && (
-            <span className="flex items-center gap-0.5 text-[#B8860B] font-black shrink-0">
-              <Star className="w-3 h-3 fill-[#D69E25] text-[#D69E25]" />
+            <span className="ibx-tiny inline-flex shrink-0 items-center gap-0.5">
+              <Star
+                className="h-3 w-3"
+                aria-hidden="true"
+                style={{ color: "var(--ibx-accent)", fill: "var(--ibx-accent)" }}
+              />
               {Number(product.rating || 0).toFixed(1)}
             </span>
           )}
         </div>
-        <div className="flex items-center justify-between pt-1.5 border-t border-slate-100">
-          <span className="text-[13px] font-black text-[#B8860B]">
-            {formatUsdToFcfa(price)} FCFA
+        <div
+          className="mt-auto flex items-center justify-between gap-2 border-t pt-2"
+          style={{ borderColor: "var(--ibx-border)" }}
+        >
+          <span className="ibx-price">
+            {price > 0 ? `${formatUsdToFcfa(price)} FCFA` : "Gratuit"}
           </span>
-          <span className="text-[9px] font-bold text-slate-400 uppercase">Téléchargeable</span>
+          <button type="button" onClick={onOpen} className="ibx-btn ibx-btn-ghost !px-2 !py-1">
+            Voir
+          </button>
         </div>
       </div>
-    </button>
+
+      <IbxLightbox
+        images={product.image ? [{ src: product.image, alt: product.title }] : []}
+        index={0}
+        open={zoomOpen}
+        onClose={() => setZoomOpen(false)}
+        label={`Aperçu de ${product.title}`}
+      />
+    </article>
   );
 }
+
 
 /* =========================== RESSOURCES =========================== */
 function ResourcesGrid({
@@ -617,7 +658,7 @@ function ResourcesGrid({
             key={tile.key}
             type="button"
             onClick={() => onOpen(tile.productType)}
-            className="rounded-2xl bg-white border border-slate-200 shadow-sm p-3 text-left hover:border-[#D69E25] hover:shadow-md transition flex flex-col gap-2 cursor-pointer"
+            className="ibx-card-flat ibx-interactive flex cursor-pointer flex-col gap-2 p-3 text-left"
           >
             <span
               className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -626,10 +667,8 @@ function ResourcesGrid({
               <Icon className="w-5 h-5" style={{ color: tile.color }} />
             </span>
             <span className="block">
-              <span className="block text-[11px] font-black text-slate-900 leading-tight">
-                {tile.label}
-              </span>
-              <span className="block text-[10px] font-bold text-[#B8860B] mt-0.5">
+              <span className="ibx-h3 block">{tile.label}</span>
+              <span className="ibx-tiny mt-0.5 block">
                 {tile.minPriceUsd > 0
                   ? `Dès ${formatUsdToFcfa(tile.minPriceUsd)} FCFA`
                   : "Gratuit"}
@@ -650,20 +689,57 @@ function ProductShowcaseBanner({ products }: { products: any[] }) {
   const router = useRouter();
   if (products.length < 2) return null;
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-[#222832]">
-      <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-700">
+    <section className="ibx-card overflow-hidden">
+      <div
+        className="flex items-center justify-between gap-4 border-b px-5 py-4"
+        style={{ borderColor: "var(--ibx-border)" }}
+      >
         <div>
-          <p className="text-sm font-black text-slate-900 dark:text-slate-100">Sélection numérique</p>
-          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">Des ressources prêtes à télécharger, choisies dans la boutique.</p>
+          <p className="ibx-h3">Sélection numérique</p>
+          <p className="ibx-tiny mt-0.5">
+            Des ressources prêtes à télécharger, choisies dans la boutique.
+          </p>
         </div>
-        <button type="button" onClick={() => router.push("/marketplace")} className="ibx-btn ibx-btn-outline shrink-0">Voir la boutique</button>
+        <button
+          type="button"
+          onClick={() => router.push("/marketplace")}
+          className="ibx-btn ibx-btn-outline shrink-0"
+        >
+          Voir la boutique
+        </button>
       </div>
-      <div className="flex gap-3 overflow-x-auto p-4">
+      <div className="ibx-scroll-x gap-3 p-4">
         {products.slice(0, 5).map((product: any) => (
-          <button key={product.id} type="button" onClick={() => router.push(`/product/${encodeURIComponent(product.slug || product.id)}`)} className="w-[160px] shrink-0 text-left group">
-            {product.image ? <img src={product.image} alt={product.title} className="h-24 w-full rounded-lg object-cover" /> : <div className="flex h-24 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700"><Download className="h-6 w-6 text-slate-400" /></div>}
-            <p className="mt-2 line-clamp-1 text-[11px] font-bold text-slate-900 group-hover:text-[#B7831B] dark:text-slate-100">{product.title}</p>
-            <p className="mt-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">{Number(product.price) > 0 ? `${product.price} $` : "Gratuit"}</p>
+          <button
+            key={product.id}
+            type="button"
+            onClick={() =>
+              router.push(`/product/${encodeURIComponent(String(product.slug || product.id))}`)
+            }
+            className="w-[160px] shrink-0 text-left"
+          >
+            <span className="ibx-media block h-24 w-full rounded-[var(--ibx-radius-sm)]">
+              {product.image ? (
+                <img
+                  src={product.image}
+                  alt={product.title}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center">
+                  <Download
+                    className="h-5 w-5"
+                    aria-hidden="true"
+                    style={{ color: "var(--ibx-fg-subtle)" }}
+                  />
+                </span>
+              )}
+            </span>
+            <span className="ibx-h3 mt-2 line-clamp-1 block">{product.title}</span>
+            <span className="ibx-tiny mt-0.5 block">
+              {Number(product.price) > 0 ? `${product.price} $` : "Gratuit"}
+            </span>
           </button>
         ))}
       </div>
@@ -690,7 +766,7 @@ function PromoBannerSlot({ offset }: { offset: number }) {
   };
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-[#222832]">
+    <section className="ibx-card overflow-hidden">
       <button type="button" onClick={open} className="group relative block w-full text-left">
         <img src={banner.imageUrl} alt={banner.title || "Bannière"} className="h-40 w-full object-cover sm:h-56" />
         <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/15 to-transparent" />

@@ -15,7 +15,9 @@ import {
   Star,
   Search,
   X,
+  ZoomIn,
 } from "lucide-react";
+import { IbxLightbox } from "@/components/ui/IbxLightbox";
 
 interface DigitalShopProps {
   products: MarketplaceProduct[];
@@ -62,6 +64,12 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
   const [selectedFilter, setSelectedFilter] = useState<string>(initialFilter || "all");
   const [selectedStoreId, setSelectedStoreId] = useState<string>("all");
   const [previewProduct, setPreviewProduct] = useState<MarketplaceProduct | null>(null);
+  /** Tri des résultats (fonctionnel, appliqué aux produits réellement filtrés). */
+  const [sortBy, setSortBy] = useState<"recent" | "price_asc" | "price_desc" | "popular" | "rating">(
+    "recent"
+  );
+  /** Aperçu plein écran d'une image de produit (lightbox accessible). */
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
 
   /* Synchronise le filtre avec l'URL (liens directs ?type=… + Retour/Avancer) */
   useEffect(() => {
@@ -96,11 +104,34 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
     });
   }, [products, isAdmin, selectedFilter, selectedStoreId, searchQuery]);
 
-  const hasActiveFilters = selectedFilter !== "all" || selectedStoreId !== "all" || searchQuery;
+  /** Produits affichés : filtres réels + tri réel. */
+  const visibleProducts = useMemo(() => {
+    const list = [...filteredProducts];
+    switch (sortBy) {
+      case "price_asc":
+        return list.sort((a, b) => Number(a.price) - Number(b.price));
+      case "price_desc":
+        return list.sort((a, b) => Number(b.price) - Number(a.price));
+      case "popular":
+        return list.sort((a, b) => Number(b.salesCount || 0) - Number(a.salesCount || 0));
+      case "rating":
+        return list.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
+      case "recent":
+      default:
+        return list.sort(
+          (a, b) =>
+            new Date(String(b.createdAt || 0)).getTime() - new Date(String(a.createdAt || 0)).getTime()
+        );
+    }
+  }, [filteredProducts, sortBy]);
+
+  const hasActiveFilters =
+    selectedFilter !== "all" || selectedStoreId !== "all" || !!searchQuery || sortBy !== "recent";
 
   const handleReset = () => {
     setSelectedFilter("all");
     setSelectedStoreId("all");
+    setSortBy("recent");
     onClearSearch?.();
     onFilterChange?.("");
   };
@@ -230,21 +261,41 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
           )}
         </div>
 
-        {/* Filtres actifs : le nombre de produits n'est pas affiché */}
-        {hasActiveFilters && (
-          <div className="flex items-center justify-end text-xs text-slate-500">
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-1.5 text-[#D69E25] hover:text-amber-300 font-semibold transition-colors"
+        {/* Resultats : tri reel + reinitialisation des filtres */}
+        <div className="ibx-toolbar justify-between">
+          <p className="ibx-small">
+            {visibleProducts.length} produit{visibleProducts.length > 1 ? "s" : ""}
+            {hasActiveFilters ? " correspondant aux filtres" : ""}
+          </p>
+          <div className="ibx-toolbar">
+            <label className="ibx-tiny" htmlFor="shop-sort">Trier</label>
+            <select
+              id="shop-sort"
+              className="ibx-select"
+              value={sortBy}
+              onChange={(event) =>
+                setSortBy(
+                  event.target.value as "recent" | "price_asc" | "price_desc" | "popular" | "rating"
+                )
+              }
             >
-              <Search className="w-3 h-3" />
-              Réinitialiser
-            </button>
+              <option value="recent">Plus recents</option>
+              <option value="price_asc">Prix croissant</option>
+              <option value="price_desc">Prix decroissant</option>
+              <option value="popular">Plus vendus</option>
+              <option value="rating">Mieux notes</option>
+            </select>
+            {hasActiveFilters && (
+              <button type="button" onClick={handleReset} className="ibx-btn ibx-btn-ghost">
+                <X className="h-3 w-3" aria-hidden="true" />
+                Reinitialiser
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
         {/* PRODUCTS GRID */}
-        {filteredProducts.length === 0 ? (
+        {visibleProducts.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -266,7 +317,7 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
           </motion.div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-            {filteredProducts.map((prod, index) => {
+            {visibleProducts.map((prod, index) => {
               const prodStore = stores.find((s) => s.id === prod.storeId);
               return (
                 <motion.div
@@ -296,6 +347,21 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                       </div>
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-[#021231] via-transparent to-transparent opacity-70" />
+                    {prod.image && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setZoomImage(prod.image);
+                        }}
+                        className="ibx-media-zoom"
+                        style={{ opacity: 1 }}
+                        aria-label={"Agrandir l'image de " + prod.title}
+                        title="Agrandir l'image"
+                      >
+                        <ZoomIn className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    )}
 
                     <span className="product-type-badge absolute top-2 left-2 text-[8px] sm:text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wide whitespace-nowrap">
                       {prod.typeLabel}
@@ -472,6 +538,13 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
           </div>
         )}
       </div>
+      <IbxLightbox
+        images={zoomImage ? [{ src: zoomImage, alt: "Aperçu du produit" }] : []}
+        index={0}
+        open={!!zoomImage}
+        onClose={() => setZoomImage(null)}
+        label="Aperçu du produit"
+      />
     </section>
   );
 };
