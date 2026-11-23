@@ -87,6 +87,8 @@ export const WRITE_POLICIES: Record<string, WritePolicy> = {
   "create-banner": { actor: "admin", adminDomain: "content" },
   "update-banner": { actor: "admin", adminDomain: "content" },
   "delete-banner": { actor: "admin", adminDomain: "content" },
+  /** Configuration d'affichage des prix (FCFA principal, USD facultatif). */
+  "save-currency-config": { actor: "admin", adminDomain: "content" },
   "create-blog-post": { actor: "admin", adminDomain: "content" },
   "update-blog-post": { actor: "admin", adminDomain: "content" },
   "delete-blog-post": { actor: "admin", adminDomain: "content" },

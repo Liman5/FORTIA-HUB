@@ -104,8 +104,8 @@ const activeRouteActions = new Set(
   [...routeActions].filter((action) => !DEPRECATED_ACTIONS.includes(action))
 );
 
-check(activeRouteActions.size === 54, "54 actions actives dans les handlers", `trouvées: ${activeRouteActions.size}`);
-check(policyActions.size === 54, "54 politiques déclarées", `trouvées: ${policyActions.size}`);
+check(activeRouteActions.size === 55, "55 actions actives dans les handlers", `trouvées: ${activeRouteActions.size}`);
+check(policyActions.size === 55, "55 politiques déclarées", `trouvées: ${policyActions.size}`);
 check(
   DEPRECATED_ACTIONS.every((action) => !routeActions.has(action)),
   "Aucun handler pour les 4 actions de paiement historiques",

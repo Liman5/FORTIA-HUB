@@ -571,6 +571,10 @@ export interface SiteContent {
   contactEmail: string;
   contactPhone: string;
   supportHours: string;
+  /** FCFA pour 1 USD (affichage uniquement, configurable dans l'Admin). */
+  fcfaRate?: number;
+  /** Afficher l'équivalent USD sous le prix FCFA (désactivé par défaut). */
+  showUsdSecondary?: boolean;
 }
 
 export interface PostPurchaseSupportSubmission {

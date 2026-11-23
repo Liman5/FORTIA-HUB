@@ -6,6 +6,13 @@ export const writeEnvelopeSchema = writeObject;
 export const writeDataSchema = z.record(z.unknown());
 
 export const writeActionSchemas: Record<string, z.ZodTypeAny> = {
+  /** Affichage des prix : taux FCFA (> 0) et activation de l'équivalent USD. */
+  "save-currency-config": z
+    .object({
+      fcfaRate: z.coerce.number().int().min(1).max(100000),
+      showUsdSecondary: z.boolean(),
+    })
+    .strict(),
   "issue-certificate": z
     .object({
       courseId: uuidSchema,

@@ -27,9 +27,10 @@ import { useAppStore } from "@/lib/store/AppStore";
 import { useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { COURSE_CATEGORY_FAMILIES, sortByPopularity } from "@/lib/data/courseCategories";
-import { REFERENCE_PRODUCT_CATEGORIES } from "@/components/CategorySelect";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { IbxLightbox } from "@/components/ui/IbxLightbox";
+import { buildProductCategories, type ProductCategoryOption } from "@/lib/data/productCategories";
+import { formatFcfa, formatPricePair, resolveMoneyConfig, type MoneyConfig } from "@/lib/data/currency";
 
 /* =====================================================================
    FORTIA HUB — Interface d'accueil (routes "/" et "/home")
@@ -38,17 +39,7 @@ import { IbxLightbox } from "@/components/ui/IbxLightbox";
    défilable, cartes blanches. Toutes les données viennent du store.
    ===================================================================== */
 
-/** Taux de conversion USD → FCFA utilisé dans toute la plateforme. */
-const FCFA_RATE = 600;
-
-/** Formate un montant en dollars vers un montant FCFA lisible. */
-export function formatUsdToFcfa(usd: number): string {
-  const value = Math.round((Number(usd) || 0) * FCFA_RATE);
-  return value.toLocaleString("fr-FR");
-}
-
-/* Les catégories proviennent de la source unique partagée avec l'Académie
-   (lib/data/courseCategories.ts) : un seul système pour toute la plateforme. */
+/** Taux de conversion historique — remplacé par `lib/data/currency.ts`. */
 
 /** Construit l'URL de l'Académie filtrée sur une catégorie. */
 export function buildAcademyCategoryUrl(slug: string): string {
@@ -99,7 +90,7 @@ const NON_DIGITAL_PRODUCT_TYPES = ["course", "service"];
    ================================================================== */
 function HeroBanner() {
   const router = useRouter();
-  const { siteBanners } = useAppStore();
+  const { siteBanners, platformLoaded } = useAppStore();
   const [index, setIndex] = useState(0);
 
   /** Bannières actives gérées depuis l'administration (triées par ordre). */
@@ -107,7 +98,6 @@ function HeroBanner() {
     const managed = (siteBanners || [])
       .filter((banner) => banner && banner.isActive !== false && banner.imageUrl)
       .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-      .slice(0, 1)
       .map((banner) => ({
         id: banner.id,
         image: banner.imageUrl,
@@ -169,8 +159,14 @@ function HeroBanner() {
   }, [slides.length, index]);
 
   // Défilement automatique : chaque bannière impose SA durée d'affichage.
+  // Désactivé si l'utilisateur préfère une interface sans animation.
   useEffect(() => {
     if (slides.length <= 1) return;
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) return;
     const slide = slides[index] || slides[0];
     const timer = setTimeout(() => {
       setIndex((current) => (current + 1) % slides.length);
@@ -178,16 +174,44 @@ function HeroBanner() {
     return () => clearTimeout(timer);
   }, [index, slides]);
 
+  /** Navigation manuelle (flèches, puces, balayage tactile). */
+  const goTo = React.useCallback(
+    (next: number) => {
+      if (slides.length === 0) return;
+      setIndex(((next % slides.length) + slides.length) % slides.length);
+    },
+    [slides.length]
+  );
+
+  const touchStartX = React.useRef<number | null>(null);
+  const onTouchStart = (event: React.TouchEvent) => {
+    touchStartX.current = event.touches[0]?.clientX ?? null;
+  };
+  const onTouchEnd = (event: React.TouchEvent) => {
+    if (touchStartX.current === null || slides.length <= 1) return;
+    const delta = (event.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(delta) < 40) return;
+    setIndex((current) => (current + (delta < 0 ? 1 : -1) + slides.length) % slides.length);
+  };
+
   const slide = slides[index] || slides[0];
 
-  // Aucune bannière publiée : squelette neutre aux mêmes dimensions
-  // (aucune image factice, aucun saut de mise en page, aucun flash).
+  // Aucune bannière publiée et plateforme chargée : on n'affiche RIEN
+  // (aucun visuel factice, aucun squelette infini).
   if (!slide) {
+    if (platformLoaded) return null;
     return (
       <section className="relative" aria-hidden="true">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0B1B36] via-[#011D46] to-[#021231] border border-[#D69E25]/20 h-40 sm:h-64 lg:h-80 flex items-center justify-center">
-          <span className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
-            <span className="w-4 h-4 rounded-full border-2 border-[#D69E25]/60 border-t-transparent animate-spin" />
+        <div
+          className="ibx-card-muted flex h-40 items-center justify-center sm:h-64 lg:h-80"
+          role="presentation"
+        >
+          <span className="ibx-small inline-flex items-center gap-2">
+            <span
+              className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"
+              style={{ borderColor: "var(--ibx-border-strong)", borderTopColor: "transparent" }}
+            />
             Chargement de la bannière…
           </span>
         </div>
@@ -204,11 +228,17 @@ function HeroBanner() {
   return (
     <section className="relative">
       <div
-        className={`relative overflow-hidden rounded-3xl bg-[#0B1B36] shadow-lg ${
+        className={`ibx-media group relative overflow-hidden rounded-[var(--ibx-radius-lg)] border border-[var(--ibx-border)] ${
           slide?.link ? "cursor-pointer" : ""
         }`}
-        style={{ perspective: 1200 }}
+        style={{
+          perspective: 1200,
+          backgroundColor: "var(--ibx-surface-muted)",
+          boxShadow: "var(--ibx-shadow-md)",
+        }}
         onClick={openSlide}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
       >
         <AnimatePresence mode="wait">
           <motion.img
@@ -217,26 +247,60 @@ function HeroBanner() {
             alt={slide.alt}
             {...variantsFor(slide.animation)}
             transition={{ duration: 0.6, ease: "easeInOut" }}
-            className="w-full h-40 sm:h-64 lg:h-80 object-cover block"
+            className="block h-40 w-full object-cover sm:h-64 lg:h-80"
             style={{ objectPosition: slide.position }}
             draggable={false}
           />
         </AnimatePresence>
+
+        {/* Flèches : discrètes, visibles au survol / focus clavier */}
+        {slides.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                goTo(index - 1);
+              }}
+              aria-label="Bannière précédente"
+              className="absolute left-2 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white opacity-0 transition hover:bg-black/55 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white group-hover:opacity-100 lg:flex"
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                goTo(index + 1);
+              }}
+              aria-label="Bannière suivante"
+              className="absolute right-2 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white opacity-0 transition hover:bg-black/55 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white group-hover:opacity-100 lg:flex"
+            >
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </>
+        )}
       </div>
 
       {/* Puces de navigation placées SOUS l'image, jamais dessus */}
-      <div className="flex items-center justify-center gap-1.5 pt-3">
-        {slides.map((item, i) => (
-          <button
-            key={item.id}
-            onClick={() => setIndex(i)}
-            aria-label={`Diapositive ${i + 1}`}
-            className={`h-1.5 rounded-full transition-all ${
-              i === index ? "w-5 bg-[#D69E25]" : "w-1.5 bg-slate-300 hover:bg-slate-400"
-            }`}
-          />
-        ))}
-      </div>
+      {slides.length > 1 && (
+        <div className="flex items-center justify-center gap-1.5 pt-3">
+          {slides.map((item, i) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => goTo(i)}
+              aria-label={`Afficher la bannière ${i + 1} sur ${slides.length}`}
+              aria-current={i === index}
+              className="h-1.5 rounded-full transition-all"
+              style={{
+                width: i === index ? 20 : 6,
+                backgroundColor: i === index ? "var(--ibx-accent)" : "var(--ibx-border-strong)",
+              }}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -384,15 +448,17 @@ function SectionHeader({
   onAction?: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 mb-4">
-      <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">{title}</h2>
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <h2 className="ibx-h2">{title}</h2>
       {actionLabel && (
         <button
+          type="button"
           onClick={onAction}
-          className="flex items-center gap-0.5 text-[11px] font-black text-[#D69E25] hover:text-[#AB6F10] transition shrink-0"
+          className="flex shrink-0 items-center gap-0.5 text-[11px] font-black transition"
+          style={{ color: "var(--ibx-accent-strong)" }}
         >
           {actionLabel}
-          <ChevronRight className="w-3.5 h-3.5" />
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       )}
     </div>
@@ -420,6 +486,7 @@ function CourseCard({
   onOpen,
   isFavorite,
   onToggleFavorite,
+  money,
 }: {
   course: {
     id: string;
@@ -437,71 +504,108 @@ function CourseCard({
   onOpen: () => void;
   isFavorite: boolean;
   onToggleFavorite: () => void;
+  money: MoneyConfig;
 }) {
+  const price = formatPricePair(Number(course.price) || 0, money);
+
   return (
-    <div
+    <article
       onClick={onOpen}
-      className="snap-start shrink-0 w-[228px] sm:w-[248px] text-left rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden hover:border-[#D69E25] hover:shadow-md transition cursor-pointer"
+      className="ibx-card-flat ibx-interactive group relative w-[228px] shrink-0 snap-start cursor-pointer overflow-hidden text-left sm:w-[248px]"
     >
-      <div className="relative h-32 bg-slate-100">
-        <Thumb src={course.image} alt={course.title} className="w-full h-full" />
-        <span className="absolute top-2 left-2 bg-[#D69E25] text-white text-[9px] font-black px-2 py-0.5 rounded-full max-w-[70%] truncate">
+      {/* Texture douce : léger dégradé doré en haut, sans surcharger la carte */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(158deg, color-mix(in srgb, var(--ibx-accent) 9%, transparent) 0%, transparent 46%)",
+        }}
+      />
+
+      <div className="ibx-media relative h-32">
+        <Thumb src={course.image} alt={course.title} className="h-full w-full" />
+        <span
+          className="absolute left-2 top-2 max-w-[70%] truncate rounded-full px-2 py-0.5 text-[9px] font-black"
+          style={{ backgroundColor: "var(--ibx-accent)", color: "#1c1405" }}
+        >
           {course.badge || course.categoryLabel || "Certifiant"}
         </span>
         <button
-          onClick={(e) => {
-            e.stopPropagation();
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
             onToggleFavorite();
           }}
-          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 backdrop-blur border border-slate-200 flex items-center justify-center hover:bg-white transition"
+          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border transition"
+          style={{
+            backgroundColor: "color-mix(in srgb, var(--ibx-surface) 92%, transparent)",
+            borderColor: "var(--ibx-border)",
+          }}
           title="Ajouter aux favoris"
+          aria-label="Ajouter aux favoris"
         >
-          <Heart className={`w-3.5 h-3.5 ${isFavorite ? "text-red-500 fill-red-500" : "text-slate-500"}`} />
+          <Heart
+            className="h-3.5 w-3.5"
+            style={{
+              color: isFavorite ? "var(--ibx-danger)" : "var(--ibx-fg-muted)",
+              fill: isFavorite ? "var(--ibx-danger)" : "transparent",
+            }}
+          />
         </button>
       </div>
 
-      <div className="p-3 space-y-2">
-        <h3 className="text-xs font-black text-slate-900 leading-snug line-clamp-2 min-h-[32px]">
-          {course.title}
-        </h3>
+      <div className="relative flex flex-col gap-2 p-3">
+        <h3 className="ibx-h3 line-clamp-2 min-h-[32px] leading-snug">{course.title}</h3>
 
         <div className="flex items-center gap-1.5">
-          <span className="w-5 h-5 rounded-full shrink-0 overflow-hidden border border-slate-200 flex items-center justify-center bg-slate-100">
+          <span
+            className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full border"
+            style={{ borderColor: "var(--ibx-border)", backgroundColor: "var(--ibx-surface-muted)" }}
+          >
             {course.instructor?.avatar ? (
               <Thumb
                 src={course.instructor.avatar}
                 alt={course.instructor?.name || "Formateur"}
-                className="w-5 h-5 rounded-full"
+                className="h-5 w-5 rounded-full"
               />
             ) : (
-              <User className="w-3 h-3 text-slate-400" />
+              <User className="h-3 w-3" style={{ color: "var(--ibx-fg-subtle)" }} />
             )}
           </span>
-          <span className="text-[10px] text-slate-500 font-semibold truncate">
-            {course.instructor?.name || "FORTIA HUB"}
-          </span>
+          <span className="ibx-tiny truncate">{course.instructor?.name || "FORTIA HUB"}</span>
         </div>
 
         <div className="flex items-center gap-2 text-[10px]">
-          <span className="flex items-center gap-0.5 text-[#B8860B] font-black">
-            <Star className="w-3 h-3 fill-[#D69E25] text-[#D69E25]" />
-            {Number(course.rating || 0).toFixed(1)}
-          </span>
-          <span className="text-slate-400">({course.reviewsCount || 0})</span>
-          <span className="flex items-center gap-0.5 text-slate-500 ml-auto font-semibold">
-            <Clock className="w-3 h-3" />
+          {(Number(course.reviewsCount) || 0) > 0 ? (
+            <>
+              <span className="flex items-center gap-0.5 font-black" style={{ color: "var(--ibx-accent-strong)" }}>
+                <Star className="h-3 w-3" style={{ fill: "var(--ibx-accent)", color: "var(--ibx-accent)" }} />
+                {Number(course.rating || 0).toFixed(1)}
+              </span>
+              <span className="ibx-tiny">({course.reviewsCount})</span>
+            </>
+          ) : (
+            <span className="ibx-tiny">Nouveau</span>
+          )}
+          <span className="ibx-tiny ml-auto inline-flex items-center gap-0.5 font-semibold">
+            <Clock className="h-3 w-3" />
             {course.durationHours || 0}h
           </span>
         </div>
 
-        <div className="flex items-center justify-between pt-1.5 border-t border-slate-100">
-          <span className="text-[13px] font-black text-[#B8860B]">
-            {formatUsdToFcfa(course.price)} FCFA
+        <div
+          className="mt-auto flex items-end justify-between gap-2 border-t pt-2"
+          style={{ borderColor: "var(--ibx-border)" }}
+        >
+          <span className="min-w-0">
+            <span className="ibx-price block !text-[13px]">{price.primary}</span>
+            {price.secondary && <span className="ibx-tiny block">{price.secondary}</span>}
           </span>
-          <span className="text-[9px] font-bold text-slate-400 uppercase">{course.level}</span>
+          <span className="ibx-tiny shrink-0 font-bold uppercase">{course.level}</span>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -516,13 +620,15 @@ function CenterCard({
   return (
     <div
       onClick={onOpen}
-      className="snap-start shrink-0 w-[210px] text-left rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden hover:border-[#D69E25] hover:shadow-md transition cursor-pointer"
+      className="ibx-card-flat ibx-interactive w-[210px] shrink-0 snap-start cursor-pointer overflow-hidden text-left"
     >
-      <Thumb src={center.banner} alt={center.centerName} className="w-full h-24" />
-      <div className="p-3 space-y-1">
-        <h3 className="text-xs font-black text-slate-900 line-clamp-1">{center.centerName}</h3>
-        <span className="flex items-center gap-1 text-[10px] text-slate-500 font-semibold">
-          <Users className="w-3 h-3 text-[#D69E25]" />
+      <div className="ibx-media relative h-24">
+        <Thumb src={center.banner} alt={center.centerName} className="h-full w-full" />
+      </div>
+      <div className="space-y-1 p-3">
+        <h3 className="ibx-h3 line-clamp-1">{center.centerName}</h3>
+        <span className="ibx-tiny flex items-center gap-1 font-semibold">
+          <Users className="h-3 w-3" style={{ color: "var(--ibx-accent-strong)" }} />
           {center.learnersLabel}
         </span>
       </div>
@@ -536,6 +642,7 @@ function CenterCard({
 function ProductCard({
   product,
   onOpen,
+  money,
 }: {
   product: {
     id: string;
@@ -548,15 +655,26 @@ function ProductCard({
     reviewsCount?: number;
   };
   onOpen: () => void;
+  money: MoneyConfig;
 }) {
   const price = Number(product.price) || 0;
   const reviewsCount = Number(product.reviewsCount) || 0;
   const [zoomOpen, setZoomOpen] = useState(false);
+  const pricePair = formatPricePair(price, money);
 
   return (
-    <article className="ibx-card-flat ibx-interactive flex w-[190px] shrink-0 snap-start flex-col overflow-hidden sm:w-[210px]">
+    <article className="ibx-card-flat ibx-interactive relative flex w-[190px] shrink-0 snap-start flex-col overflow-hidden sm:w-[210px]">
+      {/* Texture : voile doré très léger, distinct de la carte formation */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--ibx-info) 10%, transparent) 0%, transparent 60%)",
+        }}
+      />
       {/* Visuel : le clic agrandit l'image (distinct du clic qui ouvre la fiche) */}
-      <div className="ibx-media relative h-28">
+      <div className="ibx-media relative h-32">
         {product.image ? (
           <>
             <img
@@ -613,8 +731,9 @@ function ProductCard({
           className="mt-auto flex items-center justify-between gap-2 border-t pt-2"
           style={{ borderColor: "var(--ibx-border)" }}
         >
-          <span className="ibx-price">
-            {price > 0 ? `${formatUsdToFcfa(price)} FCFA` : "Gratuit"}
+          <span className="min-w-0">
+            <span className="ibx-price block">{pricePair.primary}</span>
+            {pricePair.secondary && <span className="ibx-tiny block">{pricePair.secondary}</span>}
           </span>
           <button type="button" onClick={onOpen} className="ibx-btn ibx-btn-ghost !px-2 !py-1">
             Voir
@@ -638,6 +757,7 @@ function ProductCard({
 function ResourcesGrid({
   tiles,
   onOpen,
+  money,
 }: {
   tiles: {
     key: string;
@@ -648,9 +768,12 @@ function ResourcesGrid({
     minPriceUsd: number;
   }[];
   onOpen: (productType: string) => void;
+  money: MoneyConfig;
 }) {
+  /* Défilement horizontal : réutilise CarouselRow (flèches desktop,
+     balayage tactile mobile, aucune automatisation). */
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <CarouselRow ariaLabel="les ressources numériques" className="gap-2.5 pb-1">
       {tiles.map((tile) => {
         const Icon = tile.icon;
         return (
@@ -658,26 +781,35 @@ function ResourcesGrid({
             key={tile.key}
             type="button"
             onClick={() => onOpen(tile.productType)}
-            className="ibx-card-flat ibx-interactive flex cursor-pointer flex-col gap-2 p-3 text-left"
+            className="ibx-card-flat ibx-interactive relative flex w-[150px] shrink-0 snap-start cursor-pointer flex-col gap-2 overflow-hidden p-3 text-left sm:w-[168px]"
           >
             <span
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: `${tile.color}22` }}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background: `linear-gradient(150deg, color-mix(in srgb, ${tile.color} 12%, transparent) 0%, transparent 55%)`,
+              }}
+            />
+            <span
+              className="relative flex h-9 w-9 items-center justify-center rounded-[var(--ibx-radius-sm)]"
+              style={{
+                backgroundColor: `color-mix(in srgb, ${tile.color} 16%, var(--ibx-surface))`,
+                color: tile.color,
+              }}
+              aria-hidden="true"
             >
-              <Icon className="w-5 h-5" style={{ color: tile.color }} />
+              <Icon className="h-4 w-4" />
             </span>
-            <span className="block">
-              <span className="ibx-h3 block">{tile.label}</span>
+            <span className="relative block">
+              <span className="ibx-h3 block leading-tight">{tile.label}</span>
               <span className="ibx-tiny mt-0.5 block">
-                {tile.minPriceUsd > 0
-                  ? `Dès ${formatUsdToFcfa(tile.minPriceUsd)} FCFA`
-                  : "Gratuit"}
+                {tile.minPriceUsd > 0 ? `Dès ${formatFcfa(tile.minPriceUsd, money.rate)}` : "Gratuit"}
               </span>
             </span>
           </button>
         );
       })}
-    </div>
+    </CarouselRow>
   );
 }
 
@@ -685,13 +817,22 @@ function ResourcesGrid({
    PAGE D'ACCUEIL FORTIA HUB (routes "/" et "/home")
    ================================================================== */
 /** Mini-catalogue promotionnel : produits réels, liens directs vers leur fiche. */
-function ProductShowcaseBanner({ products }: { products: any[] }) {
+function ProductShowcaseBanner({ products, money }: { products: any[]; money: MoneyConfig }) {
   const router = useRouter();
   if (products.length < 2) return null;
   return (
-    <section className="ibx-card overflow-hidden">
+    <section className="ibx-card relative overflow-hidden">
+      {/* Texture d'en-tête : filet doré + halo très doux (aucune surcharge) */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(115deg, color-mix(in srgb, var(--ibx-accent) 10%, transparent) 0%, transparent 38%)",
+        }}
+      />
       <div
-        className="flex items-center justify-between gap-4 border-b px-5 py-4"
+        className="relative flex items-center justify-between gap-4 border-b px-5 py-4"
         style={{ borderColor: "var(--ibx-border)" }}
       >
         <div>
@@ -708,7 +849,7 @@ function ProductShowcaseBanner({ products }: { products: any[] }) {
           Voir la boutique
         </button>
       </div>
-      <div className="ibx-scroll-x gap-3 p-4">
+      <div className="ibx-scroll-x relative gap-3 p-4">
         {products.slice(0, 5).map((product: any) => (
           <button
             key={product.id}
@@ -718,7 +859,7 @@ function ProductShowcaseBanner({ products }: { products: any[] }) {
             }
             className="w-[160px] shrink-0 text-left"
           >
-            <span className="ibx-media block h-24 w-full rounded-[var(--ibx-radius-sm)]">
+            <span className="ibx-media block h-28 w-full rounded-[var(--ibx-radius-sm)]">
               {product.image ? (
                 <img
                   src={product.image}
@@ -738,7 +879,7 @@ function ProductShowcaseBanner({ products }: { products: any[] }) {
             </span>
             <span className="ibx-h3 mt-2 line-clamp-1 block">{product.title}</span>
             <span className="ibx-tiny mt-0.5 block">
-              {Number(product.price) > 0 ? `${product.price} $` : "Gratuit"}
+              {formatPricePair(Number(product.price) || 0, money).primary}
             </span>
           </button>
         ))}
@@ -788,7 +929,12 @@ export function HomePage() {
   const router = useRouter();
   const { marketplaceProducts, freelances } = useMarketplace();
   const { courses, trainingCenters } = useCatalog();
-  const { platformLoaded } = useAppStore();
+  const { platformLoaded, siteContent } = useAppStore();
+
+  /* Affichage des prix : FCFA principal, équivalent USD facultatif
+     (réglé dans Admin → Contenu du site). Aucune valeur n'est convertie
+     en base : uniquement du formatage. */
+  const money = useMemo(() => resolveMoneyConfig(siteContent), [siteContent]);
 
   const [favorites, setFavorites] = useState<string[]>([]);
 
@@ -849,19 +995,13 @@ export function HomePage() {
     }).filter((tile) => tile.count > 0);
   }, [marketplaceProducts]);
 
-  /* Catégories de PRODUITS : type réel + nombre de produits publiés. */
-  const productCategories = useMemo(() => {
-    const products = (marketplaceProducts || []).filter(
-      (p: any) => p?.isPublished !== false && !NON_DIGITAL_PRODUCT_TYPES.includes(String(p?.type || ""))
-    );
-    return REFERENCE_PRODUCT_CATEGORIES
-      .filter((category) => category.code !== "course" && category.code !== "service")
-      .map((category) => ({
-        ...category,
-        count: products.filter((p: any) => String(p?.type || "") === category.code).length,
-      }))
-      .filter((category) => category.count > 0);
-  }, [marketplaceProducts]);
+  /* Catégories de PRODUITS : construites à partir des domaines réellement
+     choisis par les vendeurs (`typeLabel`), et non du seul enum technique.
+     Les univers restent séparés : jamais de formation ni de service ici. */
+  const productCategories: ProductCategoryOption[] = useMemo(
+    () => buildProductCategories(marketplaceProducts || []),
+    [marketplaceProducts]
+  );
 
   /* Freelances réellement vérifiés / autorisés à vendre. */
   const freelanceProfiles = useMemo(
@@ -932,6 +1072,7 @@ export function HomePage() {
                   }
                   isFavorite={favorites.includes(course.id)}
                   onToggleFavorite={() => toggleFavorite(course.id)}
+                  money={money}
                 />
               ))}
             </CarouselRow>
@@ -954,13 +1095,14 @@ export function HomePage() {
                   onOpen={() =>
                     router.push(`/product/${encodeURIComponent(String((product as { slug?: string }).slug || product.id))}`)
                   }
+                  money={money}
                 />
               ))}
             </CarouselRow>
           </section>
         )}
 
-        {!isLoading && <ProductShowcaseBanner products={shopProducts} />}
+        {!isLoading && <ProductShowcaseBanner products={shopProducts} money={money} />}
 
         {/* Catégories de PRODUITS : univers distinct de l'académie */}
         {!isLoading && productCategories.length > 0 && (
@@ -970,19 +1112,35 @@ export function HomePage() {
               actionLabel="Toutes les catégories"
               onAction={() => router.push("/marketplace/categories")}
             />
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              {productCategories.slice(0, 8).map((category) => (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {productCategories.slice(0, 9).map((category) => (
                 <button
-                  key={category.code}
+                  key={category.slug}
                   type="button"
-                  onClick={() => router.push(`/marketplace?type=${encodeURIComponent(category.code)}`)}
-                  className="group flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left transition hover:border-[#D5A02B] dark:border-slate-700 dark:bg-[#222832]"
+                  onClick={() =>
+                    router.push(`/marketplace?categorie=${encodeURIComponent(category.slug)}`)
+                  }
+                  className="ibx-card-flat ibx-interactive group relative flex cursor-pointer items-center justify-between gap-3 overflow-hidden px-3.5 py-3 text-left"
                 >
-                  <span className="min-w-0">
-                    <span className="block truncate text-xs font-bold text-slate-900 dark:text-slate-100">{category.label}</span>
-                    <span className="mt-0.5 block text-[10px] text-slate-500 dark:text-slate-400">{category.count} produit{category.count > 1 ? "s" : ""}</span>
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                      background:
+                        "linear-gradient(120deg, color-mix(in srgb, var(--ibx-accent) 7%, transparent) 0%, transparent 55%)",
+                    }}
+                  />
+                  <span className="relative min-w-0">
+                    <span className="ibx-h3 block truncate">{category.label}</span>
+                    <span className="ibx-tiny mt-0.5 block">
+                      {category.count} produit{category.count > 1 ? "s" : ""}
+                    </span>
                   </span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400 transition group-hover:translate-x-0.5" />
+                  <ChevronRight
+                    className="relative h-3.5 w-3.5 shrink-0 transition group-hover:translate-x-0.5"
+                    style={{ color: "var(--ibx-accent-strong)" }}
+                    aria-hidden="true"
+                  />
                 </button>
               ))}
             </div>
@@ -1071,6 +1229,7 @@ export function HomePage() {
             <ResourcesGrid
               tiles={resourceTiles}
               onOpen={(productType) => router.push(`/marketplace/ressources?type=${encodeURIComponent(productType)}`)}
+              money={money}
             />
           </section>
         )}

@@ -3,6 +3,7 @@
 import React from "react";
 import { Globe, Save, Volume2, TrendingUp } from "lucide-react";
 import type { SiteContent } from "@/lib/types";
+import { AdminCurrencySettings } from "./AdminCurrencySettings";
 
 export function AdminSiteContentTab({
   siteForm,
@@ -33,6 +34,9 @@ export function AdminSiteContentTab({
                   <span>Enregistrer & Synchroniser en Direct</span>
                 </button>
               </div>
+
+              {/* Section 0 : affichage des prix (enregistrement indépendant) */}
+              <AdminCurrencySettings />
 
               {/* Section 1: Hero & Accroches */}
               <div className="bg-[#021231] p-5 rounded-2xl border border-slate-800 space-y-4">

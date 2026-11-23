@@ -16,6 +16,34 @@ export async function handleContentAction(
 ): Promise<Response | null> {
   const { auth, data } = context;
   switch (action) {
+    /**
+     * Configuration d'AFFICHAGE des prix.
+     * Aucune conversion de transaction : seuls le taux d'affichage et
+     * l'activation de l'équivalent USD sont enregistrés.
+     */
+    case "save-currency-config": {
+      const rate = Math.round(Number(data.fcfaRate));
+      if (!Number.isFinite(rate) || rate <= 0) {
+        return NextResponse.json({ error: "Taux FCFA invalide." }, { status: 400 });
+      }
+      const showUsdSecondary = data.showUsdSecondary === true;
+      const existing = await prisma.siteContent.findFirst({ select: { id: true } });
+      if (existing) {
+        await prisma.siteContent.update({
+          where: { id: existing.id },
+          data: { fcfaRate: rate, showUsdSecondary },
+        });
+      } else {
+        await prisma.siteContent.create({ data: { fcfaRate: rate, showUsdSecondary } });
+      }
+      return NextResponse.json({
+        success: true,
+        message: "Configuration monétaire enregistrée.",
+        fcfaRate: rate,
+        showUsdSecondary,
+      });
+    }
+
     case "create-banner": {
         const created = await prisma.siteBanner.create({
           data: {

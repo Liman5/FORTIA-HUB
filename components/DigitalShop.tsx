@@ -18,6 +18,7 @@ import {
   ZoomIn,
 } from "lucide-react";
 import { IbxLightbox } from "@/components/ui/IbxLightbox";
+import { matchesProductCategory } from "@/lib/data/productCategories";
 
 interface DigitalShopProps {
   products: MarketplaceProduct[];
@@ -40,8 +41,12 @@ interface DigitalShopProps {
   onSearchChange?: (query: string) => void;
   /** Filtre de type de produit appliqué à l'ouverture (URL ?type=…). */
   initialFilter?: string | null;
+  /** Catégorie (domaine) appliquée à l'ouverture (URL ?categorie=…). */
+  initialCategory?: string | null;
   /** Notifie le parent lorsqu'un filtre de type change (synchronisation URL). */
   onFilterChange?: (filterId: string) => void;
+  /** Notifie le parent lorsqu'une catégorie change (synchronisation URL). */
+  onCategoryChange?: (slug: string) => void;
 }
 
 export const DigitalShop: React.FC<DigitalShopProps> = ({
@@ -60,8 +65,11 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
   onSearchChange,
   initialFilter,
   onFilterChange,
+  initialCategory,
+  onCategoryChange,
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>(initialFilter || "all");
+  const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory || "");
   const [selectedStoreId, setSelectedStoreId] = useState<string>("all");
   const [previewProduct, setPreviewProduct] = useState<MarketplaceProduct | null>(null);
   /** Tri des résultats (fonctionnel, appliqué aux produits réellement filtrés). */
@@ -75,6 +83,11 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
   useEffect(() => {
     setSelectedFilter(initialFilter || "all");
   }, [initialFilter]);
+
+  /* Synchronise la catégorie (domaine) avec l'URL (?categorie=…) */
+  useEffect(() => {
+    setSelectedCategory(initialCategory || "");
+  }, [initialCategory]);
 
   const filters = [
     { id: "all", label: "Tous" },
@@ -94,15 +107,17 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
       if (!prod.isPublished && !isAdmin) return false;
       const matchesFilter = selectedFilter === "all" || prod.type === selectedFilter;
       const matchesStore = selectedStoreId === "all" || prod.storeId === selectedStoreId;
+      const matchesCategory =
+        !selectedCategory || matchesProductCategory(prod, selectedCategory);
       const matchesSearch =
         !q ||
         (prod.title && prod.title.toLowerCase().includes(q)) ||
         (prod.description && prod.description.toLowerCase().includes(q)) ||
         (prod.typeLabel && prod.typeLabel.toLowerCase().includes(q)) ||
         (prod.storeName && prod.storeName.toLowerCase().includes(q));
-      return matchesFilter && matchesStore && matchesSearch;
+      return matchesFilter && matchesStore && matchesCategory && matchesSearch;
     });
-  }, [products, isAdmin, selectedFilter, selectedStoreId, searchQuery]);
+  }, [products, isAdmin, selectedFilter, selectedStoreId, selectedCategory, searchQuery]);
 
   /** Produits affichés : filtres réels + tri réel. */
   const visibleProducts = useMemo(() => {
@@ -126,14 +141,30 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
   }, [filteredProducts, sortBy]);
 
   const hasActiveFilters =
-    selectedFilter !== "all" || selectedStoreId !== "all" || !!searchQuery || sortBy !== "recent";
+    selectedFilter !== "all" ||
+    selectedStoreId !== "all" ||
+    !!searchQuery ||
+    !!selectedCategory ||
+    sortBy !== "recent";
+
+  /** Libellé lisible de la catégorie active (donnée réelle du produit). */
+  const activeCategoryLabel = useMemo(() => {
+    if (!selectedCategory) return "";
+    const match = (products || []).find((item) => matchesProductCategory(item, selectedCategory));
+    const raw = match?.typeLabel || match?.type || selectedCategory;
+    return String(raw)
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }, [products, selectedCategory]);
 
   const handleReset = () => {
     setSelectedFilter("all");
     setSelectedStoreId("all");
+    setSelectedCategory("");
     setSortBy("recent");
     onClearSearch?.();
     onFilterChange?.("");
+    onCategoryChange?.("");
   };
 
   return (
@@ -263,10 +294,27 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
 
         {/* Resultats : tri reel + reinitialisation des filtres */}
         <div className="ibx-toolbar justify-between">
-          <p className="ibx-small">
-            {visibleProducts.length} produit{visibleProducts.length > 1 ? "s" : ""}
-            {hasActiveFilters ? " correspondant aux filtres" : ""}
-          </p>
+          <div className="min-w-0">
+            <p className="ibx-small">
+              {visibleProducts.length} produit{visibleProducts.length > 1 ? "s" : ""}
+              {hasActiveFilters ? " correspondant aux filtres" : ""}
+            </p>
+            {selectedCategory && (
+              <button
+                type="button"
+                className="ibx-chip mt-1"
+                data-active="true"
+                onClick={() => {
+                  setSelectedCategory("");
+                  onCategoryChange?.("");
+                }}
+                aria-label={`Retirer le filtre de catégorie ${activeCategoryLabel}`}
+              >
+                Catégorie : {activeCategoryLabel}
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            )}
+          </div>
           <div className="ibx-toolbar">
             <label className="ibx-tiny" htmlFor="shop-sort">Trier</label>
             <select
@@ -332,7 +380,7 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                   {/* Top border gradient on hover */}
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-20" />
 
-                  <div className="relative h-32 sm:h-36 bg-[#021231] overflow-hidden">
+                  <div className="relative h-36 overflow-hidden bg-[#021231] sm:h-44">
                     {prod.image ? (
                       <OptimizedImage
                         src={prod.image}

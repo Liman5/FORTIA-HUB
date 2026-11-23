@@ -1318,6 +1318,10 @@ model SiteContent {
   contactEmail       String   @default("contact@fortia-hub.com") @map("contact_email")
   contactPhone       String   @default("+228 90 88 99 00") @map("contact_phone")
   supportHours       String   @default("7J/7 • 08h00 - 22h00 GMT") @map("support_hours")
+  /** Affichage des prix : nombre de FCFA pour 1 USD (source unique d'affichage). */
+  fcfaRate           Int      @default(600) @map("fcfa_rate")
+  /** Afficher l'équivalent USD sous le prix FCFA (désactivé par défaut). */
+  showUsdSecondary   Boolean  @default(false) @map("show_usd_secondary")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@map("site_content")

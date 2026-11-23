@@ -46,6 +46,8 @@ export function MarketplacePage() {
   /* ----- Onglet et filtre pilotés par l'URL (?section=…&type=…) ----- */
   const sectionParam = searchParams?.get("section") || null;
   const typeParam = searchParams?.get("type") || null;
+  /** Catégorie (domaine) réelle du produit : ?categorie=<slug>. */
+  const categoryParam = searchParams?.get("categorie") || null;
 
   useEffect(() => {
     if (sectionParam === "freelance") setActiveSection("freelance");
@@ -66,6 +68,15 @@ export function MarketplacePage() {
     const params = new URLSearchParams(searchParams?.toString() || "");
     if (!filterId || filterId === "all") params.delete("type");
     else params.set("type", filterId);
+    const query = params.toString();
+    router.replace(query ? `/marketplace?${query}` : "/marketplace", { scroll: false });
+  };
+
+  /** Synchronise la catégorie (domaine produit) dans l'URL. */
+  const handleCategoryFilterChange = (slug: string) => {
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    if (!slug) params.delete("categorie");
+    else params.set("categorie", slug);
     const query = params.toString();
     router.replace(query ? `/marketplace?${query}` : "/marketplace", { scroll: false });
   };
@@ -209,6 +220,8 @@ export function MarketplacePage() {
             onSearchChange={setSearchQuery}
             initialFilter={typeParam}
             onFilterChange={handleTypeFilterChange}
+            initialCategory={categoryParam}
+            onCategoryChange={handleCategoryFilterChange}
           />
         )}
 

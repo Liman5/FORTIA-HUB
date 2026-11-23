@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { slugifyLabel } from "@/lib/data/slug";
 
 /**
  * Sélecteur de catégorie commun aux formulaires (formations et produits).
@@ -21,15 +22,7 @@ const CUSTOM = "__custom__";
 
 /** Identifiant stable pour une catégorie saisie librement. */
 export function slugifyCategory(label: string): string {
-  return (
-    String(label || "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "autre"
-  );
+  return slugifyLabel(label);
 }
 
 export function CategorySelect({

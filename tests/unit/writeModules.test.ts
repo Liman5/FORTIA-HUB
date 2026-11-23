@@ -28,11 +28,11 @@ function actionsByDomain(): Record<string, string[]> {
   return result;
 }
 
-test("les 54 actions actives sont réparties sans doublon", () => {
+test("les 55 actions actives sont réparties sans doublon", () => {
   const byDomain = actionsByDomain();
   const all = Object.values(byDomain).flat();
-  assert.equal(all.length, 54, `actions trouvées : ${all.length}`);
-  assert.equal(new Set(all).size, 54, "une action est présente dans deux domaines");
+  assert.equal(all.length, 55, `actions trouvées : ${all.length}`);
+  assert.equal(new Set(all).size, 55, "une action est présente dans deux domaines");
   for (const deprecated of DEPRECATED) {
     assert.equal(all.includes(deprecated), false, `${deprecated} ne doit plus avoir de handler`);
   }
@@ -43,7 +43,7 @@ test("chaque domaine possède une responsabilité identifiable", () => {
   const expected: Record<string, number> = {
     "academy.ts": 9,
     "centers.ts": 5,
-    "content.ts": 6,
+    "content.ts": 7,
     "finance.ts": 3,
     "kyc.ts": 6,
     "learning.ts": 5,

@@ -17,10 +17,12 @@ import {
   ZoomIn,
 } from "lucide-react";
 import { useAuth, useCommerce } from "@/lib/store/domains/contexts";
+import { useAppStore } from "@/lib/store/AppStore";
 import { trackProductEvent } from "@/lib/services/track";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 import { requestSignedDownloadUrl } from "@/lib/services/paymentsClient";
 import { IbxLightbox } from "@/components/ui/IbxLightbox";
+import { formatFcfa, formatPricePair, resolveMoneyConfig } from "@/lib/data/currency";
 
 export interface ProductDetailData {
   id: string;
@@ -45,8 +47,6 @@ export interface ProductDetailData {
   files: { id: string; fileName: string; fileUrl: string; fileSize: string; mimeType: string }[];
 }
 
-const FCFA_RATE = 600;
-
 /**
  * Fiche produit.
  *
@@ -62,6 +62,11 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
   const router = useRouter();
   const { addToCart } = useCommerce();
   const { isUserLoggedIn, userProfile } = useAuth();
+  const { siteContent } = useAppStore();
+
+  /* Affichage : FCFA principal, équivalent USD facultatif (Admin). */
+  const money = resolveMoneyConfig(siteContent);
+  const pricePair = formatPricePair(Number(product.price) || 0, money);
 
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string>("");
@@ -302,16 +307,12 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
             </div>
 
             <div className="flex flex-wrap items-end gap-3">
-              <span className="ibx-price !text-2xl">
-                {isFree ? "Gratuit" : `${product.price} $`}
-              </span>
-              {!isFree && (
-                <span className="ibx-small">
-                  ≈ {(product.price * FCFA_RATE).toLocaleString("fr-FR")} FCFA
-                </span>
-              )}
+              <span className="ibx-price !text-2xl">{pricePair.primary}</span>
+              {pricePair.secondary && <span className="ibx-small">{pricePair.secondary}</span>}
               {product.originalPrice && Number(product.originalPrice) > Number(product.price) && (
-                <span className="ibx-price-old">{product.originalPrice} $</span>
+                <span className="ibx-price-old">
+                  {formatFcfa(Number(product.originalPrice), money.rate)}
+                </span>
               )}
             </div>
 

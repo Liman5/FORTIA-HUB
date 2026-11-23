@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, ArrowRight, BookOpen, ShoppingBag, FileText } from "lucide-react";
 import { COURSE_CATEGORY_FAMILIES } from "@/lib/data/courseCategories";
 import { REFERENCE_PRODUCT_CATEGORIES } from "@/components/CategorySelect";
+import { buildProductCategories } from "@/lib/data/productCategories";
 import { useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
 
 type Kind = "course" | "product" | "resource";
@@ -35,16 +36,43 @@ export function CategoryHub({ kind }: { kind: Kind }) {
         }));
     }
     const products = (marketplaceProducts || []).filter((p: any) => p?.isPublished !== false);
-    return REFERENCE_PRODUCT_CATEGORIES
+
+    // Ressources : classement par FORMAT/TYPE réel (ebook, template, prompts…).
+    if (kind === "resource") {
+      return REFERENCE_PRODUCT_CATEGORIES
+        .filter((category) => RESOURCE_TYPES.has(category.code))
+        .filter((category) => !q || category.label.toLowerCase().includes(q) || category.code.toLowerCase().includes(q))
+        .map((category) => ({
+          id: category.code,
+          label: category.label,
+          description: "Ressource numérique téléchargeable",
+          count: products.filter((p: any) => String(p?.type || "") === category.code).length,
+          href: `/marketplace/ressources?type=${encodeURIComponent(category.code)}`,
+          icon: FileText,
+        }));
+    }
+
+    // Produits : catégories (domaines) réellement utilisées par les vendeurs,
+    // puis catégories de référence encore inutilisées.
+    const real = buildProductCategories(products);
+    const used = new Set(real.map((category) => category.slug));
+    const extras = REFERENCE_PRODUCT_CATEGORIES
       .filter((category) => category.code !== "course" && category.code !== "service")
-      .filter((category) => (kind === "resource" ? RESOURCE_TYPES.has(category.code) : true))
-      .filter((category) => !q || category.label.toLowerCase().includes(q) || category.code.toLowerCase().includes(q))
       .map((category) => ({
-        id: category.code,
+        slug: category.code,
         label: category.label,
-        description: kind === "resource" ? "Ressource numérique téléchargeable" : "Produits numériques de cette catégorie",
         count: products.filter((p: any) => String(p?.type || "") === category.code).length,
-        href: kind === "resource" ? `/marketplace/ressources?type=${encodeURIComponent(category.code)}` : `/marketplace?type=${encodeURIComponent(category.code)}`,
+      }))
+      .filter((category) => !used.has(category.slug));
+
+    return [...real, ...extras]
+      .filter((category) => !q || category.label.toLowerCase().includes(q) || category.slug.includes(q))
+      .map((category) => ({
+        id: category.slug,
+        label: category.label,
+        description: "Produits numériques de cette catégorie",
+        count: category.count,
+        href: `/marketplace?categorie=${encodeURIComponent(category.slug)}`,
         icon: FileText,
       }));
   }, [kind, query, courseCategories, courses, marketplaceProducts]);

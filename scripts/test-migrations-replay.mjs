@@ -26,6 +26,7 @@ const files = [
   "20261121091000_drop_legacy_deletion_trigger/migration.sql",
   "20261121100000_phase_admin_deletion_snapshot/migration.sql",
   "20261121110000_phase_ui_demo_flag/migration.sql",
+  "20261121120000_phase_ui_currency/migration.sql",
 ];
 
 function toTestSchema(sql) {

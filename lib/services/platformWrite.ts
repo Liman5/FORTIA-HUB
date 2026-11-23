@@ -59,6 +59,7 @@ type WriteAction =
   | "create-blog-post"
   | "update-blog-post"
   | "delete-blog-post"
+  | "save-currency-config"
   // Modération des contenus (formations & produits)
   | "moderate-content"
   | "restore-content"
