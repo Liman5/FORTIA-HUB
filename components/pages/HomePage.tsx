@@ -13,6 +13,8 @@ import {
   ChevronLeft,
   Users,
   MoreHorizontal,
+  BadgeCheck,
+  MapPin,
   LayoutTemplate,
   PlayCircle,
   Briefcase,
@@ -24,6 +26,7 @@ import { useAppStore } from "@/lib/store/AppStore";
 import { useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { COURSE_CATEGORY_FAMILIES, sortByPopularity } from "@/lib/data/courseCategories";
+import { REFERENCE_PRODUCT_CATEGORIES } from "@/components/CategorySelect";
 import { OptimizedImage } from "@/components/OptimizedImage";
 
 /* =====================================================================
@@ -55,28 +58,6 @@ export function buildShopTypeUrl(productType: string): string {
   return `/marketplace?type=${encodeURIComponent(productType)}`;
 }
 
-
-/** Centres de formation affichés tant qu'aucun centre n'est enregistré. */
-const FALLBACK_CENTERS = [
-  {
-    id: "default-fortia-academy",
-    centerName: "Fortia Academy",
-    banner: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=800&q=80",
-    learnersLabel: "+2 500 apprenants",
-  },
-  {
-    id: "default-digital-skills",
-    centerName: "Digital Skills Center",
-    banner: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80",
-    learnersLabel: "+1 800 apprenants",
-  },
-  {
-    id: "default-african-learning",
-    centerName: "African Learning Hub",
-    banner: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80",
-    learnersLabel: "+1 200 apprenants",
-  },
-];
 
 /** Tuiles « Ressources numériques » : uniquement des types réellement en vente. */
 const RESOURCE_TILES: {
@@ -124,6 +105,7 @@ function HeroBanner() {
     const managed = (siteBanners || [])
       .filter((banner) => banner && banner.isActive !== false && banner.imageUrl)
       .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+      .slice(0, 1)
       .map((banner) => ({
         id: banner.id,
         image: banner.imageUrl,
@@ -663,9 +645,72 @@ function ResourcesGrid({
 /* ==================================================================
    PAGE D'ACCUEIL FORTIA HUB (routes "/" et "/home")
    ================================================================== */
+/** Mini-catalogue promotionnel : produits réels, liens directs vers leur fiche. */
+function ProductShowcaseBanner({ products }: { products: any[] }) {
+  const router = useRouter();
+  if (products.length < 2) return null;
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-[#222832]">
+      <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-700">
+        <div>
+          <p className="text-sm font-black text-slate-900 dark:text-slate-100">Sélection numérique</p>
+          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">Des ressources prêtes à télécharger, choisies dans la boutique.</p>
+        </div>
+        <button type="button" onClick={() => router.push("/marketplace")} className="ibx-btn ibx-btn-outline shrink-0">Voir la boutique</button>
+      </div>
+      <div className="flex gap-3 overflow-x-auto p-4">
+        {products.slice(0, 5).map((product: any) => (
+          <button key={product.id} type="button" onClick={() => router.push(`/product/${encodeURIComponent(product.slug || product.id)}`)} className="w-[160px] shrink-0 text-left group">
+            {product.image ? <img src={product.image} alt={product.title} className="h-24 w-full rounded-lg object-cover" /> : <div className="flex h-24 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700"><Download className="h-6 w-6 text-slate-400" /></div>}
+            <p className="mt-2 line-clamp-1 text-[11px] font-bold text-slate-900 group-hover:text-[#B7831B] dark:text-slate-100">{product.title}</p>
+            <p className="mt-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">{Number(product.price) > 0 ? `${product.price} $` : "Gratuit"}</p>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Bannière éditoriale secondaire (ordre Admin : displayOrder). */
+function PromoBannerSlot({ offset }: { offset: number }) {
+  const router = useRouter();
+  const { siteBanners } = useAppStore();
+  const banner = useMemo(() => {
+    return (siteBanners || [])
+      .filter((item) => item && item.isActive !== false && item.imageUrl)
+      .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))[offset];
+  }, [siteBanners, offset]);
+
+  if (!banner) return null;
+
+  const open = () => {
+    if (!banner.buttonLink) return;
+    if (banner.linkTarget === "external") window.open(banner.buttonLink, "_blank", "noopener,noreferrer");
+    else router.push(banner.buttonLink);
+  };
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-[#222832]">
+      <button type="button" onClick={open} className="group relative block w-full text-left">
+        <img src={banner.imageUrl} alt={banner.title || "Bannière"} className="h-40 w-full object-cover sm:h-56" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/15 to-transparent" />
+        <div className="absolute inset-0 flex flex-col justify-end p-5 sm:p-7">
+          <p className="text-sm font-black text-white sm:text-lg">{banner.title}</p>
+          {banner.subtitle && <p className="mt-1 max-w-xl text-[11px] text-white/80 sm:text-xs">{banner.subtitle}</p>}
+          {banner.buttonLabel && (
+            <span className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-[11px] font-bold text-slate-900">
+              {banner.buttonLabel} <ChevronRight className="h-3.5 w-3.5" />
+            </span>
+          )}
+        </div>
+      </button>
+    </section>
+  );
+}
+
 export function HomePage() {
   const router = useRouter();
-  const { marketplaceProducts } = useMarketplace();
+  const { marketplaceProducts, freelances } = useMarketplace();
   const { courses, trainingCenters } = useCatalog();
   const { platformLoaded } = useAppStore();
 
@@ -697,14 +742,14 @@ export function HomePage() {
         return {
           id: center.id,
           centerName: center.centerName,
-          banner: center.banner || center.logo || FALLBACK_CENTERS[0].banner,
+          banner: center.banner || center.logo || "",
           learnersLabel:
             learners > 0 ? `+${learners.toLocaleString("fr-FR")} apprenants` : "Centre certifié",
           isReal: true,
         };
       });
     }
-    return FALLBACK_CENTERS.map((center) => ({ ...center, isReal: false }));
+    return [];
   }, [trainingCenters, courses]);
 
   /* Ressources numériques : uniquement les types réellement en vente.
@@ -728,6 +773,29 @@ export function HomePage() {
     }).filter((tile) => tile.count > 0);
   }, [marketplaceProducts]);
 
+  /* Catégories de PRODUITS : type réel + nombre de produits publiés. */
+  const productCategories = useMemo(() => {
+    const products = (marketplaceProducts || []).filter(
+      (p: any) => p?.isPublished !== false && !NON_DIGITAL_PRODUCT_TYPES.includes(String(p?.type || ""))
+    );
+    return REFERENCE_PRODUCT_CATEGORIES
+      .filter((category) => category.code !== "course" && category.code !== "service")
+      .map((category) => ({
+        ...category,
+        count: products.filter((p: any) => String(p?.type || "") === category.code).length,
+      }))
+      .filter((category) => category.count > 0);
+  }, [marketplaceProducts]);
+
+  /* Freelances réellement vérifiés / autorisés à vendre. */
+  const freelanceProfiles = useMemo(
+    () =>
+      (freelances || [])
+        .filter((profile: any) => profile?.kycVerified || profile?.canSellServices)
+        .slice(0, 8),
+    [freelances]
+  );
+
   const toggleFavorite = (id: string) =>
     setFavorites((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]));
 
@@ -747,25 +815,27 @@ export function HomePage() {
         {/* Bannière : image pleine, aucun texte superposé */}
         <HeroBanner />
 
-        {/* Catégories : une seule ligne → Académie filtrée sur la catégorie */}
+        {/* Catégories de FORMATION : ne jamais confondre avec la boutique */}
         <section>
           <SectionHeader
-            title="Explorer par catégorie"
-            actionLabel="Tout voir"
-            onAction={() => router.push("/academy")}
+            title="Explorer les formations par catégorie"
+            actionLabel="Toutes les catégories"
+            onAction={() => router.push("/academy/categories")}
           />
           <CategoryRow
             onSelect={(slug) => router.push(buildAcademyCategoryUrl(slug))}
-            onSeeMore={() => router.push("/academy")}
+            onSeeMore={() => router.push("/academy/categories")}
           />
         </section>
+
+        <PromoBannerSlot offset={1} />
 
         {/* Formations populaires : une seule rangée, flèches sur grand écran */}
         <section>
           <SectionHeader
             title="Formations populaires"
-            actionLabel="Voir tout"
-            onAction={() => router.push("/academy?vue=populaires")}
+            actionLabel="Voir toutes les formations"
+            onAction={() => router.push("/academy")}
           />
           {isLoading ? (
             <div className="flex items-center justify-center py-10">
@@ -805,19 +875,53 @@ export function HomePage() {
                 <ProductCard
                   key={product.id}
                   product={product}
-                  onOpen={() => router.push(buildShopTypeUrl(String(product.type || "")))}
+                  onOpen={() =>
+                    router.push(`/product/${encodeURIComponent(String((product as { slug?: string }).slug || product.id))}`)
+                  }
                 />
               ))}
             </CarouselRow>
           </section>
         )}
 
-        {/* Centres de formation : lien vers le catalogue filtré sur le centre */}
-        <section>
+        {!isLoading && <ProductShowcaseBanner products={shopProducts} />}
+
+        {/* Catégories de PRODUITS : univers distinct de l'académie */}
+        {!isLoading && productCategories.length > 0 && (
+          <section>
+            <SectionHeader
+              title="Explorer les produits numériques par catégorie"
+              actionLabel="Toutes les catégories"
+              onAction={() => router.push("/marketplace/categories")}
+            />
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {productCategories.slice(0, 8).map((category) => (
+                <button
+                  key={category.code}
+                  type="button"
+                  onClick={() => router.push(`/marketplace?type=${encodeURIComponent(category.code)}`)}
+                  className="group flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-left transition hover:border-[#D5A02B] dark:border-slate-700 dark:bg-[#222832]"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-bold text-slate-900 dark:text-slate-100">{category.label}</span>
+                    <span className="mt-0.5 block text-[10px] text-slate-500 dark:text-slate-400">{category.count} produit{category.count > 1 ? "s" : ""}</span>
+                  </span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400 transition group-hover:translate-x-0.5" />
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <PromoBannerSlot offset={2} />
+
+        {/* Centres de formation : répertoire dédié */}
+        {centers.length > 0 && (
+          <section>
           <SectionHeader
             title="Nos centres de formation"
-            actionLabel="Voir tout"
-            onAction={() => router.push("/academy")}
+            actionLabel="Voir tous les centres"
+            onAction={() => router.push("/centres")}
           />
           <CarouselRow ariaLabel="les centres de formation" className="pb-2">
             {centers.map((center) => (
@@ -826,25 +930,71 @@ export function HomePage() {
                 center={center}
                 onOpen={() =>
                   router.push(
-                    center.isReal ? `/academy?centre=${encodeURIComponent(center.id)}` : "/academy"
+                    center.isReal ? `/centres/${encodeURIComponent(center.id)}` : "/centres"
                   )
                 }
               />
             ))}
           </CarouselRow>
         </section>
+        )}
+
+        {/* Freelances vérifiés : univers distinct, données réelles uniquement */}
+        {!isLoading && freelanceProfiles.length > 0 && (
+          <section>
+            <SectionHeader
+              title="Freelances et experts vérifiés"
+              actionLabel="Découvrir tous les freelances"
+              onAction={() => router.push("/freelances")}
+            />
+            <CarouselRow ariaLabel="les freelances vérifiés" className="pb-2">
+              {freelanceProfiles.map((profile: any) => (
+                <button
+                  key={profile.id}
+                  type="button"
+                  onClick={() => router.push(`/freelances/${encodeURIComponent(profile.id)}`)}
+                  className="w-[230px] shrink-0 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-[#D5A02B] dark:border-slate-700 dark:bg-[#222832]"
+                >
+                  <div className="flex items-start gap-3">
+                    {profile.avatar ? (
+                      <img src={profile.avatar} alt={profile.name} className="h-11 w-11 rounded-full object-cover" />
+                    ) : (
+                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 font-black text-slate-500 dark:bg-slate-700 dark:text-slate-200">
+                        {(profile.name || "F").slice(0, 1)}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-xs font-bold text-slate-900 dark:text-slate-100">{profile.name}</span>
+                        {profile.kycVerified && <BadgeCheck className="h-3.5 w-3.5 text-emerald-600" />}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[10px] text-slate-500 dark:text-slate-400">{profile.title || profile.category}</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400">
+                    {profile.rating > 0 && <span className="flex items-center gap-1"><Star className="h-3 w-3" /> {profile.rating}</span>}
+                    {profile.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {profile.location}</span>}
+                  </div>
+                  {profile.skills?.length > 0 && (
+                    <p className="mt-2 line-clamp-1 text-[10px] text-slate-400">{profile.skills.slice(0, 3).join(" · ")}</p>
+                  )}
+                </button>
+              ))}
+            </CarouselRow>
+          </section>
+        )}
 
         {/* Ressources numériques : liens vers la boutique filtrée par type */}
         {resourceTiles.length > 0 && (
           <section className="pb-4">
             <SectionHeader
               title="Ressources numériques"
-              actionLabel="Boutique"
-              onAction={() => router.push("/marketplace")}
+              actionLabel="Explorer toutes les ressources"
+              onAction={() => router.push("/marketplace/ressources")}
             />
             <ResourcesGrid
               tiles={resourceTiles}
-              onOpen={(productType) => router.push(buildShopTypeUrl(productType))}
+              onOpen={(productType) => router.push(`/marketplace/ressources?type=${encodeURIComponent(productType)}`)}
             />
           </section>
         )}

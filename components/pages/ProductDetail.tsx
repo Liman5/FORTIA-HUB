@@ -57,6 +57,8 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
 
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string>("");
+  const galleryImages = Array.from(new Set([product.bannerImage, product.image].filter(Boolean)));
+  const [activeImage, setActiveImage] = useState(galleryImages[0] || "");
 
   // ---- Notation du produit (une note par membre) ----
   const [ratingValue, setRatingValue] = useState(Number(product.rating) || 0);
@@ -157,9 +159,9 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
           {/* Visuel */}
           <div className="space-y-3">
             <div className="rounded-3xl overflow-hidden border border-[#D69E25]/30 bg-[#011D46] aspect-video product-visual">
-              {product.bannerImage || product.image ? (
+              {activeImage ? (
                 <img
-                  src={product.bannerImage || product.image}
+                  src={activeImage}
                   alt={product.title}
                   className="w-full h-full object-contain p-2"
                 />
@@ -169,6 +171,15 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
                 </div>
               )}
             </div>
+            {galleryImages.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto">
+                {galleryImages.map((image) => (
+                  <button key={image} type="button" onClick={() => setActiveImage(image)} className={`h-16 w-20 shrink-0 overflow-hidden rounded-xl border ${activeImage === image ? "border-[#D69E25]" : "border-slate-700"}`} aria-label="Afficher cette image">
+                    <img src={image} alt="" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2 text-[10px] font-bold">
               <span className="px-3 py-1.5 rounded-full bg-[#D69E25]/15 border border-[#D69E25]/40 text-[#D69E25]">
                 {product.typeLabel}
