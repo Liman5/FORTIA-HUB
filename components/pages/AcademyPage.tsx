@@ -125,8 +125,8 @@ export function AcademyPage() {
     <div className="ibx-page ibx-catalogue">
       {/* ---------------------------- EN-TÊTE ---------------------------- */}
       <header className="border-b" style={{ borderColor: "var(--ibx-border)" }}>
-        <div className="ibx-container py-7 sm:py-9">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="ibx-container py-5 sm:py-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0 space-y-2">
               <p className="ibx-label">Académie certifiante</p>
               <h1 className="ibx-h1">Apprenez des compétences concrètes</h1>
@@ -175,7 +175,7 @@ export function AcademyPage() {
           {/* Accès rapide aux catégories réelles (compteurs réels) */}
           {quickCategories.length > 0 && (
             <div
-              className="ibx-scroll-x mt-5 border-t pt-4"
+              className="ibx-scroll-x mt-4 border-t pt-3"
               style={{ borderColor: "var(--ibx-border)" }}
               role="group"
               aria-label="Catégories de formations"
@@ -232,25 +232,25 @@ export function AcademyPage() {
 
 
       {/* --------------------------- AVANTAGES --------------------------- */}
-      <section className="ibx-container py-10 sm:py-12">
-        <div className="mb-5 flex items-center gap-2">
+      <section className="ibx-container py-8 sm:py-10">
+        <div className="mb-3 flex items-center gap-2">
           <Sparkles className="h-4 w-4" aria-hidden="true" style={{ color: "var(--ibx-accent-strong)" }} />
           <h2 className="ibx-h2">Pourquoi apprendre ici</h2>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           {highlights.map((item) => {
             const Icon = item.icon;
             return (
-              <div key={item.title} className="ibx-card-flat ibx-interactive p-4">
+              <div key={item.title} className="ibx-card-flat ibx-interactive p-3.5">
                 <span
-                  className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-[var(--ibx-radius-sm)]"
+                  className="mb-2 inline-flex h-8 w-8 items-center justify-center rounded-[var(--ibx-radius-sm)]"
                   style={{ backgroundColor: "var(--ibx-surface-muted)", color: "var(--ibx-accent-strong)" }}
                   aria-hidden="true"
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-3.5 w-3.5" />
                 </span>
-                <h3 className="ibx-h3">{item.title}</h3>
-                <p className="ibx-small mt-1">{item.description}</p>
+                <h3 className="ibx-h3 !text-[12px]">{item.title}</h3>
+                <p className="ibx-small mt-1 !text-[10.5px]">{item.description}</p>
               </div>
             );
           })}
@@ -258,8 +258,8 @@ export function AcademyPage() {
       </section>
 
       {/* ------------------------- CERTIFICATION ------------------------- */}
-      <section className="ibx-container pb-12">
-        <div className="ibx-card p-5 sm:p-6">
+      <section className="ibx-container pb-10">
+        <div className="ibx-card p-4 sm:p-5">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-4">
               <span

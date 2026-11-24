@@ -201,22 +201,26 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
   };
 
   return (
-    <section className="relative min-h-[600px] overflow-x-clip py-6" id="courses-section">
-      <div className="ibx-container space-y-5 relative z-10">
+    <section className="relative min-h-[600px] overflow-x-clip py-5" id="courses-section">
+      <div className="ibx-container relative z-10 space-y-4">
 
         {/* ===================== EN-TÊTE DU CATALOGUE ===================== */}
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-2.5">
+          <div className="flex flex-wrap items-end justify-between gap-2">
             <div className="min-w-0">
-              <h2 className="text-lg sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-[#D69E25] shrink-0" />
+              <h2 className="ibx-h2 flex items-center gap-2">
+                <GraduationCap
+                  className="h-4 w-4 shrink-0"
+                  style={{ color: "var(--ibx-accent-strong)" }}
+                  aria-hidden="true"
+                />
                 <span className="truncate">{title}</span>
               </h2>
-              <p className="text-[11px] sm:text-xs text-slate-400 font-medium mt-1">
+              <p className="ibx-small mt-0.5">
                 Formations certifiantes — filtrez par catégorie, niveau et prix.
               </p>
             </div>
-            <span className="shrink-0 text-[11px] font-bold text-[#D69E25] bg-[#D69E25]/10 border border-[#D69E25]/30 px-3 py-1.5 rounded-full">
+            <span className="ibx-badge shrink-0">
               {/* Nombre TOTAL côté serveur lorsque aucun filtre local n'est actif,
                   sinon le nombre de résultats réellement filtrés. */}
               {isFiltering
@@ -297,13 +301,13 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
 
           {/* Filtres secondaires : niveau + prix */}
           {showMoreFilters && (
-            <div className="flex flex-wrap gap-2 p-3 rounded-2xl bg-white/[0.03] border border-white/10">
-              <label className="flex items-center gap-2 text-[11px] font-bold text-slate-400">
+            <div className="ibx-card-muted flex flex-wrap gap-2 p-2.5">
+              <label className="flex items-center gap-1.5 text-[10px] font-semibold" style={{ color: "var(--ibx-fg-muted)" }}>
                 Niveau
                 <select
                   value={selectedLevel}
                   onChange={(e) => setSelectedLevel(e.target.value)}
-                  className="bg-[#021231] border border-white/15 rounded-lg text-xs font-semibold text-white px-2.5 py-1.5 focus:outline-none focus:border-[#D69E25]/60"
+                  className="ibx-select"
                 >
                   <option value="all">Tous les niveaux</option>
                   {LEVELS.map((level) => (
@@ -313,12 +317,12 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                   ))}
                 </select>
               </label>
-              <label className="flex items-center gap-2 text-[11px] font-bold text-slate-400">
+              <label className="flex items-center gap-1.5 text-[10px] font-semibold" style={{ color: "var(--ibx-fg-muted)" }}>
                 Prix
                 <select
                   value={selectedPrice}
                   onChange={(e) => setSelectedPrice(e.target.value)}
-                  className="bg-[#021231] border border-white/15 rounded-lg text-xs font-semibold text-white px-2.5 py-1.5 focus:outline-none focus:border-[#D69E25]/60"
+                  className="ibx-select"
                 >
                   {PRICE_RANGES.map((range) => (
                     <option key={range.id} value={range.id}>
@@ -332,31 +336,23 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
         </div>
 
         {/* ========== CATÉGORIES (une seule ligne, défilement fluide) ========== */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory scroll-px-4">
+        <div className="ibx-scroll-x snap-x" role="group" aria-label="Catégories de formations">
           {categoryOptions.map((cat) => {
             const isActive = selectedCategory === cat.id;
             const CatIcon = cat.icon;
             return (
               <button
                 key={cat.id}
+                type="button"
                 onClick={() => handleSelectCategory(cat.id)}
                 aria-pressed={isActive}
-                className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap snap-start shrink-0 transition-all duration-300 ${
-                  isActive
-                    ? "bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] shadow-lg shadow-[#D69E25]/20"
-                    : "bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white border border-white/10"
-                }`}
+                className="ibx-chip snap-start"
+                data-active={isActive ? "true" : "false"}
               >
-                {CatIcon && <CatIcon className="w-3.5 h-3.5" />}
+                {CatIcon && <CatIcon className="h-3 w-3" aria-hidden="true" />}
                 <span>{cat.label}</span>
                 {cat.count > 0 && (
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${
-                      isActive ? "bg-[#021231]/20 text-[#021231]" : "bg-white/10 text-slate-400"
-                    }`}
-                  >
-                    {cat.count}
-                  </span>
+                  <span className="text-[9px] font-bold opacity-70">{cat.count}</span>
                 )}
               </button>
             );
@@ -364,22 +360,18 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
         </div>
 
         {/* ===================== VUES / TRIS ===================== */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-            Trier par
-          </span>
+        <div className="ibx-scroll-x" role="group" aria-label="Trier les formations">
+          <span className="ibx-label shrink-0">Trier</span>
           {views.map((view) => {
             const isActive = selectedView === view.id;
             return (
               <button
                 key={view.id}
+                type="button"
                 onClick={() => handleSelectView(view.id)}
                 aria-pressed={isActive}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${
-                  isActive
-                    ? "bg-[#D69E25]/15 border-[#D69E25]/50 text-[#D69E25]"
-                    : "bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10"
-                }`}
+                className="ibx-chip"
+                data-active={isActive ? "true" : "false"}
               >
                 {view.label}
               </button>
@@ -389,30 +381,20 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
 
         {/* ===================== RÉSULTATS ===================== */}
         {filteredCourses.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="text-center py-16 bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-8 space-y-4"
-          >
-            <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto">
-              <Search className="w-8 h-8 text-slate-500" />
-            </div>
-            <h3 className="text-lg font-bold text-white">
+          <div className="ibx-empty">
+            <p className="ibx-h3">
               Aucune formation disponible dans cette catégorie pour le moment.
-            </h3>
-            <p className="text-slate-400 text-sm max-w-md mx-auto leading-relaxed">
+            </p>
+            <p className="ibx-small mx-auto mt-1 max-w-md">
               Choisissez une autre catégorie ou parcourez l&apos;ensemble du catalogue.
             </p>
-            <button
-              onClick={handleReset}
-              className="px-5 py-2.5 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-bold text-xs rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-[#D69E25]/20"
-            >
+            <button type="button" onClick={handleReset} className="ibx-btn ibx-btn-primary mt-3">
               Explorer toutes les formations
             </button>
-          </motion.div>
+          </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 lg:gap-4 xl:grid-cols-4">
               {visibleCourses.map((course, index) => (
                 <CourseCardItem
                   key={course.id}
@@ -427,8 +409,9 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
 
             {/* Chargement progressif : liste locale d'abord, puis pages serveur */}
             {(visibleCount < filteredCourses.length || hasMoreCourses) && (
-              <div className="flex justify-center pt-2">
+              <div className="flex justify-center pt-1">
                 <button
+                  type="button"
                   onClick={() => {
                     if (visibleCount < filteredCourses.length) {
                       setVisibleCount((count) => count + PAGE_SIZE);
@@ -438,7 +421,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
                     // côté serveur (le catalogue n'est jamais chargé d'un coup).
                     onLoadMoreCourses?.();
                   }}
-                  className="px-6 py-3 rounded-xl bg-white/5 border border-white/15 text-xs font-bold text-slate-200 hover:bg-white/10 hover:text-white transition"
+                  className="ibx-btn ibx-btn-outline"
                 >
                   {visibleCount < filteredCourses.length ? (
                     <>
@@ -492,12 +475,11 @@ function CourseCardItem({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }}
+      initial={{ opacity: 0, y: 14 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-50px" }}
-      transition={{ duration: 0.5, delay: Math.min(index, 6) * 0.06, ease: "easeOut" }}
-      whileHover={{ y: -6 }}
-      className="group relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl shadow-xl hover:border-[#D69E25]/40 transition-all duration-500 flex flex-col overflow-hidden"
+      transition={{ duration: 0.35, delay: Math.min(index, 6) * 0.04, ease: "easeOut" }}
+      className="ibx-card-flat ibx-interactive group relative flex flex-col overflow-hidden"
     >
       {/* Texture douce : léger dégradé doré, cohérent avec les autres cartes */}
       <span
@@ -510,7 +492,7 @@ function CourseCardItem({
       />
 
       {/* Couverture */}
-      <div className="relative h-40 overflow-hidden bg-[#021231] sm:h-44">
+      <div className="ibx-media relative h-32 sm:h-36">
         {course?.image ? (
           <OptimizedImage
             src={course.image}
@@ -519,15 +501,17 @@ function CourseCardItem({
             className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-[#0B1B36]">
-            <GraduationCap className="w-7 h-7 text-[#D69E25]/60" />
+          <div className="w-full h-full flex items-center justify-center">
+            <GraduationCap
+              className="h-6 w-6"
+              style={{ color: "var(--ibx-fg-subtle)" }}
+            />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#021231] via-[#021231]/30 to-transparent pointer-events-none" />
 
         {course?.categoryLabel && (
           <span
-            className="absolute left-2 top-2 max-w-[70%] truncate rounded-full px-2.5 py-1 text-[8px] font-extrabold uppercase tracking-wide sm:text-[10px]"
+            className="absolute left-1.5 top-1.5 max-w-[70%] truncate rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide"
             style={{ backgroundColor: "var(--ibx-accent)", color: "#1c1405" }}
           >
             {course.categoryLabel}
@@ -535,17 +519,20 @@ function CourseCardItem({
         )}
 
         {course?.badge && (
-          <span className="absolute top-2 right-2 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-md shadow-md max-w-[45%] truncate">
+          <span
+            className="absolute right-1.5 top-1.5 max-w-[45%] truncate rounded px-1.5 py-0.5 text-[8px] font-bold"
+            style={{ backgroundColor: "var(--ibx-surface)", color: "var(--ibx-accent-strong)", border: "1px solid var(--ibx-border)" }}
+          >
             {course.badge}
           </span>
         )}
 
         {course?.level && (
           <span
-            className="absolute bottom-2 left-2 rounded-lg px-2 py-0.5 text-[9px] font-semibold sm:text-[10px]"
+            className="absolute bottom-1.5 left-1.5 rounded px-1 py-px text-[8px] font-semibold"
             style={{
               backgroundColor: "color-mix(in srgb, var(--ibx-surface) 90%, transparent)",
-              color: "var(--ibx-fg)",
+              color: "var(--ibx-fg-muted)",
               border: "1px solid var(--ibx-border)",
             }}
           >
@@ -554,105 +541,123 @@ function CourseCardItem({
         )}
 
         <button
+          type="button"
           onClick={() => onSelect(course)}
-          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition duration-300 bg-[#021231]/50"
+          className="absolute inset-0 flex items-center justify-center bg-[#021231]/40 opacity-0 transition duration-300 focus:opacity-100 group-hover:opacity-100"
           title="Voir la formation"
           aria-label={`Voir la formation ${course?.title || ""}`}
         >
-          <span className="w-12 h-12 rounded-full bg-gradient-to-br from-[#D69E25] to-[#AB6F10] text-[#021231] flex items-center justify-center shadow-2xl">
-            <Play className="w-5 h-5 fill-current ml-0.5" />
+          <span
+            className="flex h-9 w-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: "var(--ibx-accent)", color: "#1c1405" }}
+          >
+            <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
           </span>
         </button>
       </div>
 
       {/* Contenu */}
-      <div className="p-3.5 sm:p-5 flex-1 flex flex-col justify-between gap-3">
-        <div className="space-y-2">
+      <div className="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
+        <div className="space-y-1">
           <h3
             onClick={() => onSelect(course)}
-            className="font-extrabold text-white text-sm sm:text-base group-hover:text-[#D69E25] transition-colors line-clamp-2 cursor-pointer leading-snug"
+            className="ibx-h3 line-clamp-2 cursor-pointer !text-[12.5px] leading-[1.3] sm:!text-[13px] transition-colors group-hover:!text-[var(--ibx-accent-strong)]"
           >
             {course?.title}
           </h3>
 
           {course?.description && (
-            <p className="text-slate-400 text-[11px] sm:text-xs line-clamp-2 leading-relaxed">
+            <p className="ibx-tiny line-clamp-2 !text-[9.5px]">
               {course.description}
             </p>
           )}
         </div>
 
-        <div className="pt-3 border-t border-white/10 space-y-2.5">
+        <div
+          className="mt-auto space-y-1.5 border-t pt-2"
+          style={{ borderColor: "var(--ibx-border)" }}
+        >
           {/* Formateur */}
-          <div className="flex items-center gap-2 text-xs text-slate-400">
+          <div className="flex items-center gap-1.5">
             {avatarSrc ? (
               <img
                 src={avatarSrc}
                 alt={instructorName}
-                className="w-7 h-7 rounded-full object-cover border border-[#D69E25]/50"
+                className="h-5 w-5 rounded-full object-cover"
                 loading="lazy"
               />
             ) : (
-              <span className="w-7 h-7 rounded-full bg-[#D69E25]/15 text-[#D69E25] border border-[#D69E25]/40 flex items-center justify-center text-[10px] font-black shrink-0">
+              <span
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold"
+                style={{ backgroundColor: "var(--ibx-surface-muted)", color: "var(--ibx-fg-muted)" }}
+              >
                 {initial}
               </span>
             )}
-            <span className="font-semibold text-slate-300 text-[11px] truncate">
+            <span className="ibx-tiny truncate !text-[9.5px] font-semibold">
               {instructorName}
             </span>
           </div>
 
           {/* Note (si avis réels) + statistiques disponibles */}
-          <div className="flex items-center justify-between gap-2 text-[10px] sm:text-[11px]">
+          <div className="flex items-center justify-between gap-1.5 text-[9px]">
             <div className="flex items-center gap-0.5">
               {[1, 2, 3, 4, 5].map((star) => {
                 const filled = reviewsCount > 0 && star <= Math.round(rating);
                 return (
                   <button
                     key={star}
+                    type="button"
                     onClick={() => onRate?.(course.id, star)}
                     title={`Noter ${star} étoile${star > 1 ? "s" : ""}`}
                     aria-label={`Noter ${star} étoile${star > 1 ? "s" : ""}`}
-                    className="transition hover:scale-125"
+                    className="transition hover:scale-110"
                   >
                     <Star
-                      className={`w-3.5 h-3.5 ${
-                        filled ? "text-[#D69E25] fill-[#D69E25]" : "text-slate-600"
-                      }`}
+                      className="h-2.5 w-2.5"
+                      style={
+                        filled
+                          ? { color: "var(--ibx-accent)", fill: "var(--ibx-accent)" }
+                          : { color: "var(--ibx-fg-subtle)" }
+                      }
                     />
                   </button>
                 );
               })}
               {reviewsCount > 0 ? (
-                <span className="text-slate-400 font-medium ml-1">
-                  {rating.toFixed(1)} <span className="text-slate-500">({reviewsCount})</span>
+                <span className="ml-1 font-semibold" style={{ color: "var(--ibx-fg-muted)" }}>
+                  {rating.toFixed(1)}{" "}
+                  <span style={{ color: "var(--ibx-fg-subtle)" }}>({reviewsCount})</span>
                 </span>
               ) : (
-                <span className="text-slate-500 font-medium ml-1">Nouveau</span>
+                <span className="ml-1 font-semibold" style={{ color: "var(--ibx-fg-subtle)" }}>
+                  Nouveau
+                </span>
               )}
             </div>
-            <div className="flex items-center gap-2.5 text-slate-400">
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3 text-[#D69E25]" />
+            <div className="flex shrink-0 items-center gap-2" style={{ color: "var(--ibx-fg-muted)" }}>
+              <span className="flex items-center gap-0.5">
+                <Clock className="h-2.5 w-2.5" style={{ color: "var(--ibx-accent-strong)" }} aria-hidden="true" />
                 {Number(course?.durationHours) || 0}h
               </span>
-              <span className="flex items-center gap-1">
-                <Users className="w-3 h-3 text-[#D69E25]" />
+              <span className="flex items-center gap-0.5">
+                <Users className="h-2.5 w-2.5" style={{ color: "var(--ibx-accent-strong)" }} aria-hidden="true" />
                 {Number(course?.studentsCount) || 0}
               </span>
             </div>
           </div>
 
           {/* Prix + actions — FCFA principal, USD secondaire facultatif */}
-          <div className="flex items-end justify-between gap-2 pt-1">
+          <div className="flex items-end justify-between gap-1.5 pt-0.5">
             <div className="min-w-0">
-              <span className="ibx-price block !text-base sm:!text-lg">{pricePair.primary}</span>
+              <span className="ibx-price block !text-[12.5px] sm:!text-[13px]">{pricePair.primary}</span>
               {pricePair.secondary && (
-                <span className="ibx-tiny mt-0.5 block">{pricePair.secondary}</span>
+                <span className="ibx-tiny mt-0.5 block !text-[9px]">{pricePair.secondary}</span>
               )}
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-1">
               <button
+                type="button"
                 onClick={() =>
                   onAddToCart({
                     id: course.id,
@@ -663,17 +668,18 @@ function CourseCardItem({
                     categoryLabel: course.categoryLabel,
                   })
                 }
-                className="shop-cart-btn p-2 rounded-xl border border-[#D69E25]/70"
+                className="ibx-btn ibx-btn-outline !px-1.5 !py-1"
                 title="Ajouter au panier"
                 aria-label={`Ajouter ${course?.title || "la formation"} au panier`}
               >
-                <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <ShoppingCart className="h-3 w-3" aria-hidden="true" />
               </button>
               <button
+                type="button"
                 onClick={() => onSelect(course)}
-                className="px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-extrabold text-[10px] sm:text-xs hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-[#D69E25]/20 flex items-center gap-1"
+                className="ibx-btn ibx-btn-primary !px-1.5 !py-1 !text-[9.5px]"
               >
-                <Play className="w-3 h-3 fill-current" />
+                <Play className="h-2.5 w-2.5 fill-current" aria-hidden="true" />
                 <span className="hidden sm:inline">Suivre</span>
                 <span className="sm:hidden">Voir</span>
               </button>

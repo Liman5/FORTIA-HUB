@@ -103,251 +103,240 @@ export const FreelanceMarketplace: React.FC<FreelanceMarketplaceProps> = ({
   };
 
   return (
-    <section className="py-12 bg-[#021231] min-h-[600px] relative overflow-hidden" id="freelance-section">
+    <section className="relative min-h-[520px] overflow-hidden py-8" id="freelance-section">
       {/* Background decoration */}
-      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/20 to-transparent" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.03)_0%,transparent_50%)]" />
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/20 to-transparent" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-7 relative z-10">
+      <div className="relative z-10 mx-auto max-w-7xl space-y-5 px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="inline-flex items-center gap-2 bg-white/5 backdrop-blur-xl border border-emerald-500/40 px-4 py-2 rounded-full text-xs font-bold text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Freelances</span>
-            </div>
-            <span className="text-xs text-slate-500 font-semibold">
+            <span
+              className="ibx-badge"
+              style={{
+                borderColor: "color-mix(in srgb, var(--ibx-success) 35%, transparent)",
+                backgroundColor: "var(--ibx-success-soft)",
+                color: "var(--ibx-success)",
+              }}
+            >
+              <Sparkles className="h-3 w-3" aria-hidden="true" />
+              Freelances
+            </span>
+            <span className="ibx-small font-semibold">
               {filteredFreelances.length} talent{filteredFreelances.length > 1 ? "s" : ""}
             </span>
           </div>
 
           {!hideKycCta && (
-            <button
-              onClick={onOpenKycModal}
-            className="group relative inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 bg-[length:200%_auto] hover:bg-right text-white font-black text-xs uppercase tracking-wider hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg shadow-emerald-500/20 overflow-hidden"
-          >
-            <span className="absolute inset-0 bg-white/15 opacity-0 group-hover:opacity-100 group-hover:animate-shine transition-opacity" />
-            <PlusCircle className="w-3.5 h-3.5" />
-            Soumettre Profil & KYC
+            <button type="button" onClick={onOpenKycModal} className="ibx-btn ibx-btn-outline">
+              <PlusCircle className="h-3.5 w-3.5" aria-hidden="true" />
+              Soumettre profil &amp; KYC
             </button>
           )}
         </div>
 
-        {/* Filters & Search Bar */}
-        <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-5">
-          <div className="flex flex-col lg:flex-row items-center gap-4">
-            {/* Search Input */}
-            <div className="relative flex-1 w-full group">
-              <div className="absolute inset-0 bg-[#D69E25]/10 blur-xl rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500" />
-              <div className="relative flex items-center bg-white/5 border border-white/15 rounded-xl overflow-hidden focus-within:border-[#D69E25]/60 transition-all duration-300">
-                <Search className="absolute left-3 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Rechercher par nom, compétence (React, ChatGPT, Branding)..."
-                  className="w-full bg-transparent pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none"
-                />
-              </div>
+        {/* Filtres */}
+        <div className="ibx-card space-y-2.5 p-3">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="relative flex w-full items-center lg:flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 h-4 w-4"
+                style={{ color: "var(--ibx-fg-subtle)" }}
+                aria-hidden="true"
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Rechercher un nom, une compétence…"
+                aria-label="Rechercher un freelance"
+                className="ibx-input pl-9"
+              />
             </div>
 
-            {/* Badge filter */}
-            <div className="flex items-center gap-2 overflow-x-auto w-full lg:w-auto pb-1 lg:pb-0 scrollbar-none snap-x snap-mandatory scroll-px-2 -mx-4 px-4 lg:mx-0 lg:px-0">
+            <div className="ibx-scroll-x" role="group" aria-label="Filtrer par badge">
               <button
-                onClick={() => setBadgeFilter('all')}
-                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition shrink-0 snap-start whitespace-nowrap ${
-                  badgeFilter === 'all'
-                    ? 'bg-white/10 text-white border border-white/20'
-                    : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-white/10'
-                }`}
+                type="button"
+                onClick={() => setBadgeFilter("all")}
+                className="ibx-chip"
+                data-active={badgeFilter === "all" ? "true" : "false"}
               >
-                Tous Badges
+                Tous les badges
               </button>
-
               <button
-                onClick={() => setBadgeFilter('green')}
-                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 snap-start whitespace-nowrap ${
-                  badgeFilter === 'green'
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                    : 'bg-emerald-500/5 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10'
-                }`}
+                type="button"
+                onClick={() => setBadgeFilter("green")}
+                className="ibx-chip"
+                data-active={badgeFilter === "green" ? "true" : "false"}
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Badge Vert</span>
+                <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                Badge vert
               </button>
-
               <button
-                onClick={() => setBadgeFilter('gold')}
-                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 snap-start whitespace-nowrap ${
-                  badgeFilter === 'gold'
-                    ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-[#021231] shadow-lg shadow-amber-500/20'
-                    : 'bg-amber-500/5 text-amber-400 border border-amber-500/20 hover:bg-amber-500/10'
-                }`}
+                type="button"
+                onClick={() => setBadgeFilter("gold")}
+                className="ibx-chip"
+                data-active={badgeFilter === "gold" ? "true" : "false"}
               >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Badge Doré</span>
+                <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+                Badge doré
               </button>
             </div>
           </div>
 
-          {/* Categories Horizontal Selector */}
-          <div className="flex items-center gap-2 overflow-x-auto pt-3 border-t border-white/10 scrollbar-none snap-x snap-mandatory scroll-px-2 -mx-4 px-4 lg:mx-0 lg:px-0">
-            {categories.map((cat) => {
-              const isActive = selectedCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap snap-start shrink-0 transition-all duration-300 ${
-                    isActive
-                      ? 'bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-bold shadow-lg shadow-[#D69E25]/20'
-                      : 'text-slate-400 bg-white/5 hover:bg-white/10 hover:text-white border border-white/10'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              );
-            })}
+          {/* Catégories : une seule ligne défilante */}
+          <div
+            className="ibx-scroll-x border-t pt-2.5"
+            style={{ borderColor: "var(--ibx-border)" }}
+            role="group"
+            aria-label="Filtrer par catégorie"
+          >
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id)}
+                className="ibx-chip"
+                data-active={selectedCategory === cat.id ? "true" : "false"}
+              >
+                {cat.label}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Results count */}
-        <div className="flex items-center justify-between text-xs text-slate-500">
-          <span className="font-medium">
-            {filteredFreelances.length} talent{filteredFreelances.length > 1 ? "s" : ""} trouvé{filteredFreelances.length > 1 ? "s" : ""}
+        <div className="flex items-center justify-between gap-3">
+          <span className="ibx-small font-semibold">
+            {filteredFreelances.length} talent{filteredFreelances.length > 1 ? "s" : ""} trouvé
+            {filteredFreelances.length > 1 ? "s" : ""}
           </span>
           {hasActiveFilters && (
             <button
+              type="button"
               onClick={handleReset}
-              className="flex items-center gap-1.5 text-[#D69E25] hover:text-amber-300 font-semibold transition-colors"
+              className="ibx-btn ibx-btn-ghost"
             >
-              <Search className="w-3 h-3" />
+              <Search className="h-3 w-3" aria-hidden="true" />
               Réinitialiser
             </button>
           )}
         </div>
 
-        {/* Freelances Grid */}
+        {/* Freelances */}
         {filteredFreelances.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="text-center py-16 bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-8 space-y-4"
-          >
-            <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto">
-              <Search className="w-8 h-8 text-slate-500" />
-            </div>
-            <h3 className="text-lg font-bold text-white">Aucun talent ne correspond à votre recherche</h3>
-            <p className="text-slate-400 text-sm max-w-md mx-auto leading-relaxed">
+          <div className="ibx-empty">
+            <p className="ibx-h3">Aucun talent ne correspond à votre recherche</p>
+            <p className="ibx-small mt-1">
               Essayez de réinitialiser vos filtres ou de modifier les mots-clés.
             </p>
-            <button
-              onClick={handleReset}
-              className="px-5 py-2.5 bg-gradient-to-r from-[#D69E25] to-[#AB6F10] text-[#021231] font-bold text-xs rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-[#D69E25]/20"
-            >
-              Réinitialiser les Filtres
+            <button type="button" onClick={handleReset} className="ibx-btn ibx-btn-primary mt-3">
+              Réinitialiser les filtres
             </button>
-          </motion.div>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="ibx-cards-row md:grid-cols-2 lg:grid-cols-3">
             {filteredFreelances.map((freelance, index) => {
               const badgeStyles = getBadgeStyles(freelance.badge || 'none');
               return (
                 <motion.div
                   key={freelance.id}
-                  initial={{ opacity: 0, y: 24 }}
+                  initial={{ opacity: 0, y: 16 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-50px" }}
-                  transition={{ duration: 0.5, delay: index * 0.08, ease: "easeOut" }}
-                  whileHover={{ y: -6, scale: 1.01 }}
-                  className="group relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl hover:border-[#D69E25]/40 hover:shadow-[0_20px_60px_rgba(0,0,0,0.4),0_0_40px_rgba(214,158,37,0.1)] transition-all duration-500 flex flex-col overflow-hidden"
+                  transition={{ duration: 0.4, delay: Math.min(index, 6) * 0.04, ease: "easeOut" }}
+                  className="ibx-card ibx-interactive group relative flex w-[270px] flex-col overflow-hidden md:w-auto"
                 >
-                  {/* Top border gradient on hover */}
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-20" />
-
-                  <div className="p-6 space-y-4 flex-1">
-                    {/* Profile Header */}
-                    <div className="flex items-start gap-4">
+                  <div className="flex-1 space-y-3 p-4">
+                    {/* En-tête du profil */}
+                    <div className="flex items-start gap-3">
                       <div className="relative shrink-0">
                         <img
                           src={freelance.avatar}
                           alt={freelance.name}
-                          className="w-16 h-16 rounded-2xl object-cover border-2 border-[#D69E25]/40 group-hover:scale-105 transition-transform duration-300"
+                          className="h-12 w-12 rounded-xl border object-cover"
+                          style={{ borderColor: "var(--ibx-border)" }}
                         />
                         {freelance.badge === 'gold' && (
-                          <span className="absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center shadow-lg">
-                            <ShieldCheck className="w-3.5 h-3.5 text-[#021231]" />
+                          <span
+                            className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full"
+                            style={{ backgroundColor: "var(--ibx-accent)", color: "#1c1405" }}
+                          >
+                            <ShieldCheck className="h-3 w-3" aria-hidden="true" />
                           </span>
                         )}
                       </div>
 
-                      <div className="space-y-1 min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-bold text-white text-base truncate">{freelance.name}</h3>
-                        </div>
-
-                        <p className="text-xs text-[#D69E25] font-semibold truncate">{freelance.title}</p>
-
-                        <div className="flex items-center gap-3 text-xs text-slate-400 pt-0.5">
-                          <span className="flex items-center gap-1 truncate">
-                            <MapPin className="w-3 h-3 shrink-0" />
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <h3 className="ibx-h3 truncate !text-[13px]">{freelance.name}</h3>
+                        <p className="ibx-tiny truncate !text-[10px] font-semibold" style={{ color: "var(--ibx-accent-strong)" }}>
+                          {freelance.title}
+                        </p>
+                        <div className="flex items-center gap-2 text-[9.5px]" style={{ color: "var(--ibx-fg-muted)" }}>
+                          <span className="flex min-w-0 items-center gap-0.5">
+                            <MapPin className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
                             <span className="truncate">{freelance.location}</span>
                           </span>
-                          <span className="flex items-center gap-0.5 text-amber-400 font-bold shrink-0">
-                            <Star className="w-3 h-3 fill-amber-400" />
+                          <span className="flex shrink-0 items-center gap-0.5 font-bold" style={{ color: "var(--ibx-accent-strong)" }}>
+                            <Star className="h-2.5 w-2.5" style={{ fill: "var(--ibx-accent)" }} aria-hidden="true" />
                             {freelance.rating}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Badge */}
-                    <div className="flex items-center gap-1.5">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold ${badgeStyles.wrapper}`}>
+                    {/* Badges */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold ${badgeStyles.wrapper}`}>
                         {badgeStyles.icon}
                         <span>{badgeStyles.label}</span>
                       </span>
                       {(freelance.badge === 'green' || freelance.badge === 'gold') && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-sky-500/10 text-sky-400 border border-sky-400/30 text-[10px] font-bold">
-                          <BadgeCheck className="w-3 h-3" />
-                          KYC Vérifié
+                        <span className="ibx-badge !text-[9px]">
+                          <BadgeCheck className="h-2.5 w-2.5" aria-hidden="true" />
+                          KYC vérifié
                         </span>
                       )}
                     </div>
 
-                    {/* Bio & Skills */}
-                    <p className="text-slate-400 text-xs line-clamp-2 leading-relaxed">
-                      {freelance.bio}
-                    </p>
+                    {/* Bio & compétences */}
+                    <p className="ibx-tiny line-clamp-2 !text-[10px]">{freelance.bio}</p>
 
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1">
                       {freelance.skills.map((skill: string, idx: number) => (
                         <span
                           key={idx}
-                          className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[10px] font-medium hover:border-[#D69E25]/40 hover:text-[#D69E25] transition-colors"
+                          className="rounded border px-1.5 py-0.5 text-[9px] font-medium"
+                          style={{ borderColor: "var(--ibx-border)", color: "var(--ibx-fg-muted)" }}
                         >
                           {skill}
                         </span>
                       ))}
                     </div>
 
-                    {/* Services Available */}
+                    {/* Prestation phare */}
                     {freelance.services && freelance.services.length > 0 && (
-                      <div className="pt-3 border-t border-white/10 space-y-2">
-                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                          <Briefcase className="w-3 h-3" />
-                          Service Phare
+                      <div
+                        className="space-y-1.5 border-t pt-2.5"
+                        style={{ borderColor: "var(--ibx-border)" }}
+                      >
+                        <span
+                          className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide"
+                          style={{ color: "var(--ibx-success)" }}
+                        >
+                          <Briefcase className="h-2.5 w-2.5" aria-hidden="true" />
+                          Service phare
                         </span>
                         {freelance.services.slice(0, 1).map((serv: FreelanceService) => (
                           <div
                             key={serv.id}
-                            className="bg-white/[0.03] p-3 rounded-xl border border-white/10 flex items-center justify-between gap-2 hover:border-[#D69E25]/30 transition-colors"
+                            className="ibx-card-muted flex items-center justify-between gap-2 p-2"
                           >
                             <div className="min-w-0">
-                              <div className="font-bold text-xs text-white line-clamp-1">{serv.title}</div>
-                              <div className="text-[10px] text-slate-400">Délai : {serv.deliveryDays} jours</div>
+                              <div className="ibx-h3 line-clamp-1 !text-[10.5px]">{serv.title}</div>
+                              <div className="ibx-tiny !text-[9px]">Délai : {serv.deliveryDays} jours</div>
                             </div>
-                            <span className="font-black text-xs text-emerald-400 shrink-0">
+                            <span className="shrink-0 text-[10.5px] font-bold" style={{ color: "var(--ibx-accent-strong)" }}>
                               {serv.startingPrice}$
                             </span>
                           </div>
@@ -356,19 +345,23 @@ export const FreelanceMarketplace: React.FC<FreelanceMarketplaceProps> = ({
                     )}
                   </div>
 
-                  {/* Action Card Footer */}
-                  <div className="p-4 bg-white/[0.02] border-t border-white/10 flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                      <TrendingUp className="w-3.5 h-3.5 text-[#D69E25]" />
-                      <strong className="text-white">{freelance.completedJobs}</strong>
-                      missions réussies
+                  {/* Pied de carte */}
+                  <div
+                    className="flex items-center justify-between gap-2 border-t px-4 py-2.5"
+                    style={{ borderColor: "var(--ibx-border)", backgroundColor: "var(--ibx-surface-muted)" }}
+                  >
+                    <span className="ibx-tiny flex items-center gap-1 !text-[9.5px]">
+                      <TrendingUp className="h-2.5 w-2.5" style={{ color: "var(--ibx-accent-strong)" }} aria-hidden="true" />
+                      <strong style={{ color: "var(--ibx-fg)" }}>{freelance.completedJobs}</strong>
+                      missions
                     </span>
 
                     <button
+                      type="button"
                       onClick={() => setSelectedFreelance(freelance)}
-                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#D69E25] to-[#AB6F10] hover:brightness-110 text-[#021231] font-bold text-xs transition-all duration-300 active:scale-95 shadow-lg shadow-[#D69E25]/20"
+                      className="ibx-btn ibx-btn-outline !px-2.5 !py-1 !text-[10px]"
                     >
-                      Voir Profil
+                      Voir le profil
                     </button>
                   </div>
                 </motion.div>

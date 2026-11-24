@@ -7,7 +7,7 @@ import { useMarketplace, useCommerce, useAuth, useUi } from "@/lib/store/domains
 import { DigitalShop } from "@/components/DigitalShop";
 import { FreelanceMarketplace } from "@/components/FreelanceMarketplace";
 import { EnterpriseDirectory } from "@/components/EnterpriseDirectory";
-import { ShoppingBag, Users, Building2, Loader2, LayoutGrid } from "lucide-react";
+import { ShoppingBag, Users, Building2, Loader2, LayoutGrid, Plus } from "lucide-react";
 
 function getStoreSlug(store: { slug?: string; name?: string }): string {
   const base = store.slug && store.slug.trim() ? store.slug : (store.name || "boutique");
@@ -103,7 +103,7 @@ export function MarketplacePage() {
   };
 
   // Ouvre directement la page publique de la boutique /vendorstore/{slug} (lien court)
-  const handleOpenStore = (store: any) => {
+  const handleOpenStore = (store: { slug?: string; name?: string }) => {
     router.push(`/vendorstore/${encodeURIComponent(getStoreSlug(store))}`);
   };
 
@@ -142,8 +142,8 @@ export function MarketplacePage() {
     <div className="ibx-page ibx-catalogue">
       {/* ==================== EN-TETE ==================== */}
       <header style={{ borderColor: "var(--ibx-border)" }} className="border-b">
-        <div className="ibx-container py-6 sm:py-7">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="ibx-container py-5 sm:py-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 space-y-1.5">
               <p className="ibx-label">Marketplace numérique</p>
               <h1 className="ibx-h1">Produits numériques, freelances et entreprises</h1>
@@ -169,12 +169,24 @@ export function MarketplacePage() {
               >
                 Ressources numériques
               </button>
+              {/* Appel vendeur déplacé depuis la barre de filtres supprimée */}
+              {!hideVendorCta && (
+                <button
+                  type="button"
+                  onClick={handleOpenVendorApplication}
+                  className="ibx-btn ibx-btn-primary"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  Ouvrir ma boutique
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Indicateurs de sections : cartes distinctes, séparées et cliquables */}
+          {/* Indicateurs de sections : rangée horizontale défilante sur mobile,
+              trois cartes distinctes sur grand écran */}
           <div
-            className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3"
+            className="mt-4 flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0"
             role="tablist"
             aria-label="Sections de la marketplace"
           >
@@ -194,7 +206,7 @@ export function MarketplacePage() {
                   role="tab"
                   aria-selected={isActive}
                   onClick={() => handleSectionChange(tab.id)}
-                  className="ibx-card-flat ibx-interactive flex items-center gap-3 p-3 text-left"
+                  className="ibx-card-flat ibx-interactive flex w-[190px] shrink-0 snap-start items-center gap-2.5 p-2.5 text-left sm:w-auto"
                   style={{
                     borderColor: isActive ? "var(--ibx-accent)" : "var(--ibx-border)",
                     backgroundColor: isActive
@@ -203,18 +215,18 @@ export function MarketplacePage() {
                   }}
                 >
                   <span
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--ibx-radius-sm)]"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--ibx-radius-sm)]"
                     style={{
                       backgroundColor: isActive ? "var(--ibx-accent)" : "var(--ibx-surface-muted)",
                       color: isActive ? "#1c1405" : "var(--ibx-accent-strong)",
                     }}
                     aria-hidden="true"
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-3.5 w-3.5" />
                   </span>
                   <span className="min-w-0">
-                    <span className="ibx-h3 block truncate">{tab.label}</span>
-                    <span className="ibx-tiny block">
+                    <span className="ibx-h3 block truncate !text-[12px]">{tab.label}</span>
+                    <span className="ibx-tiny block !text-[9.5px]">
                       {count} {tab.id === "shop" ? "produit" : "profil"}
                       {count > 1 ? "s" : ""}
                     </span>
@@ -241,8 +253,6 @@ export function MarketplacePage() {
             onDeleteProduct={deleteProduct}
             onEditProduct={updateProduct}
             onOpenStore={handleOpenStore}
-            onOpenVendorApplication={handleOpenVendorApplication}
-            hideVendorCta={hideVendorCta}
             onClearSearch={() => setSearchQuery("")}
             onSearchChange={setSearchQuery}
             initialFilter={typeParam}

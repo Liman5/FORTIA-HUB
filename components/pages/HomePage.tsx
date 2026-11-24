@@ -511,7 +511,7 @@ function CourseCard({
   return (
     <article
       onClick={onOpen}
-      className="ibx-card-flat ibx-interactive group relative w-[228px] shrink-0 snap-start cursor-pointer overflow-hidden text-left sm:w-[248px]"
+      className="ibx-card-flat ibx-interactive group relative w-[196px] shrink-0 snap-start cursor-pointer overflow-hidden text-left sm:w-[214px]"
     >
       {/* Texture douce : léger dégradé doré en haut, sans surcharger la carte */}
       <span
@@ -523,10 +523,10 @@ function CourseCard({
         }}
       />
 
-      <div className="ibx-media relative h-32">
+      <div className="ibx-media relative h-28">
         <Thumb src={course.image} alt={course.title} className="h-full w-full" />
         <span
-          className="absolute left-2 top-2 max-w-[70%] truncate rounded-full px-2 py-0.5 text-[9px] font-black"
+          className="absolute left-1.5 top-1.5 max-w-[70%] truncate rounded-full px-1.5 py-0.5 text-[8px] font-bold"
           style={{ backgroundColor: "var(--ibx-accent)", color: "#1c1405" }}
         >
           {course.badge || course.categoryLabel || "Certifiant"}
@@ -537,7 +537,7 @@ function CourseCard({
             event.stopPropagation();
             onToggleFavorite();
           }}
-          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border transition"
+          className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border transition"
           style={{
             backgroundColor: "color-mix(in srgb, var(--ibx-surface) 92%, transparent)",
             borderColor: "var(--ibx-border)",
@@ -546,7 +546,7 @@ function CourseCard({
           aria-label="Ajouter aux favoris"
         >
           <Heart
-            className="h-3.5 w-3.5"
+            className="h-3 w-3"
             style={{
               color: isFavorite ? "var(--ibx-danger)" : "var(--ibx-fg-muted)",
               fill: isFavorite ? "var(--ibx-danger)" : "transparent",
@@ -555,54 +555,63 @@ function CourseCard({
         </button>
       </div>
 
-      <div className="relative flex flex-col gap-2 p-3">
-        <h3 className="ibx-h3 line-clamp-2 min-h-[32px] leading-snug">{course.title}</h3>
+      <div className="relative flex flex-col gap-1.5 p-2.5">
+        <h3 className="ibx-h3 line-clamp-2 min-h-[32px] !text-[12.5px] leading-[1.3]">
+          {course.title}
+        </h3>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <span
-            className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full border"
+            className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full border"
             style={{ borderColor: "var(--ibx-border)", backgroundColor: "var(--ibx-surface-muted)" }}
           >
             {course.instructor?.avatar ? (
               <Thumb
                 src={course.instructor.avatar}
                 alt={course.instructor?.name || "Formateur"}
-                className="h-5 w-5 rounded-full"
+                className="h-4 w-4 rounded-full"
               />
             ) : (
-              <User className="h-3 w-3" style={{ color: "var(--ibx-fg-subtle)" }} />
+              <User className="h-2.5 w-2.5" style={{ color: "var(--ibx-fg-subtle)" }} />
             )}
           </span>
-          <span className="ibx-tiny truncate">{course.instructor?.name || "FORTIA HUB"}</span>
+          <span className="ibx-tiny truncate !text-[10px]">{course.instructor?.name || "FORTIA HUB"}</span>
         </div>
 
-        <div className="flex items-center gap-2 text-[10px]">
+        <div className="flex items-center gap-1.5 text-[10px]">
           {(Number(course.reviewsCount) || 0) > 0 ? (
             <>
-              <span className="flex items-center gap-0.5 font-black" style={{ color: "var(--ibx-accent-strong)" }}>
-                <Star className="h-3 w-3" style={{ fill: "var(--ibx-accent)", color: "var(--ibx-accent)" }} />
+              <span className="flex items-center gap-0.5 font-bold" style={{ color: "var(--ibx-accent-strong)" }}>
+                <Star className="h-2.5 w-2.5" style={{ fill: "var(--ibx-accent)", color: "var(--ibx-accent)" }} />
                 {Number(course.rating || 0).toFixed(1)}
               </span>
-              <span className="ibx-tiny">({course.reviewsCount})</span>
+              <span className="ibx-tiny !text-[9px]">({course.reviewsCount})</span>
             </>
           ) : (
-            <span className="ibx-tiny">Nouveau</span>
+            <span className="ibx-tiny !text-[9px]">Nouveau</span>
           )}
-          <span className="ibx-tiny ml-auto inline-flex items-center gap-0.5 font-semibold">
-            <Clock className="h-3 w-3" />
+          <span className="ibx-tiny ml-auto inline-flex items-center gap-0.5 !text-[9px] font-semibold">
+            <Clock className="h-2.5 w-2.5" />
             {course.durationHours || 0}h
           </span>
         </div>
 
         <div
-          className="mt-auto flex items-end justify-between gap-2 border-t pt-2"
+          className="mt-auto flex items-end justify-between gap-1.5 border-t pt-1.5"
           style={{ borderColor: "var(--ibx-border)" }}
         >
           <span className="min-w-0">
-            <span className="ibx-price block !text-[13px]">{price.primary}</span>
-            {price.secondary && <span className="ibx-tiny block">{price.secondary}</span>}
+            <span className="ibx-price block !text-[12.5px]">{price.primary}</span>
+            {price.secondary && <span className="ibx-tiny block !text-[9px]">{price.secondary}</span>}
           </span>
-          <span className="ibx-tiny shrink-0 font-bold uppercase">{course.level}</span>
+          {course.level && (
+            <span
+              className="shrink-0 rounded border px-1 py-px text-[8.5px] font-semibold"
+              style={{ borderColor: "var(--ibx-border)", color: "var(--ibx-fg-muted)" }}
+            >
+              {course.level}
+            </span>
+          )}
         </div>
       </div>
     </article>
@@ -620,15 +629,15 @@ function CenterCard({
   return (
     <div
       onClick={onOpen}
-      className="ibx-card-flat ibx-interactive w-[210px] shrink-0 snap-start cursor-pointer overflow-hidden text-left"
+      className="ibx-card-flat ibx-interactive w-[178px] shrink-0 snap-start cursor-pointer overflow-hidden text-left"
     >
-      <div className="ibx-media relative h-24">
+      <div className="ibx-media relative h-20">
         <Thumb src={center.banner} alt={center.centerName} className="h-full w-full" />
       </div>
-      <div className="space-y-1 p-3">
-        <h3 className="ibx-h3 line-clamp-1">{center.centerName}</h3>
-        <span className="ibx-tiny flex items-center gap-1 font-semibold">
-          <Users className="h-3 w-3" style={{ color: "var(--ibx-accent-strong)" }} />
+      <div className="space-y-0.5 p-2.5">
+        <h3 className="ibx-h3 line-clamp-1 !text-[12px]">{center.centerName}</h3>
+        <span className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: "var(--ibx-fg-muted)" }}>
+          <Users className="h-2.5 w-2.5" style={{ color: "var(--ibx-accent-strong)" }} />
           {center.learnersLabel}
         </span>
       </div>
@@ -663,7 +672,7 @@ function ProductCard({
   const pricePair = formatPricePair(price, money);
 
   return (
-    <article className="ibx-card-flat ibx-interactive relative flex w-[190px] shrink-0 snap-start flex-col overflow-hidden sm:w-[210px]">
+    <article className="ibx-card-flat ibx-interactive relative flex w-[168px] shrink-0 snap-start flex-col overflow-hidden sm:w-[188px]">
       {/* Texture : voile doré très léger, distinct de la carte formation */}
       <span
         aria-hidden="true"
@@ -674,7 +683,7 @@ function ProductCard({
         }}
       />
       {/* Visuel : le clic agrandit l'image (distinct du clic qui ouvre la fiche) */}
-      <div className="ibx-media relative h-32">
+      <div className="ibx-media relative h-28">
         {product.image ? (
           <>
             <img
@@ -691,7 +700,7 @@ function ProductCard({
               aria-label={`Agrandir l'image de ${product.title}`}
               title="Agrandir l'image"
             >
-              <ZoomIn className="h-3.5 w-3.5" aria-hidden="true" />
+              <ZoomIn className="h-3 w-3" aria-hidden="true" />
             </button>
           </>
         ) : (
@@ -704,22 +713,22 @@ function ProductCard({
           </span>
         )}
         {product.typeLabel && (
-          <span className="ibx-badge absolute left-2 top-2 max-w-[80%] truncate">
+          <span className="absolute left-1.5 top-1.5 max-w-[80%] truncate rounded-full px-1.5 py-0.5 text-[8px] font-bold" style={{ backgroundColor: "var(--ibx-accent)", color: "#1c1405" }}>
             {product.typeLabel}
           </span>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-1.5 p-3">
+      <div className="flex flex-1 flex-col gap-1 p-2.5">
         <button type="button" onClick={onOpen} className="text-left">
-          <h3 className="ibx-h3 line-clamp-2 min-h-[32px]">{product.title}</h3>
+          <h3 className="ibx-h3 line-clamp-2 min-h-[32px] !text-[12px] leading-[1.3]">{product.title}</h3>
         </button>
-        <div className="flex items-center justify-between gap-2">
-          <span className="ibx-tiny truncate">{product.storeName || "FORTIA HUB"}</span>
+        <div className="flex items-center justify-between gap-1.5">
+          <span className="ibx-tiny truncate !text-[9px]">{product.storeName || "FORTIA HUB"}</span>
           {reviewsCount > 0 && (
-            <span className="ibx-tiny inline-flex shrink-0 items-center gap-0.5">
+            <span className="inline-flex shrink-0 items-center gap-0.5 text-[9px]" style={{ color: "var(--ibx-fg-muted)" }}>
               <Star
-                className="h-3 w-3"
+                className="h-2.5 w-2.5"
                 aria-hidden="true"
                 style={{ color: "var(--ibx-accent)", fill: "var(--ibx-accent)" }}
               />
@@ -728,14 +737,14 @@ function ProductCard({
           )}
         </div>
         <div
-          className="mt-auto flex items-center justify-between gap-2 border-t pt-2"
+          className="mt-auto flex items-center justify-between gap-1.5 border-t pt-1.5"
           style={{ borderColor: "var(--ibx-border)" }}
         >
           <span className="min-w-0">
-            <span className="ibx-price block">{pricePair.primary}</span>
-            {pricePair.secondary && <span className="ibx-tiny block">{pricePair.secondary}</span>}
+            <span className="ibx-price block !text-[12px]">{pricePair.primary}</span>
+            {pricePair.secondary && <span className="ibx-tiny block !text-[9px]">{pricePair.secondary}</span>}
           </span>
-          <button type="button" onClick={onOpen} className="ibx-btn ibx-btn-ghost !px-2 !py-1">
+          <button type="button" onClick={onOpen} className="ibx-btn ibx-btn-ghost !px-1.5 !py-0.5 !text-[9px]">
             Voir
           </button>
         </div>
@@ -781,7 +790,7 @@ function ResourcesGrid({
             key={tile.key}
             type="button"
             onClick={() => onOpen(tile.productType)}
-            className="ibx-card-flat ibx-interactive relative flex w-[150px] shrink-0 snap-start cursor-pointer flex-col gap-2 overflow-hidden p-3 text-left sm:w-[168px]"
+            className="ibx-card-flat ibx-interactive relative flex w-[132px] shrink-0 snap-start cursor-pointer flex-col gap-1.5 overflow-hidden p-2.5 text-left sm:w-[150px]"
           >
             <span
               aria-hidden="true"
@@ -791,18 +800,18 @@ function ResourcesGrid({
               }}
             />
             <span
-              className="relative flex h-9 w-9 items-center justify-center rounded-[var(--ibx-radius-sm)]"
+              className="relative flex h-8 w-8 items-center justify-center rounded-[var(--ibx-radius-sm)]"
               style={{
                 backgroundColor: `color-mix(in srgb, ${tile.color} 16%, var(--ibx-surface))`,
                 color: tile.color,
               }}
               aria-hidden="true"
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-3.5 w-3.5" />
             </span>
             <span className="relative block">
-              <span className="ibx-h3 block leading-tight">{tile.label}</span>
-              <span className="ibx-tiny mt-0.5 block">
+              <span className="ibx-h3 block !text-[11.5px] leading-[1.25]">{tile.label}</span>
+              <span className="ibx-tiny mt-0.5 block !text-[9px]">
                 {tile.minPriceUsd > 0 ? `Dès ${formatFcfa(tile.minPriceUsd, money.rate)}` : "Gratuit"}
               </span>
             </span>
@@ -832,12 +841,12 @@ function ProductShowcaseBanner({ products, money }: { products: any[]; money: Mo
         }}
       />
       <div
-        className="relative flex items-center justify-between gap-4 border-b px-5 py-4"
+        className="relative flex items-center justify-between gap-3 border-b px-4 py-3"
         style={{ borderColor: "var(--ibx-border)" }}
       >
         <div>
-          <p className="ibx-h3">Sélection numérique</p>
-          <p className="ibx-tiny mt-0.5">
+          <p className="ibx-h3 !text-[12.5px]">Sélection numérique</p>
+          <p className="ibx-tiny mt-0.5 !text-[9.5px]">
             Des ressources prêtes à télécharger, choisies dans la boutique.
           </p>
         </div>
@@ -849,7 +858,7 @@ function ProductShowcaseBanner({ products, money }: { products: any[]; money: Mo
           Voir la boutique
         </button>
       </div>
-      <div className="ibx-scroll-x relative gap-3 p-4">
+      <div className="relative flex snap-x gap-2.5 overflow-x-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {products.slice(0, 5).map((product: any) => (
           <button
             key={product.id}
@@ -857,15 +866,15 @@ function ProductShowcaseBanner({ products, money }: { products: any[]; money: Mo
             onClick={() =>
               router.push(`/product/${encodeURIComponent(String(product.slug || product.id))}`)
             }
-            className="w-[160px] shrink-0 text-left"
+            className="ibx-card-flat ibx-interactive group w-[148px] shrink-0 snap-start overflow-hidden text-left"
           >
-            <span className="ibx-media block h-28 w-full rounded-[var(--ibx-radius-sm)]">
+            <span className="ibx-media block h-24 w-full">
               {product.image ? (
                 <img
                   src={product.image}
                   alt={product.title}
                   loading="lazy"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
                 />
               ) : (
                 <span className="flex h-full w-full items-center justify-center">
@@ -877,9 +886,11 @@ function ProductShowcaseBanner({ products, money }: { products: any[]; money: Mo
                 </span>
               )}
             </span>
-            <span className="ibx-h3 mt-2 line-clamp-1 block">{product.title}</span>
-            <span className="ibx-tiny mt-0.5 block">
-              {formatPricePair(Number(product.price) || 0, money).primary}
+            <span className="block p-2">
+              <span className="ibx-h3 line-clamp-1 !text-[11.5px] leading-[1.3]">{product.title}</span>
+              <span className="mt-0.5 block text-[9px] font-semibold" style={{ color: "var(--ibx-accent-strong)" }}>
+                {formatPricePair(Number(product.price) || 0, money).primary}
+              </span>
             </span>
           </button>
         ))}
@@ -922,6 +933,95 @@ function PromoBannerSlot({ offset }: { offset: number }) {
         </div>
       </button>
     </section>
+  );
+}
+
+/** Bandeau de catégories de produits : trois visibles à la fois sur mobile,
+ *  défilement automatique toutes les 3,2 s (mise en pause au survol et au
+ *  toucher). À partir de 768 px, les catégories passent en grille alignée. */
+function ProductCategoryRail({
+  categories,
+  onSelect,
+}: {
+  categories: ProductCategoryOption[];
+  onSelect: (slug: string) => void;
+}) {
+  const railRef = React.useRef<HTMLDivElement>(null);
+  const pausedRef = React.useRef(false);
+
+  useEffect(() => {
+    if (categories.length <= 3) return;
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) return;
+
+    const timer = window.setInterval(() => {
+      const el = railRef.current;
+      if (!el || pausedRef.current) return;
+      // Rotation uniquement sur mobile : le desktop affiche la grille.
+      if (!window.matchMedia("(max-width: 767px)").matches) return;
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 8;
+      el.scrollTo({ left: atEnd ? 0 : el.scrollLeft + el.clientWidth, behavior: "smooth" });
+    }, 3200);
+
+    return () => window.clearInterval(timer);
+  }, [categories.length]);
+
+  return (
+    <div
+      ref={railRef}
+      role="group"
+      aria-label="Catégories de produits numériques"
+      className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-3 md:gap-3 md:overflow-visible md:pb-0"
+      onPointerEnter={() => {
+        pausedRef.current = true;
+      }}
+      onPointerLeave={() => {
+        pausedRef.current = false;
+      }}
+      onTouchStart={() => {
+        pausedRef.current = true;
+      }}
+      onFocusCapture={() => {
+        pausedRef.current = true;
+      }}
+      onBlurCapture={() => {
+        pausedRef.current = false;
+      }}
+    >
+      {categories.map((category) => (
+        <button
+          key={category.slug}
+          type="button"
+          onClick={() => onSelect(category.slug)}
+          className="ibx-card-flat ibx-interactive group relative flex w-[calc((100%_-_1rem)/3)] shrink-0 snap-start items-center justify-between gap-1 overflow-hidden p-2.5 text-left md:w-auto md:gap-3 md:px-3.5 md:py-3"
+        >
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(120deg, color-mix(in srgb, var(--ibx-accent) 7%, transparent) 0%, transparent 55%)",
+            }}
+          />
+          <span className="relative min-w-0">
+            <span className="ibx-h3 line-clamp-2 block !text-[10.5px] leading-[1.25] md:!text-[12.5px]">
+              {category.label}
+            </span>
+            <span className="ibx-tiny mt-0.5 block !text-[8.5px] md:!text-[9.5px]">
+              {category.count} produit{category.count > 1 ? "s" : ""}
+            </span>
+          </span>
+          <ChevronRight
+            className="relative hidden h-3.5 w-3.5 shrink-0 transition group-hover:translate-x-0.5 md:block"
+            style={{ color: "var(--ibx-accent-strong)" }}
+            aria-hidden="true"
+          />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -1112,38 +1212,12 @@ export function HomePage() {
               actionLabel="Toutes les catégories"
               onAction={() => router.push("/marketplace/categories")}
             />
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {productCategories.slice(0, 9).map((category) => (
-                <button
-                  key={category.slug}
-                  type="button"
-                  onClick={() =>
-                    router.push(`/marketplace?categorie=${encodeURIComponent(category.slug)}`)
-                  }
-                  className="ibx-card-flat ibx-interactive group relative flex cursor-pointer items-center justify-between gap-3 overflow-hidden px-3.5 py-3 text-left"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0"
-                    style={{
-                      background:
-                        "linear-gradient(120deg, color-mix(in srgb, var(--ibx-accent) 7%, transparent) 0%, transparent 55%)",
-                    }}
-                  />
-                  <span className="relative min-w-0">
-                    <span className="ibx-h3 block truncate">{category.label}</span>
-                    <span className="ibx-tiny mt-0.5 block">
-                      {category.count} produit{category.count > 1 ? "s" : ""}
-                    </span>
-                  </span>
-                  <ChevronRight
-                    className="relative h-3.5 w-3.5 shrink-0 transition group-hover:translate-x-0.5"
-                    style={{ color: "var(--ibx-accent-strong)" }}
-                    aria-hidden="true"
-                  />
-                </button>
-              ))}
-            </div>
+            <ProductCategoryRail
+              categories={productCategories.slice(0, 9)}
+              onSelect={(slug) =>
+                router.push(`/marketplace?categorie=${encodeURIComponent(slug)}`)
+              }
+            />
           </section>
         )}
 
@@ -1187,30 +1261,47 @@ export function HomePage() {
                   key={profile.id}
                   type="button"
                   onClick={() => router.push(`/freelances/${encodeURIComponent(profile.id)}`)}
-                  className="w-[230px] shrink-0 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-[#D5A02B] dark:border-slate-700 dark:bg-[#222832]"
+                  className="ibx-card-flat ibx-interactive w-[190px] shrink-0 snap-start p-3 text-left"
                 >
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-2">
                     {profile.avatar ? (
-                      <img src={profile.avatar} alt={profile.name} className="h-11 w-11 rounded-full object-cover" />
+                      <img src={profile.avatar} alt={profile.name} className="h-9 w-9 rounded-full object-cover" />
                     ) : (
-                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 font-black text-slate-500 dark:bg-slate-700 dark:text-slate-200">
+                      <span
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-bold"
+                        style={{ backgroundColor: "var(--ibx-surface-muted)", color: "var(--ibx-fg-muted)" }}
+                      >
                         {(profile.name || "F").slice(0, 1)}
                       </span>
                     )}
                     <div className="min-w-0">
-                      <span className="flex items-center gap-1.5">
-                        <span className="truncate text-xs font-bold text-slate-900 dark:text-slate-100">{profile.name}</span>
-                        {profile.kycVerified && <BadgeCheck className="h-3.5 w-3.5 text-emerald-600" />}
+                      <span className="flex items-center gap-1">
+                        <span className="ibx-h3 truncate !text-[11.5px]">{profile.name}</span>
+                        {profile.kycVerified && (
+                          <BadgeCheck className="h-3 w-3 shrink-0" style={{ color: "var(--ibx-success)" }} />
+                        )}
                       </span>
-                      <span className="mt-0.5 block truncate text-[10px] text-slate-500 dark:text-slate-400">{profile.title || profile.category}</span>
+                      <span className="ibx-tiny mt-0.5 block truncate !text-[9px]">
+                        {profile.title || profile.category}
+                      </span>
                     </div>
                   </div>
-                  <div className="mt-3 flex items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400">
-                    {profile.rating > 0 && <span className="flex items-center gap-1"><Star className="h-3 w-3" /> {profile.rating}</span>}
-                    {profile.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {profile.location}</span>}
+                  <div className="mt-2 flex items-center gap-2.5 text-[9px]" style={{ color: "var(--ibx-fg-muted)" }}>
+                    {profile.rating > 0 && (
+                      <span className="flex items-center gap-0.5">
+                        <Star className="h-2.5 w-2.5" /> {profile.rating}
+                      </span>
+                    )}
+                    {profile.location && (
+                      <span className="flex items-center gap-0.5 truncate">
+                        <MapPin className="h-2.5 w-2.5 shrink-0" /> {profile.location}
+                      </span>
+                    )}
                   </div>
                   {profile.skills?.length > 0 && (
-                    <p className="mt-2 line-clamp-1 text-[10px] text-slate-400">{profile.skills.slice(0, 3).join(" · ")}</p>
+                    <p className="mt-1.5 line-clamp-1 text-[9px]" style={{ color: "var(--ibx-fg-subtle)" }}>
+                      {profile.skills.slice(0, 3).join(" · ")}
+                    </p>
                   )}
                 </button>
               ))}

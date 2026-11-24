@@ -12,8 +12,8 @@ html.light {
   --ibx-fg: #222b38;
   --ibx-fg-muted: #687386;
   --ibx-fg-subtle: #8a95a5;
-  --ibx-border: #dfe3e9;
-  --ibx-border-strong: #c8ced8;
+  --ibx-border: #d6dbe4;
+  --ibx-border-strong: #bcc4d1;
   --ibx-accent: #d5a02b;
   --ibx-accent-strong: #b7831b;
   --ibx-accent-soft: #fbf3df;
@@ -41,8 +41,8 @@ html.dark {
   --ibx-fg: #f1f3f6;
   --ibx-fg-muted: #aab4c2;
   --ibx-fg-subtle: #8792a1;
-  --ibx-border: #343c48;
-  --ibx-border-strong: #46505f;
+  --ibx-border: #3b4350;
+  --ibx-border-strong: #525d6c;
   --ibx-accent: #e0b34c;
   --ibx-accent-strong: #f0c76a;
   --ibx-accent-soft: #352c1b;
@@ -206,6 +206,8 @@ html.dark .ibx-profile-page [class*="bg-slate-50"] {
 html.dark .ibx-profile-page [class*="border-slate-200"],
 html.dark .ibx-profile-page [class*="border-slate-100"] {
   border-color: var(--ibx-border) !important;
+}
+
 /* ==========================================================================
    IBX MINIMAL - PRIMITIVES DE CATALOGUE ET DE DECOUVERTE
    Mises en page, cartes, puces de filtre, medias, galerie plein ecran.
@@ -368,6 +370,33 @@ html.dark .ibx-profile-page [class*="border-slate-100"] {
 }
 .ibx-scroll-x::-webkit-scrollbar { display: none; }
 
+/* Rangée de cartes : défilement horizontal sur mobile/tablette, grille
+   sobre dès 768 px. Le gabarit de colonnes reste fourni par Tailwind
+   (`md:grid-cols-2`, `lg:grid-cols-3`…). */
+.ibx-cards-row {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 0.25rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 0.25rem;
+}
+.ibx-cards-row::-webkit-scrollbar { display: none; }
+.ibx-cards-row > * { flex: 0 0 auto; scroll-snap-align: start; }
+
+@media (min-width: 768px) {
+  .ibx-cards-row {
+    display: grid;
+    gap: 1rem;
+    overflow-x: visible;
+    scroll-snap-type: none;
+    padding-bottom: 0;
+  }
+  .ibx-cards-row > * { flex: initial; }
+}
+
 /* --------------------------- GALERIE PLEIN ECRAN -------------------------- */
 .ibx-lightbox {
   position: fixed;
@@ -509,7 +538,6 @@ html.dark .ibx-catalogue [class*="text-[#D69E25]"] {
   .ibx-lightbox-nav { transition: none; }
 }
 
-}
 html.dark .ibx-profile-page [class*="text-slate-900"],
 html.dark .ibx-profile-page [class*="text-slate-800"],
 html.dark .ibx-profile-page [class*="text-slate-700"] {
@@ -525,5 +553,25 @@ html.light .ibx-profile-page [class*="bg-white"] {
 html.light .ibx-profile-page [class*="text-slate-900"] {
   color: var(--ibx-fg) !important;
 }
+
+/* ==========================================================================
+   CONTENUS ET RYTHME DES CATALOGUES (accueil, marketplace, académie)
+   --------------------------------------------------------------------------
+   Les cartes gardent un contour visible dans les deux thèmes ; les rangées
+   horizontales (`.ibx-cards-row`) deviennent des grilles sobres dès 768 px.
+   Aucun effet de couleur : uniquement contours, espacements et tailles.
+   ========================================================================== */
+.ibx-card,
+.ibx-card-flat,
+.ibx-card-muted {
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ibx-card,
+  .ibx-card-flat,
+  .ibx-card-muted { transition: none; }
+}
+
 
 
