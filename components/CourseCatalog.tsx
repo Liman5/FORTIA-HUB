@@ -17,6 +17,8 @@ import {
   GraduationCap,
   SlidersHorizontal,
 } from "lucide-react";
+import { useAppStore } from "@/lib/store/AppStore";
+import { formatPricePair, resolveMoneyConfig } from "@/lib/data/currency";
 import {
   COURSE_VIEWS,
   applyCourseView,
@@ -199,11 +201,8 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
   };
 
   return (
-    <section className="py-8 bg-[#021231] min-h-[600px] relative overflow-x-clip" id="courses-section">
-      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/20 to-transparent" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(214,158,37,0.03)_0%,transparent_50%)]" />
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5 relative z-10">
+    <section className="relative min-h-[600px] overflow-x-clip py-6" id="courses-section">
+      <div className="ibx-container space-y-5 relative z-10">
 
         {/* ===================== EN-TÊTE DU CATALOGUE ===================== */}
         <div className="space-y-3">
@@ -228,51 +227,69 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
             </span>
           </div>
 
-          {/* Recherche + accès aux filtres */}
+          {/* Recherche (uniquement < lg : l'en-tête global la fournit sur desktop) */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex items-center flex-1 min-w-[190px] bg-white/5 border border-white/15 rounded-xl overflow-hidden focus-within:border-[#D69E25]/60 transition-all">
-              <Search className="absolute left-3 w-4 h-4 text-slate-400 shrink-0" />
+            <div className="relative flex min-w-[190px] flex-1 items-center lg:hidden">
+              <Search
+                className="pointer-events-none absolute left-3 h-4 w-4"
+                style={{ color: "var(--ibx-fg-subtle)" }}
+                aria-hidden="true"
+              />
               <input
-                type="text"
+                type="search"
                 value={searchQuery}
                 onChange={(e) => onSearchChange?.(e.target.value)}
-                placeholder="Rechercher une formation..."
-                className="w-full bg-transparent text-sm text-white placeholder-slate-400 pl-9 pr-8 py-2.5 focus:outline-none"
+                placeholder="Rechercher une formation…"
+                aria-label="Rechercher une formation"
+                className="ibx-input pl-9 pr-9"
               />
               {searchQuery && (
                 <button
+                  type="button"
                   onClick={() => onSearchChange?.("")}
-                  className="absolute right-2 p-1 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition"
-                  title="Effacer la recherche"
+                  className="absolute right-2 inline-flex h-6 w-6 items-center justify-center rounded-full"
+                  style={{ color: "var(--ibx-fg-muted)" }}
                   aria-label="Effacer la recherche"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               )}
             </div>
 
+            {searchQuery && (
+              <button
+                type="button"
+                className="ibx-chip hidden lg:inline-flex"
+                data-active="true"
+                onClick={() => onSearchChange?.("")}
+                aria-label={`Retirer la recherche ${searchQuery}`}
+              >
+                « {searchQuery} »
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            )}
+
             <button
+              type="button"
               onClick={() => setShowMoreFilters((v) => !v)}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold border transition ${
+              className={`ibx-btn ${
                 showMoreFilters || selectedLevel !== "all" || selectedPrice !== "all"
-                  ? "bg-[#D69E25]/15 border-[#D69E25]/50 text-[#D69E25]"
-                  : "bg-white/5 border-white/15 text-slate-300 hover:text-white hover:bg-white/10"
+                  ? "ibx-btn-primary"
+                  : "ibx-btn-outline"
               }`}
               aria-expanded={showMoreFilters}
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
               Filtres
               <ChevronDown
-                className={`w-3.5 h-3.5 transition-transform ${showMoreFilters ? "rotate-180" : ""}`}
+                className={`h-3.5 w-3.5 transition-transform ${showMoreFilters ? "rotate-180" : ""}`}
+                aria-hidden="true"
               />
             </button>
 
             {hasActiveFilters && (
-              <button
-                onClick={handleReset}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white/5 border border-white/15 text-slate-300 hover:text-white hover:bg-white/10 transition"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
+              <button type="button" onClick={handleReset} className="ibx-btn ibx-btn-ghost">
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                 Réinitialiser
               </button>
             )}
@@ -462,13 +479,16 @@ function CourseCardItem({
   onAddToCart: (item: CartItem) => void;
   onRate?: (courseId: string, rating: number) => void;
 }) {
+  const { siteContent } = useAppStore();
+  const money = resolveMoneyConfig(siteContent);
+  const price = Number(course?.price) || 0;
+  const pricePair = formatPricePair(price, money);
   const instructorName =
     course?.instructor?.name || course?.instructorName || "Formateur FORTIA HUB";
   const avatarSrc = course?.instructor?.avatar || course?.instructorAvatar || "";
   const initial = instructorName.trim().charAt(0).toUpperCase() || "F";
   const reviewsCount = Number(course?.reviewsCount) || 0;
   const rating = Number(course?.rating) || 0;
-  const price = Number(course?.price) || 0;
 
   return (
     <motion.div
@@ -479,8 +499,18 @@ function CourseCardItem({
       whileHover={{ y: -6 }}
       className="group relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl shadow-xl hover:border-[#D69E25]/40 transition-all duration-500 flex flex-col overflow-hidden"
     >
+      {/* Texture douce : léger dégradé doré, cohérent avec les autres cartes */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(158deg, color-mix(in srgb, var(--ibx-accent) 9%, transparent) 0%, transparent 46%)",
+        }}
+      />
+
       {/* Couverture */}
-      <div className="relative h-32 sm:h-40 overflow-hidden bg-[#021231]">
+      <div className="relative h-40 overflow-hidden bg-[#021231] sm:h-44">
         {course?.image ? (
           <OptimizedImage
             src={course.image}
@@ -496,7 +526,10 @@ function CourseCardItem({
         <div className="absolute inset-0 bg-gradient-to-t from-[#021231] via-[#021231]/30 to-transparent pointer-events-none" />
 
         {course?.categoryLabel && (
-          <span className="absolute top-2 left-2 bg-[#021231]/85 backdrop-blur-md text-[#D69E25] border border-[#D69E25]/40 text-[8px] sm:text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wide whitespace-nowrap max-w-[70%] truncate">
+          <span
+            className="absolute left-2 top-2 max-w-[70%] truncate rounded-full px-2.5 py-1 text-[8px] font-extrabold uppercase tracking-wide sm:text-[10px]"
+            style={{ backgroundColor: "var(--ibx-accent)", color: "#1c1405" }}
+          >
             {course.categoryLabel}
           </span>
         )}
@@ -508,7 +541,14 @@ function CourseCardItem({
         )}
 
         {course?.level && (
-          <span className="absolute bottom-2 left-2 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[9px] sm:text-[10px] font-semibold px-2 py-0.5 rounded-lg">
+          <span
+            className="absolute bottom-2 left-2 rounded-lg px-2 py-0.5 text-[9px] font-semibold sm:text-[10px]"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--ibx-surface) 90%, transparent)",
+              color: "var(--ibx-fg)",
+              border: "1px solid var(--ibx-border)",
+            }}
+          >
             {course.level}
           </span>
         )}
@@ -603,13 +643,13 @@ function CourseCardItem({
             </div>
           </div>
 
-          {/* Prix + actions */}
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <div>
-              <span className="block text-lg font-black text-white leading-none">${price}</span>
-              <span className="block text-[9px] sm:text-[10px] text-slate-500 font-medium mt-1">
-                ≈ {(price * 600).toLocaleString("fr-FR")} FCFA
-              </span>
+          {/* Prix + actions — FCFA principal, USD secondaire facultatif */}
+          <div className="flex items-end justify-between gap-2 pt-1">
+            <div className="min-w-0">
+              <span className="ibx-price block !text-base sm:!text-lg">{pricePair.primary}</span>
+              {pricePair.secondary && (
+                <span className="ibx-tiny mt-0.5 block">{pricePair.secondary}</span>
+              )}
             </div>
             <div className="flex items-center gap-1.5">
               <button

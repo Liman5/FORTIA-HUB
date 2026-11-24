@@ -141,10 +141,10 @@ export function MarketplacePage() {
   return (
     <div className="ibx-page ibx-catalogue">
       {/* ==================== EN-TETE ==================== */}
-      <header className="border-b" style={{ borderColor: "var(--ibx-border)" }}>
-        <div className="ibx-container py-7 sm:py-9">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0 space-y-2">
+      <header style={{ borderColor: "var(--ibx-border)" }} className="border-b">
+        <div className="ibx-container py-6 sm:py-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 space-y-1.5">
               <p className="ibx-label">Marketplace numérique</p>
               <h1 className="ibx-h1">Produits numériques, freelances et entreprises</h1>
               <p className="ibx-body max-w-2xl">
@@ -152,7 +152,8 @@ export function MarketplacePage() {
                 prestataires et des entreprises identifiés sur la plateforme.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+
+            <div className="flex flex-wrap gap-2 lg:shrink-0">
               <button
                 type="button"
                 onClick={() => router.push("/marketplace/categories")}
@@ -171,15 +172,21 @@ export function MarketplacePage() {
             </div>
           </div>
 
-          {/* Sections : produits / freelances / entreprises */}
+          {/* Indicateurs de sections : cartes distinctes, séparées et cliquables */}
           <div
-            className="ibx-scroll-x mt-5"
+            className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3"
             role="tablist"
             aria-label="Sections de la marketplace"
           >
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeSection === tab.id;
+              const count =
+                tab.id === "shop"
+                  ? (marketplaceProducts || []).filter((item) => item?.isPublished !== false).length
+                  : tab.id === "freelance"
+                    ? (freelances || []).length
+                    : (enterprises || []).length;
               return (
                 <button
                   key={tab.id}
@@ -187,11 +194,31 @@ export function MarketplacePage() {
                   role="tab"
                   aria-selected={isActive}
                   onClick={() => handleSectionChange(tab.id)}
-                  className="ibx-chip"
-                  data-active={isActive ? "true" : "false"}
+                  className="ibx-card-flat ibx-interactive flex items-center gap-3 p-3 text-left"
+                  style={{
+                    borderColor: isActive ? "var(--ibx-accent)" : "var(--ibx-border)",
+                    backgroundColor: isActive
+                      ? "color-mix(in srgb, var(--ibx-accent) 8%, var(--ibx-surface))"
+                      : undefined,
+                  }}
                 >
-                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                  {tab.label}
+                  <span
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--ibx-radius-sm)]"
+                    style={{
+                      backgroundColor: isActive ? "var(--ibx-accent)" : "var(--ibx-surface-muted)",
+                      color: isActive ? "#1c1405" : "var(--ibx-accent-strong)",
+                    }}
+                    aria-hidden="true"
+                  >
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="ibx-h3 block truncate">{tab.label}</span>
+                    <span className="ibx-tiny block">
+                      {count} {tab.id === "shop" ? "produit" : "profil"}
+                      {count > 1 ? "s" : ""}
+                    </span>
+                  </span>
                 </button>
               );
             })}

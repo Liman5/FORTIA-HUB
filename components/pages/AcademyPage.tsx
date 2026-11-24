@@ -1,11 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/lib/store/AppStore";
 import { useCatalog, useCommerce, useUi } from "@/lib/store/domains/contexts";
 import { CourseCatalog } from "@/components/CourseCatalog";
 import type { CourseCatalogFilters } from "@/components/CourseCatalog";
+import { buildCategoryOptions } from "@/lib/data/courseCategories";
 import {
   ArrowRight,
   Sparkles,
@@ -111,6 +112,15 @@ export function AcademyPage() {
   const categoryCount = (courseCategories || []).length;
   const centersCount = (trainingCenters || []).length;
 
+  /** Catégories réellement disponibles (familles + catégories en base). */
+  const quickCategories = useMemo(
+    () =>
+      buildCategoryOptions(courses || [], courseCategories || [], categoryParam)
+        .filter((category) => category.id !== "all" && category.count > 0)
+        .slice(0, 10),
+    [courses, courseCategories, categoryParam]
+  );
+
   return (
     <div className="ibx-page ibx-catalogue">
       {/* ---------------------------- EN-TÊTE ---------------------------- */}
@@ -161,6 +171,37 @@ export function AcademyPage() {
               </button>
             </div>
           </div>
+
+          {/* Accès rapide aux catégories réelles (compteurs réels) */}
+          {quickCategories.length > 0 && (
+            <div
+              className="ibx-scroll-x mt-5 border-t pt-4"
+              style={{ borderColor: "var(--ibx-border)" }}
+              role="group"
+              aria-label="Catégories de formations"
+            >
+              <button
+                type="button"
+                className="ibx-chip"
+                data-active={!categoryParam ? "true" : "false"}
+                onClick={() => handleFiltersChange({ categorie: null, centre: null })}
+              >
+                Toutes
+              </button>
+              {quickCategories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  className="ibx-chip"
+                  data-active={categoryParam === category.id ? "true" : "false"}
+                  onClick={() => handleFiltersChange({ categorie: category.id, centre: null })}
+                >
+                  {category.label}
+                  <span className="ibx-tiny">{category.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 
