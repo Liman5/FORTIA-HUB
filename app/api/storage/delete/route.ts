@@ -1,3 +1,4 @@
+import { logger } from "@/lib/server/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { deleteFromR2 } from "@/lib/services/r2Storage";
 import { getStorageActor, parseStorageKey, canWriteKey } from "@/lib/server/storageAccess";
@@ -57,9 +58,10 @@ export async function POST(req: NextRequest) {
       message: "Fichier supprimé",
     });
   } catch (error: any) {
+    logger.error("storage_delete_failed", { message: (error as Error)?.message });
     console.error("[R2 Delete] Erreur:", error);
     return NextResponse.json(
-      { error: error?.message || "Erreur lors de la suppression" },
+      { error: "La suppression du fichier a échoué. Réessayez." },
       { status: 500 }
     );
   }

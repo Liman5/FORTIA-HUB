@@ -1,3 +1,4 @@
+import { logger } from "@/lib/server/logger";
 import { NextRequest, NextResponse } from "next/server";
 import {
   buildR2Key,
@@ -279,9 +280,10 @@ export async function POST(req: NextRequest) {
       contentType,
     });
   } catch (error: any) {
+    logger.error("storage_presign_failed", { message: (error as Error)?.message });
     console.error("[R2 Presign Upload] Erreur:", error);
     return NextResponse.json(
-      { error: error?.message || "Erreur lors de la préparation de l'upload" },
+      { error: "Impossible de préparer le téléversement. Réessayez." },
       { status: 500 }
     );
   }

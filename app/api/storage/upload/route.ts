@@ -1,3 +1,4 @@
+import { logger } from "@/lib/server/logger";
 import { NextRequest, NextResponse } from "next/server";
 import {
   uploadToR2,
@@ -251,9 +252,10 @@ export async function POST(req: NextRequest) {
       private: !isPublicFolder(validatedBucket),
     });
   } catch (error: any) {
+    logger.error("storage_upload_failed", { message: (error as Error)?.message });
     console.error("[R2 Upload] Erreur:", error);
     return NextResponse.json(
-      { error: error?.message || "Erreur lors de l'upload" },
+      { error: "Le téléversement a échoué. Réessayez." },
       { status: 500 }
     );
   }
