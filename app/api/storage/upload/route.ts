@@ -7,6 +7,7 @@ import {
   type R2BucketName,
 } from "@/lib/services/r2Storage";
 import { getStorageActor, parseStorageKey, canWriteKey } from "@/lib/server/storageAccess";
+import { checkDeclaredType } from "@/lib/server/fileSignatures";
 import { requireAdmin } from "@/lib/server/requireAdmin";
 import { isReadOnlyAdmin } from "@/lib/server/adminRoles";
 import { recordStorageObject } from "@/lib/server/storageInventory";
@@ -58,14 +59,12 @@ const BUCKET_MIME_TYPES: Record<string, string[]> = {
     "image/jpeg",
     "image/png",
     "image/webp",
-    "image/svg+xml",
     "image/gif",
   ],
   [R2_BUCKETS.SITE_MEDIA]: [
     "image/jpeg",
     "image/png",
     "image/webp",
-    "image/svg+xml",
     "image/gif",
     "audio/mpeg",
     "audio/wav",
@@ -76,14 +75,12 @@ const BUCKET_MIME_TYPES: Record<string, string[]> = {
     "image/jpeg",
     "image/png",
     "image/webp",
-    "image/svg+xml",
     "image/gif",
   ],
   [R2_BUCKETS.BLOG_IMAGES]: [
     "image/jpeg",
     "image/png",
     "image/webp",
-    "image/svg+xml",
     "image/gif",
   ],
 };
@@ -189,6 +186,16 @@ export async function POST(req: NextRequest) {
     // Lecture du contenu
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+
+    // ⚠️ SÉCURITÉ : le type MIME déclaré par le navigateur n'est pas fiable.
+    // On vérifie la signature réelle (magic bytes) des images et des PDF.
+    const signatureError = checkDeclaredType(fileType, buffer);
+    if (signatureError) {
+      return NextResponse.json(
+        { error: signatureError, code: "INVALID_FILE_SIGNATURE" },
+        { status: 415 }
+      );
+    }
 
     // Nom de fichier sécurisé avec timestamp pour éviter les collisions
     const safeName = sanitizeFileName(file.name);
