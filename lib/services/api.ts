@@ -7,13 +7,14 @@ export interface OtpSendResponse {
   success: boolean;
   message: string;
   sender: string;
-  otpCode?: string;
 }
 
 export interface OtpVerifyResponse {
   success: boolean;
   message: string;
   error?: string;
+  /** Jeton signé à transmettre à l'inscription (preuve de vérification). */
+  verificationToken?: string;
 }
 
 /** Réponse de login : peut exiger une étape 2FA avant de créer la session. */
@@ -25,15 +26,15 @@ export interface LoginResult {
 }
 
 /**
- * Sends a 6-digit OTP email via Resend to the registrant
+ * Demande l'envoi d'un code de vérification à 6 chiffres.
+ * ⚠️ Le code est généré côté serveur et n'est JAMAIS renvoyé au navigateur.
  */
 export async function apiSendOtp(email: string): Promise<OtpSendResponse> {
-  const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
   try {
     const response = await fetch("/api/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "send-otp", email, otpCode: generatedCode }),
+      body: JSON.stringify({ action: "send-otp", email }),
     });
     const data = await response.json();
     if (response.ok && data.success) {
@@ -41,8 +42,10 @@ export async function apiSendOtp(email: string): Promise<OtpSendResponse> {
         success: true,
         message: data.message || `Code de vérification envoyé à ${email}`,
         sender: data.sender || SENDER_EMAIL_OFFICIAL,
-        otpCode: data.otpCode || generatedCode,
       };
+    }
+    if (data?.error) {
+      return { success: false, message: String(data.error), sender: SENDER_EMAIL_OFFICIAL };
     }
   } catch (err) {
     // Erreur réseau — aucune simulation d'envoi
@@ -56,35 +59,47 @@ export async function apiSendOtp(email: string): Promise<OtpSendResponse> {
 }
 
 /**
- * Verifies the 6-digit numeric OTP code
+ * Vérifie le code à 6 chiffres auprès du serveur (aucune comparaison locale).
+ * En cas de succès, le serveur renvoie le jeton signé exigé par l'inscription.
  */
-export async function apiVerifyOtp(
-  email: string,
-  code: string,
-  expectedCode: string
-): Promise<OtpVerifyResponse> {
-  const cleanCode = code.trim();
+export async function apiVerifyOtp(email: string, code: string): Promise<OtpVerifyResponse> {
+  const cleanCode = String(code || "").trim();
 
-  // Enforce 6 numeric digits rule strictly
   if (!/^\d{6}$/.test(cleanCode)) {
     return {
       success: false,
-      message: "Format invalide : Le code OTP doit comporter exactement 6 chiffres.",
+      message: "Format invalide : Le code de vérification doit comporter exactement 6 chiffres.",
     };
   }
 
-  if (cleanCode !== expectedCode.trim()) {
+  try {
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "verify-otp", email, otp: cleanCode }),
+    });
+    const data = await response.json();
+
+    if (response.ok && data.success && typeof data.verificationToken === "string") {
+      return {
+        success: true,
+        message: data.message || "Adresse e-mail vérifiée.",
+        verificationToken: data.verificationToken,
+      };
+    }
+
     return {
       success: false,
       message:
-        "Code OTP incorrect. Veuillez vérifier le code à 6 chiffres envoyé à votre adresse e-mail.",
+        data?.error ||
+        "Code de vérification invalide ou expiré. Demandez un nouveau code puis réessayez.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: "Vérification impossible pour le moment. Vérifiez votre connexion et réessayez.",
     };
   }
-
-  return {
-    success: true,
-    message: "Code OTP validé avec succès !",
-  };
 }
 
 export interface AuthRegisterPayload {
@@ -93,6 +108,8 @@ export interface AuthRegisterPayload {
   name: string;
   phone?: string;
   accountType?: "buyer" | "freelance" | "enterprise" | "admin" | "superadmin" | "super_admin";
+  /** Jeton signé renvoyé par la vérification du code e-mail. */
+  verificationToken?: string;
 }
 
 export interface AuthLoginPayload {

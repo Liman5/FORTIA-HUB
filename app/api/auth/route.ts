@@ -23,6 +23,7 @@ import { enforceRateLimit } from "@/lib/server/rateLimits";
 import { isAdminEmailAllowlisted } from "@/lib/server/requireAdmin";
 import { requestAccountDeletion } from "@/lib/modules/admin/platformDeletion";
 import { requestIdOf, toErrorResponse, withApiRoute } from "@/lib/server/errors";
+import { issueEmailOtp, verifyEmailOtp, verifyEmailVerificationToken } from "@/lib/services/emailVerification";
 import { authActionSchema } from "@/lib/validation";
 import { parseOrThrow } from "@/lib/validation/common";
 import bcrypt from "bcryptjs";
@@ -45,11 +46,6 @@ const AUTH_ACTIONS = new Set([
 const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 const FROM_EMAIL = process.env.SENDER_EMAIL || "Fortia Hub <onboarding@resend.dev>";
-
-const activeOtpsStore = new Map<
-  string,
-  { otpCode: string; expiresAt: number; sender: string }
->();
 
 function generateOtpEmailHtml(otpCode: string, recipientEmail: string) {
   return `
@@ -188,8 +184,11 @@ async function handlePost(request: NextRequest) {
     }
 
     // ====== SEND-OTP ======
+    // ⚠️ SÉCURITÉ : le code est généré côté serveur (crypto.randomInt) et
+    // n'est JAMAIS renvoyé dans la réponse. Tout code envoyé par le navigateur
+    // est ignoré. Le hash salé est stocké dans platformConfig (10 min, 5 essais).
     if (body.action === "send-otp") {
-      const { email, otpCode } = body;
+      const { email } = body;
       const formatResult = validateEmailFormat(email);
       if (!formatResult.isValid) {
         return NextResponse.json(
@@ -199,16 +198,19 @@ async function handlePost(request: NextRequest) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
-      const code =
-        otpCode && /^\d{6}$/.test(otpCode)
-          ? otpCode
-          : Math.floor(100000 + Math.random() * 900000).toString();
 
-      const expiresAt = Date.now() + 10 * 60 * 1000;
-      activeOtpsStore.set(normalizedEmail, { otpCode: code, sender: FROM_EMAIL, expiresAt });
+      let code: string;
+      try {
+        code = await issueEmailOtp(normalizedEmail);
+      } catch (error) {
+        console.error("[AUTH] Génération du code de vérification impossible:", (error as Error)?.message);
+        return NextResponse.json(
+          { success: false, error: "Service de vérification momentanément indisponible." },
+          { status: 503 }
+        );
+      }
 
       let emailSent = false;
-      let resendId = null;
 
       if (resend) {
         try {
@@ -222,67 +224,57 @@ async function handlePost(request: NextRequest) {
             console.warn("[RESEND API NOTICE]", error);
           } else if (data?.id) {
             emailSent = true;
-            resendId = data.id;
           }
-        } catch (resendError: any) {
+        } catch (resendError: unknown) {
           console.warn("[RESEND EXCEPTION]", resendError);
         }
       }
 
       return NextResponse.json({
         success: true,
-        message: `Code de vérification à 6 chiffres envoyé à ${normalizedEmail} depuis ${FROM_EMAIL}`,
+        message:
+          "Si l'adresse est valide, un code de vérification à 6 chiffres vient d'être envoyé par e-mail.",
         sender: FROM_EMAIL,
-        otpCode: code,
         emailSent,
-        resendId,
       });
     }
 
     // ====== VERIFY-OTP ======
+    // Vérification à temps constant côté serveur. Message générique : on ne
+    // distingue jamais « code inconnu », « expiré » ou « trop d'essais ».
     if (body.action === "verify-otp") {
       const { email, otp } = body;
       if (!email || !otp) {
         return NextResponse.json(
-          { success: false, error: "L'adresse e-mail et le code OTP sont requis." },
+          { success: false, error: "L'adresse e-mail et le code de vérification sont requis." },
           { status: 400 }
         );
       }
 
-      const normalizedEmail = email.trim().toLowerCase();
-      const storedData = activeOtpsStore.get(normalizedEmail);
-
-      if (!/^\d{6}$/.test(otp.trim())) {
+      if (!/^\d{6}$/.test(String(otp).trim())) {
         return NextResponse.json(
-          { success: false, error: "Refusé : Le code OTP doit comporter exactement 6 chiffres." },
+          { success: false, error: "Le code de vérification doit comporter 6 chiffres." },
           { status: 400 }
         );
       }
 
-      if (!storedData) {
+      const result = await verifyEmailOtp(email, String(otp).trim());
+      if (!result.ok) {
         return NextResponse.json(
-          { success: false, error: "Aucun code OTP actif trouvé pour cet e-mail. Veuillez demander un nouveau code." },
+          {
+            success: false,
+            error:
+              "Code de vérification invalide ou expiré. Demandez un nouveau code puis réessayez.",
+          },
           { status: 400 }
         );
       }
 
-      if (Date.now() > storedData.expiresAt) {
-        activeOtpsStore.delete(normalizedEmail);
-        return NextResponse.json(
-          { success: false, error: "Ce code de vérification a expiré (durée de validité : 10 minutes). Veuillez demander un nouveau code." },
-          { status: 400 }
-        );
-      }
-
-      if (storedData.otpCode === otp.trim()) {
-        activeOtpsStore.delete(normalizedEmail);
-        return NextResponse.json({ success: true, message: "Code OTP validé avec succès !" });
-      }
-
-      return NextResponse.json(
-        { success: false, error: `Code OTP incorrect. Veuillez saisir le code à 6 chiffres reçu par e-mail depuis ${FROM_EMAIL}.` },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: true,
+        message: "Adresse e-mail vérifiée.",
+        verificationToken: result.verificationToken,
+      });
     }
 
     // ====== REGISTER ======
@@ -319,6 +311,23 @@ async function handlePost(request: NextRequest) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
+
+      // ⚠️ SÉCURITÉ : l'inscription exige un jeton signé prouvant que le code
+      // reçu par e-mail a bien été validé pour CETTE adresse (30 min max).
+      const verificationToken =
+        typeof (body as { verificationToken?: unknown }).verificationToken === "string"
+          ? String((body as { verificationToken?: unknown }).verificationToken)
+          : "";
+      const verifiedEmail = await verifyEmailVerificationToken(verificationToken, normalizedEmail);
+      if (!verifiedEmail) {
+        return NextResponse.json(
+          {
+            error:
+              "Refusé : l'adresse e-mail n'a pas été vérifiée. Validez le code reçu par e-mail avant de créer le compte.",
+          },
+          { status: 400 }
+        );
+      }
 
       // ⚠️ SÉCURITÉ : une adresse réservée à l'administration ne peut pas être
       // créée par l'inscription publique (sinon un visiteur s'attribuerait les

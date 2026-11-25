@@ -33,7 +33,7 @@ export default function RegisterPage() {
   // OTP step
   const [step, setStep] = useState<"form" | "otp">("form");
   const [otpInput, setOtpInput] = useState("");
-  const [generatedOtp, setGeneratedOtp] = useState("");
+  const [verificationToken, setVerificationToken] = useState("");
   const [otpSender, setOtpSender] = useState(SENDER_EMAIL_OFFICIAL);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
 
@@ -80,13 +80,12 @@ export default function RegisterPage() {
     const otpRes = await apiSendOtp(email);
     setLoading(false);
 
-    if (otpRes.otpCode) {
-      setGeneratedOtp(otpRes.otpCode);
+    if (otpRes.success) {
       setOtpSender(otpRes.sender || SENDER_EMAIL_OFFICIAL);
       setStep("otp");
-      setSuccess(`Code de vérification envoyé à ${email}. Utilisez le code reçu pour confirmer votre compte.`);
+      setSuccess(`Code de vérification envoyé à ${email}. Saisissez le code reçu pour confirmer votre compte.`);
     } else {
-      setError("Impossible d'envoyer le code de vérification. Réessayez.");
+      setError(otpRes.message || "Impossible d'envoyer le code de vérification. Réessayez.");
     }
   };
 
@@ -95,11 +94,13 @@ export default function RegisterPage() {
     setError(null);
     setSuccess(null);
 
-    const verifyRes = await apiVerifyOtp(email, otpInput, generatedOtp);
-    if (!verifyRes.success) {
-      setError(verifyRes.error || "Code OTP invalide.");
+    const verifyRes = await apiVerifyOtp(email, otpInput);
+    if (!verifyRes.success || !verifyRes.verificationToken) {
+      setError(verifyRes.message || "Code de vérification invalide.");
       return;
     }
+
+    setVerificationToken(verifyRes.verificationToken);
 
     setLoading(true);
     const regRes = await apiRegisterUser({
@@ -108,6 +109,7 @@ export default function RegisterPage() {
       name,
       phone,
       accountType,
+      verificationToken: verifyRes.verificationToken,
     });
     setLoading(false);
 
@@ -151,18 +153,6 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* 🔴 ZONE DÉVELOPPEMENT / DÉMO : Affiche le code généré tant que Resend n'est pas connecté */}
-          {generatedOtp && (
-            <div className="bg-amber-500/15 border border-amber-500/40 rounded-xl p-3 text-center space-y-1">
-              <p className="text-[10px] text-amber-300 font-bold uppercase tracking-wide">
-                🔧 Mode Développement — Votre code de vérification
-              </p>
-              <p className="text-2xl font-black text-amber-300 font-mono tracking-[0.3em]">{generatedOtp}</p>
-              <p className="text-[10px] text-amber-400/80">
-                (visible uniquement tant que l'envoi d'email Resend n'est pas configuré)
-              </p>
-            </div>
-          )}
 
           {step === "form" && (
             <form onSubmit={handleSendOtp} className="space-y-4">
@@ -310,8 +300,8 @@ export default function RegisterPage() {
                   onClick={async () => {
                     setIsResendingOtp(true);
                     const res = await apiSendOtp(email);
-                    if (res.otpCode) {
-                      setGeneratedOtp(res.otpCode);
+                    if (res.success) {
+                      setOtpSender(res.sender || SENDER_EMAIL_OFFICIAL);
                       setSuccess(`Nouveau code envoyé à ${email}.`);
                     }
                     setIsResendingOtp(false);
