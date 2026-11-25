@@ -9,7 +9,6 @@ import {
   User,
   Star,
   Clock,
-  Heart,
   ChevronRight,
   ChevronLeft,
   Users,
@@ -37,6 +36,7 @@ import { IbxLightbox } from "@/components/ui/IbxLightbox";
 import { buildProductCategories, type ProductCategoryOption } from "@/lib/data/productCategories";
 import { formatFcfa, formatPricePair, resolveMoneyConfig, type MoneyConfig } from "@/lib/data/currency";
 import { ContentCard } from "@/components/discovery/ContentCard";
+import { FavoriteButton } from "@/components/ui/FavoriteButton";
 import { storeHref } from "@/lib/data/storeSlug";
 import {
   buildMixedFeed,
@@ -500,8 +500,6 @@ function CourseCard({
   course,
   onOpen,
   onPrefetch,
-  isFavorite,
-  onToggleFavorite,
   money,
 }: {
   course: {
@@ -520,8 +518,6 @@ function CourseCard({
   onOpen: () => void;
   /** Précharge la fiche au survol : navigation quasi instantanée. */
   onPrefetch?: () => void;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
   money: MoneyConfig;
 }) {
   const price = formatPricePair(Number(course.price) || 0, money);
@@ -551,28 +547,8 @@ function CourseCard({
         >
           {course.badge || course.categoryLabel || "Certifiant"}
         </span>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleFavorite();
-          }}
-          className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border transition"
-          style={{
-            backgroundColor: "color-mix(in srgb, var(--ibx-surface) 92%, transparent)",
-            borderColor: "var(--ibx-border)",
-          }}
-          title="Ajouter aux favoris"
-          aria-label="Ajouter aux favoris"
-        >
-          <Heart
-            className="h-3 w-3"
-            style={{
-              color: isFavorite ? "var(--ibx-danger)" : "var(--ibx-fg-muted)",
-              fill: isFavorite ? "var(--ibx-danger)" : "transparent",
-            }}
-          />
-        </button>
+        {/* Favori réel : enregistré en base et visible dans /favorites */}
+        <FavoriteButton resourceType="course" resourceId={course.id} variant="overlay" />
       </div>
 
       <div className="relative flex flex-col gap-1.5 p-2.5">
@@ -693,7 +669,6 @@ function ProductCard({
   const reviewsCount = Number(product.reviewsCount) || 0;
   const [zoomOpen, setZoomOpen] = useState(false);
   const pricePair = formatPricePair(price, money);
-
   return (
     <article
       onMouseEnter={onPrefetch}
@@ -744,6 +719,12 @@ function ProductCard({
             {product.typeLabel}
           </span>
         )}
+        <FavoriteButton
+          resourceType="product"
+          resourceId={product.id}
+          variant="overlay"
+          className="!left-1.5 !right-auto !top-auto !bottom-1.5"
+        />
       </div>
 
       <div className="flex flex-1 flex-col gap-1 p-2.5">
@@ -1157,13 +1138,10 @@ export function HomePage() {
   const { marketplaceProducts, freelances, stores } = useMarketplace();
   const { courses, trainingCenters } = useCatalog();
   const { platformLoaded, siteContent } = useAppStore();
-
   /* Affichage des prix : FCFA principal, équivalent USD facultatif
      (réglé dans Admin → Contenu du site). Aucune valeur n'est convertie
      en base : uniquement du formatage. */
   const money = useMemo(() => resolveMoneyConfig(siteContent), [siteContent]);
-
-  const [favorites, setFavorites] = useState<string[]>([]);
 
   /* Formations populaires : tri sur données réelles (note puis apprenants). */
   const popularCourses = useMemo(() => sortByPopularity(courses || []).slice(0, 15), [courses]);
@@ -1258,9 +1236,6 @@ export function HomePage() {
     [freelances]
   );
 
-  const toggleFavorite = (id: string) =>
-    setFavorites((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]));
-
   const isLoading = !platformLoaded;
 
   return (
@@ -1322,8 +1297,6 @@ export function HomePage() {
                   onPrefetch={() =>
                     router.prefetch(`/course/${encodeURIComponent(String((course as { slug?: string }).slug || course.id))}`)
                   }
-                  isFavorite={favorites.includes(course.id)}
-                  onToggleFavorite={() => toggleFavorite(course.id)}
                   money={money}
                 />
               ))}
@@ -1402,12 +1375,12 @@ export function HomePage() {
           </section>
         )}
 
-        {/* Boutique de produits digitaux : séparée des formations */}
+        {/* Produits numériques : séparés des formations */}
         {!isLoading && shopProducts.length > 0 && (
           <section>
             <SectionHeader
-              title="Boutique de produits digitaux"
-              actionLabel="Voir la boutique"
+              title="Produits numériques"
+              actionLabel="Tout voir"
               onAction={() => router.push("/marketplace")}
             />
             <CarouselRow ariaLabel="les produits digitaux" className="pb-2">

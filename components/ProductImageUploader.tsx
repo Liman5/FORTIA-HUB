@@ -1,36 +1,40 @@
 "use client";
 
 import React, { useRef, useState } from 'react';
-import { Upload, Image as ImageIcon, Check, Ratio, Trash2, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, Image as ImageIcon, Check, Trash2, AlertCircle, Loader2 } from 'lucide-react';
 import { uploadFileToR2, type ClientBucketName } from '../lib/services/clientUpload';
 import { acceptForBucket, uploadHintForBucket } from '../lib/services/uploadLimits';
 
 interface ProductImageUploaderProps {
   coverImage: string;
-  bannerImage: string;
+  /** Galerie : images supplémentaires (couverture exclue). */
+  images: string[];
   onCoverChange: (url: string) => void;
-  onBannerChange: (url: string) => void;
+  onImagesChange: (images: string[]) => void;
   /** ID de l'entité (boutique, produit) utilisé comme dossier dans R2 */
   entityId: string;
   /** Bucket R2 cible (défaut : store-images, public) */
   bucket?: ClientBucketName;
   /** true si le bucket est public (défaut true pour store-images) */
   isPublic?: boolean;
+  /** Nombre maximum d'images de galerie (défaut 6). */
+  maxImages?: number;
 }
 
 export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
   coverImage,
-  bannerImage,
+  images,
   onCoverChange,
-  onBannerChange,
+  onImagesChange,
   entityId,
   bucket = 'store-images',
-  isPublic = true
+  isPublic = true,
+  maxImages = 6
 }) => {
   const coverFileRef = useRef<HTMLInputElement>(null);
-  const bannerFileRef = useRef<HTMLInputElement>(null);
+  const galleryFileRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
-  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleCoverFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,25 +58,39 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
     }
   };
 
-  const handleBannerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  /** Galerie : import de plusieurs visuels (un par un, ordre conservé). */
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const remaining = Math.max(0, maxImages - images.length);
+    const selection = files.slice(0, remaining);
+    if (selection.length === 0) {
+      setError(`Vous pouvez ajouter jusqu'à ${maxImages} images de galerie.`);
+      if (galleryFileRef.current) galleryFileRef.current.value = '';
+      return;
+    }
 
     setError(null);
-    setUploadingBanner(true);
+    setUploadingGallery(true);
+    const added: string[] = [];
     try {
-      const result = await uploadFileToR2(file, bucket, entityId, isPublic);
-      if (result.success) {
-        onBannerChange(result.url);
-      } else {
-        setError(result.error || "Erreur lors de l'importation sur FORTIA HUB.");
+      for (const file of selection) {
+        const result = await uploadFileToR2(file, bucket, entityId, isPublic);
+        if (result.success && result.url) added.push(result.url);
+        else if (result.error) setError(result.error);
       }
+      if (added.length > 0) onImagesChange([...images, ...added].slice(0, maxImages));
     } catch (err: any) {
       setError(err?.message || "Erreur lors de l'importation sur FORTIA HUB.");
     } finally {
-      setUploadingBanner(false);
-      if (bannerFileRef.current) bannerFileRef.current.value = '';
+      setUploadingGallery(false);
+      if (galleryFileRef.current) galleryFileRef.current.value = '';
     }
+  };
+
+  const removeGalleryImage = (url: string) => {
+    onImagesChange(images.filter((item) => item !== url));
   };
 
   return (
@@ -181,102 +199,77 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
         )}
       </div>
 
-      {/* SECTION 2: BANNER HEADER IMAGE UPLOAD (BANNIÈRE OBLIGATOIRE) */}
+      {/* SECTION 2 : GALERIE D'IMAGES (OPTIONNEL) */}
       <div className="space-y-3 pt-4 border-t border-slate-800">
         <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
           <div>
             <div className="flex items-center gap-2">
-              <Ratio className="w-4 h-4 text-sky-400" />
-              <h4 className="font-bold text-xs text-white">2. Bannière d'En-tête Produit</h4>
+              <ImageIcon className="w-4 h-4 text-sky-400" />
+              <h4 className="font-bold text-xs text-white">2. Galerie d&apos;images</h4>
               <span className="bg-sky-500/20 text-sky-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border border-sky-500/40">
-                Format 16:9 (1200×400 px)
+                {images.length}/{maxImages}
               </span>
-              <span className="bg-sky-500/20 text-sky-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                Panoramique
+              <span className="bg-slate-700/60 text-slate-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                Optionnel
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              Importez la bannière d'arrière-plan pour l'en-tête de la fiche produit.
+              Ajoutez d&apos;autres visuels : ils apparaîtront sous l&apos;image principale de la fiche
+              produit pour rassurer l&apos;acheteur.
             </p>
           </div>
         </div>
 
-        {/* Hidden File Input */}
         <input
           type="file"
-          ref={bannerFileRef}
-          onChange={handleBannerFileUpload}
+          ref={galleryFileRef}
+          onChange={handleGalleryUpload}
           accept={acceptForBucket(bucket)}
+          multiple
           className="hidden"
         />
 
-        {/* Upload Box */}
-        <div
-          onClick={() => !uploadingBanner && bannerFileRef.current?.click()}
-          className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2.5 group ${
-            uploadingBanner
-              ? 'border-sky-400 bg-sky-500/10'
-              : bannerImage 
-                ? 'border-sky-500/50 bg-[#011D46]/40 hover:border-sky-400' 
-                : 'border-slate-700 hover:border-sky-400 bg-[#011D46]/70'
-          }`}
-        >
-          <div className="w-12 h-12 rounded-full bg-sky-500/10 flex items-center justify-center group-hover:bg-sky-500/20 transition shadow-inner">
-            {uploadingBanner ? (
-              <Loader2 className="w-6 h-6 text-sky-400 animate-spin" />
-            ) : (
-              <Upload className="w-6 h-6 text-sky-400" />
-            )}
-          </div>
-          <div>
-            <p className="text-xs font-bold text-white group-hover:text-sky-400 transition">
-              {uploadingBanner ? 'Importation en cours...' : bannerImage ? 'Changer le fichier de bannière' : 'Importer la bannière panoramique'}
-            </p>
-            <p className="text-[10px] text-slate-400 mt-1">
-              Format panoramique 16:9 recommandé (ex. 1200×400 px) • {uploadHintForBucket(bucket)}
-            </p>
-          </div>
-        </div>
-
-        {/* Banner Preview Strip */}
-        {bannerImage ? (
-          <div className="rounded-xl border border-slate-700/80 overflow-hidden relative group h-24 bg-slate-900 shadow-md">
-            <img src={bannerImage} alt="Aperçu Bannière" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/40 to-transparent p-3.5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-sky-400 shrink-0" />
-                <div>
-                  <p className="text-xs font-bold text-white">Bannière Panoramique Importée</p>
-                  <p className="text-[10px] text-sky-300 font-mono font-semibold">Stockée sur FORTIA HUB</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => bannerFileRef.current?.click()}
-                  className="px-2.5 py-1 bg-sky-500/20 text-sky-300 hover:bg-sky-500 hover:text-slate-950 rounded-lg text-xs font-semibold transition"
-                >
-                  Remplacer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onBannerChange('')}
-                  className="p-1.5 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition"
-                  title="Supprimer la bannière"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {images.map((url, index) => (
+            <div
+              key={`${url}-${index}`}
+              className="relative overflow-hidden rounded-lg border border-slate-700 bg-black/40"
+            >
+              <img src={url} alt={`Visuel ${index + 1}`} className="h-20 w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => removeGalleryImage(url)}
+                className="absolute right-1 top-1 rounded bg-red-500/80 p-1 text-white transition hover:bg-red-500"
+                title="Retirer cette image"
+                aria-label={`Retirer l'image ${index + 1}`}
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
             </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-[11px] text-sky-400/90 bg-sky-500/10 p-2.5 rounded-xl border border-sky-500/20">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>Optionnel : Si aucune bannière n'est importée, l'image de couverture sera adaptée.</span>
-          </div>
-        )}
-      </div>
+          ))}
 
+          {images.length < maxImages && (
+            <button
+              type="button"
+              onClick={() => !uploadingGallery && galleryFileRef.current?.click()}
+              className={`flex h-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed text-center transition ${
+                uploadingGallery
+                  ? "border-sky-400 bg-sky-500/10"
+                  : "border-slate-700 bg-[#011D46]/70 hover:border-sky-400"
+              }`}
+            >
+              {uploadingGallery ? (
+                <Loader2 className="h-4 w-4 animate-spin text-sky-400" />
+              ) : (
+                <Upload className="h-4 w-4 text-sky-400" />
+              )}
+              <span className="text-[9px] font-bold text-slate-300">
+                {uploadingGallery ? "Import…" : "Ajouter"}
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

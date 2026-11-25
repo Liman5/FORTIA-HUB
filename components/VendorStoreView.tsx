@@ -21,7 +21,8 @@ import {
   MessageCircle,
   Send,
   Linkedin,
-  Facebook
+  Facebook,
+  PauseCircle
 } from 'lucide-react';
 import { VendorStore, MarketplaceProduct, CartItem } from '../types';
 
@@ -245,7 +246,20 @@ export const VendorStoreView: React.FC<VendorStoreViewProps> = ({
                     Boutique Suspendue
                   </span>
                 )}
+                {store.isOpen === false && store.status !== 'suspended' && (
+                  <span className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-[10px] font-extrabold text-amber-300">
+                    <PauseCircle className="w-3.5 h-3.5" /> Boutique en pause
+                  </span>
+                )}
               </div>
+
+              {store.isOpen === false && (
+                <p className="flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-200 md:justify-start">
+                  <PauseCircle className="w-4 h-4 shrink-0" />
+                  Cette boutique n&apos;accepte pas de nouvelles commandes pour le moment.
+                  Les produits restent consultables.
+                </p>
+              )}
 
               <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
                 {store.description}

@@ -126,6 +126,9 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     salesCount: Number(product.salesCount || 0),
     image: product.image || "",
     bannerImage: product.bannerImage || "",
+    images: Array.isArray(product.images)
+      ? (product.images as unknown[]).map((item) => String(item)).filter(Boolean)
+      : [],
     fileFormat: product.fileFormat || "",
     fileSize: product.fileSize || "",
     features,
