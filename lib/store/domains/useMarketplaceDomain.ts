@@ -127,6 +127,7 @@ export function useMarketplaceDomain({ userProfile, onSaved }: MarketplaceDomain
         fileSize: mProduct.fileSize || "10 MB",
         image: mProduct.image || "",
         bannerImage: mProduct.bannerImage || "",
+        images: Array.isArray(mProduct.images) ? mProduct.images : [],
         features: mProduct.features || [],
         downloadUrl: mProduct.downloadUrl || "#",
         isPublished: mProduct.isPublished ?? true,
@@ -269,6 +270,7 @@ export function useMarketplaceDomain({ userProfile, onSaved }: MarketplaceDomain
         logo: store.logo,
         banner: store.banner,
         categories: store.categories,
+        isOpen: store.isOpen !== false,
       });
     },
     []

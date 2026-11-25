@@ -162,6 +162,8 @@ export interface DigitalProduct {
   fileSize: string;
   image: string;
   bannerImage?: string;
+  /** Galerie : images supplementaires du produit (URL publiques). */
+  images?: string[];
   features: string[];
   downloadUrl?: string;
   isPopular?: boolean;
@@ -453,6 +455,8 @@ export interface VendorStore {
   description: string;
   categories: string[];
   status: StoreStatus;
+  /** Boutique ouverte aux ventes (false = en pause : achats suspendus). */
+  isOpen?: boolean;
   isVerified: boolean;
   createdAt: string;
   salesCount: number;
@@ -484,6 +488,8 @@ export interface MarketplaceProduct {
   fileSize: string;
   image: string;
   bannerImage?: string;
+  /** Galerie : images supplementaires du produit (URL publiques). */
+  images?: string[];
   features: string[];
   downloadUrl?: string;
   isPublished: boolean; // Seller published or unpublished

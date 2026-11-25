@@ -97,9 +97,17 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   if (UUID_PATTERN.test(storeId)) {
     const store = await prisma.store.findUnique({
       where: { id: storeId },
-      select: { name: true },
+      select: { name: true, isOpen: true },
     });
     storeName = store?.name || "FORTIA HUB";
+    // Boutique en pause : la vitrine reste visible mais aucun achat n'est accepté.
+    if (store && store.isOpen === false) {
+      throw new PaymentError(
+        409,
+        "STORE_CLOSED",
+        "Cette boutique est temporairement en pause et n'accepte pas de nouvelles commandes."
+      );
+    }
   }
 
   const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${randomUUID()

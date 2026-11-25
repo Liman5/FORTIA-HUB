@@ -164,6 +164,8 @@ export async function handleVendorsAction(
         if (typeof data.logo === "string") storeData.logo = data.logo;
         if (typeof data.banner === "string") storeData.banner = data.banner;
         if (Array.isArray(data.categories)) storeData.categories = data.categories;
+        // Ouverture / mise en pause des ventes de la boutique.
+        if (typeof data.isOpen === "boolean") storeData.isOpen = data.isOpen;
 
         const updated = await prisma.store.update({
           where: { id: targetStore.id },
