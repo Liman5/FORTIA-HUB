@@ -44,8 +44,8 @@ export default function ResetPasswordPage() {
       setError("Lien de réinitialisation invalide ou expiré.");
       return;
     }
-    if (password.length < 6 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
-      setError("Le mot de passe doit contenir au moins 6 caractères, une majuscule et un chiffre.");
+    if (password.length < 10 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setError("Le mot de passe doit contenir au moins 10 caractères, une majuscule et un chiffre.");
       return;
     }
     if (password !== confirmPassword) {

@@ -1,3 +1,4 @@
+import { logger } from "@/lib/server/logger";
 import { NextRequest, NextResponse } from "next/server";
 import {
   buildR2Key,
@@ -214,6 +215,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ⚠️ SÉCURITÉ : le contenu n'est pas visible lors d'un PUT présigné, mais
+    // l'extension doit rester cohérente avec le type déclaré (un `.svg` ou un
+    // `.html` annoncé en image/png est refusé). Les extensions actives sont
+    // bannies des dossiers publics.
+    const extension = (fileName.toLowerCase().split(".").pop() || "").trim();
+    const CONSISTENT_EXTENSIONS: Record<string, string[]> = {
+      "image/jpeg": ["jpg", "jpeg"],
+      "image/png": ["png"],
+      "image/webp": ["webp"],
+      "image/gif": ["gif"],
+      "image/avif": ["avif"],
+      "application/pdf": ["pdf"],
+    };
+    const expected = CONSISTENT_EXTENSIONS[contentType];
+    if (expected && !expected.includes(extension)) {
+      return NextResponse.json(
+        {
+          error: `L'extension '.${extension || "?"}' ne correspond pas au format '${contentType}'.`,
+          code: "EXTENSION_MISMATCH",
+        },
+        { status: 415 }
+      );
+    }
+    const FORBIDDEN_EXTENSIONS = ["svg", "svgz", "html", "htm", "xhtml", "js", "mjs", "php", "exe", "bat", "sh"];
+    if (FORBIDDEN_EXTENSIONS.includes(extension)) {
+      return NextResponse.json(
+        { error: "Ce type de fichier n'est pas autorisé pour des raisons de sécurité.", code: "FORBIDDEN_EXTENSION" },
+        { status: 415 }
+      );
+    }
+
     // Clé stable = mêmes conventions que l'upload classique (timestamp + nom sûr)
     const safeName = sanitizeFileName(fileName);
     const key = buildR2Key(folder, entityId, `${Date.now()}-${safeName}`);
@@ -248,9 +280,10 @@ export async function POST(req: NextRequest) {
       contentType,
     });
   } catch (error: any) {
+    logger.error("storage_presign_failed", { message: (error as Error)?.message });
     console.error("[R2 Presign Upload] Erreur:", error);
     return NextResponse.json(
-      { error: error?.message || "Erreur lors de la préparation de l'upload" },
+      { error: "Impossible de préparer le téléversement. Réessayez." },
       { status: 500 }
     );
   }

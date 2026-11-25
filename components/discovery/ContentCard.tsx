@@ -5,6 +5,7 @@ import Link from "next/link";
 import { GraduationCap, Download, Star, ArrowRight } from "lucide-react";
 import type { ExplorerItem } from "@/lib/data/explorer";
 import { formatPricePair, type MoneyConfig } from "@/lib/data/currency";
+import { FavoriteButton } from "@/components/ui/FavoriteButton";
 
 /**
  * Carte de contenu (formation ou produit numérique).
@@ -78,21 +79,24 @@ export function ContentCard({ item, money }: { item: ExplorerItem; money: MoneyC
           <Link
             href={item.categoryHref}
             prefetch
-            className="max-w-[70%] truncate rounded border px-1.5 py-0.5 text-[8.5px] font-semibold transition hover:opacity-80"
+            className="max-w-[58%] truncate rounded border px-1.5 py-0.5 text-[8.5px] font-semibold transition hover:opacity-80"
             style={{ borderColor: "var(--ibx-border)", color: "var(--ibx-accent-strong)" }}
             title={`Voir la catégorie ${item.categoryLabel}`}
           >
             {item.categoryLabel}
           </Link>
-          <span className="flex shrink-0 items-center gap-0.5 text-[9px]" style={{ color: "var(--ibx-fg-muted)" }}>
-            {item.reviewsCount > 0 ? (
-              <>
-                <Star className="h-2.5 w-2.5" style={{ color: "var(--ibx-accent)", fill: "var(--ibx-accent)" }} aria-hidden="true" />
-                {item.rating.toFixed(1)}
-              </>
-            ) : (
-              item.meta || (item.kind === "course" ? "En ligne" : "Téléchargeable")
-            )}
+          <span className="flex shrink-0 items-center gap-1">
+            <span className="flex items-center gap-0.5 text-[9px]" style={{ color: "var(--ibx-fg-muted)" }}>
+              {item.reviewsCount > 0 ? (
+                <>
+                  <Star className="h-2.5 w-2.5" style={{ color: "var(--ibx-accent)", fill: "var(--ibx-accent)" }} aria-hidden="true" />
+                  {item.rating.toFixed(1)}
+                </>
+              ) : (
+                item.meta || (item.kind === "course" ? "En ligne" : "Téléchargeable")
+              )}
+            </span>
+            <FavoriteButton resourceType={item.kind} resourceId={item.id} />
           </span>
         </div>
 

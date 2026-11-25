@@ -22,7 +22,14 @@ import { isRetryableDbError, withDbRetry } from "@/lib/server/dbRetry";
 import { enforceRateLimit } from "@/lib/server/rateLimits";
 import { isAdminEmailAllowlisted } from "@/lib/server/requireAdmin";
 import { requestAccountDeletion } from "@/lib/modules/admin/platformDeletion";
-import { requestIdOf, toErrorResponse, withApiRoute } from "@/lib/server/errors";
+import { AppError, requestIdOf, toErrorResponse, withApiRoute } from "@/lib/server/errors";
+import {
+  isEmailVerificationRequired,
+  issueEmailOtp,
+  verifyEmailOtp,
+  verifyEmailVerificationToken,
+} from "@/lib/services/emailVerification";
+import { logger } from "@/lib/server/logger";
 import { authActionSchema } from "@/lib/validation";
 import { parseOrThrow } from "@/lib/validation/common";
 import bcrypt from "bcryptjs";
@@ -45,11 +52,6 @@ const AUTH_ACTIONS = new Set([
 const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 const FROM_EMAIL = process.env.SENDER_EMAIL || "Fortia Hub <onboarding@resend.dev>";
-
-const activeOtpsStore = new Map<
-  string,
-  { otpCode: string; expiresAt: number; sender: string }
->();
 
 function generateOtpEmailHtml(otpCode: string, recipientEmail: string) {
   return `
@@ -123,27 +125,6 @@ function generateOtpEmailHtml(otpCode: string, recipientEmail: string) {
   `;
 }
 
-// GET /api/auth/users - list registered users (Supabase / Prisma)
-export async function GET() {
-  try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        phone: true,
-        accountType: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    return NextResponse.json({ count: users.length, users });
-  } catch (err: any) {
-    console.warn("[AUTH] Base inaccessible pour la liste des utilisateurs:", err?.message);
-    return NextResponse.json({ count: 0, users: [] });
-  }
-}
-
 // POST /api/auth - unified auth endpoint (action-based routing)
 async function handlePost(request: NextRequest) {
   try {
@@ -209,8 +190,15 @@ async function handlePost(request: NextRequest) {
     }
 
     // ====== SEND-OTP ======
+    // ⚠️ SÉCURITÉ : le code est généré côté serveur (crypto.randomInt) et
+    // n'est JAMAIS renvoyé dans la réponse. Tout code envoyé par le navigateur
+    // est ignoré. Le hash salé est stocké dans platformConfig (10 min, 5 essais).
     if (body.action === "send-otp") {
-      const { email, otpCode } = body;
+      // Mode test : vérification désactivée (EMAIL_VERIFICATION_MODE=off sans RESEND_API_KEY).
+      if (!isEmailVerificationRequired()) {
+        return NextResponse.json({ success: true, verificationDisabled: true });
+      }
+      const { email } = body;
       const formatResult = validateEmailFormat(email);
       if (!formatResult.isValid) {
         return NextResponse.json(
@@ -220,16 +208,19 @@ async function handlePost(request: NextRequest) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
-      const code =
-        otpCode && /^\d{6}$/.test(otpCode)
-          ? otpCode
-          : Math.floor(100000 + Math.random() * 900000).toString();
 
-      const expiresAt = Date.now() + 10 * 60 * 1000;
-      activeOtpsStore.set(normalizedEmail, { otpCode: code, sender: FROM_EMAIL, expiresAt });
+      let code: string;
+      try {
+        code = await issueEmailOtp(normalizedEmail);
+      } catch (error) {
+        console.error("[AUTH] Génération du code de vérification impossible:", (error as Error)?.message);
+        return NextResponse.json(
+          { success: false, error: "Service de vérification momentanément indisponible." },
+          { status: 503 }
+        );
+      }
 
       let emailSent = false;
-      let resendId = null;
 
       if (resend) {
         try {
@@ -243,67 +234,60 @@ async function handlePost(request: NextRequest) {
             console.warn("[RESEND API NOTICE]", error);
           } else if (data?.id) {
             emailSent = true;
-            resendId = data.id;
           }
-        } catch (resendError: any) {
+        } catch (resendError: unknown) {
           console.warn("[RESEND EXCEPTION]", resendError);
         }
       }
 
       return NextResponse.json({
         success: true,
-        message: `Code de vérification à 6 chiffres envoyé à ${normalizedEmail} depuis ${FROM_EMAIL}`,
+        message:
+          "Si l'adresse est valide, un code de vérification à 6 chiffres vient d'être envoyé par e-mail.",
         sender: FROM_EMAIL,
-        otpCode: code,
         emailSent,
-        resendId,
       });
     }
 
     // ====== VERIFY-OTP ======
+    // Vérification à temps constant côté serveur. Message générique : on ne
+    // distingue jamais « code inconnu », « expiré » ou « trop d'essais ».
     if (body.action === "verify-otp") {
+      if (!isEmailVerificationRequired()) {
+        return NextResponse.json({ success: true, verificationDisabled: true });
+      }
       const { email, otp } = body;
       if (!email || !otp) {
         return NextResponse.json(
-          { success: false, error: "L'adresse e-mail et le code OTP sont requis." },
+          { success: false, error: "L'adresse e-mail et le code de vérification sont requis." },
           { status: 400 }
         );
       }
 
-      const normalizedEmail = email.trim().toLowerCase();
-      const storedData = activeOtpsStore.get(normalizedEmail);
-
-      if (!/^\d{6}$/.test(otp.trim())) {
+      if (!/^\d{6}$/.test(String(otp).trim())) {
         return NextResponse.json(
-          { success: false, error: "Refusé : Le code OTP doit comporter exactement 6 chiffres." },
+          { success: false, error: "Le code de vérification doit comporter 6 chiffres." },
           { status: 400 }
         );
       }
 
-      if (!storedData) {
+      const result = await verifyEmailOtp(email, String(otp).trim());
+      if (!result.ok) {
         return NextResponse.json(
-          { success: false, error: "Aucun code OTP actif trouvé pour cet e-mail. Veuillez demander un nouveau code." },
+          {
+            success: false,
+            error:
+              "Code de vérification invalide ou expiré. Demandez un nouveau code puis réessayez.",
+          },
           { status: 400 }
         );
       }
 
-      if (Date.now() > storedData.expiresAt) {
-        activeOtpsStore.delete(normalizedEmail);
-        return NextResponse.json(
-          { success: false, error: "Ce code de vérification a expiré (durée de validité : 10 minutes). Veuillez demander un nouveau code." },
-          { status: 400 }
-        );
-      }
-
-      if (storedData.otpCode === otp.trim()) {
-        activeOtpsStore.delete(normalizedEmail);
-        return NextResponse.json({ success: true, message: "Code OTP validé avec succès !" });
-      }
-
-      return NextResponse.json(
-        { success: false, error: `Code OTP incorrect. Veuillez saisir le code à 6 chiffres reçu par e-mail depuis ${FROM_EMAIL}.` },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: true,
+        message: "Adresse e-mail vérifiée.",
+        verificationToken: result.verificationToken,
+      });
     }
 
     // ====== REGISTER ======
@@ -322,14 +306,14 @@ async function handlePost(request: NextRequest) {
         return NextResponse.json({ error: "Refusé : Un mot de passe est obligatoire." }, { status: 400 });
       }
 
-      const hasMinLength = password.length >= 6;
+      const hasMinLength = password.length >= 10;
       const hasUppercase = /[A-Z]/.test(password);
       const hasDigit = /[0-9]/.test(password);
       const hasSymbol = /[^a-zA-Z0-9]/.test(password);
 
       if (!hasMinLength || !hasUppercase || !hasDigit || !hasSymbol) {
         const missing: string[] = [];
-        if (!hasMinLength) missing.push("au moins 6 caractères");
+        if (!hasMinLength) missing.push("au moins 10 caractères");
         if (!hasUppercase) missing.push("1 lettre majuscule (A-Z)");
         if (!hasDigit) missing.push("1 chiffre (0-9)");
         if (!hasSymbol) missing.push("1 symbole ou caractère spécial (!@#$%...)");
@@ -340,6 +324,33 @@ async function handlePost(request: NextRequest) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
+
+      // ⚠️ SÉCURITÉ : l'inscription exige un jeton signé prouvant que le code
+      // reçu par e-mail a bien été validé pour CETTE adresse (30 min max).
+      // Interrupteur TEMPORAIRE de phase de test : si la vérification par
+      // e-mail est désactivée (EMAIL_VERIFICATION_MODE=off sans RESEND_API_KEY),
+      // le jeton n'est pas exigé — comportement journalisé à chaque inscription.
+      if (isEmailVerificationRequired()) {
+        const verificationToken =
+          typeof (body as { verificationToken?: unknown }).verificationToken === "string"
+            ? String((body as { verificationToken?: unknown }).verificationToken)
+            : "";
+        const verifiedEmail = await verifyEmailVerificationToken(verificationToken, normalizedEmail);
+        if (!verifiedEmail) {
+          return NextResponse.json(
+            {
+              error:
+                "Refusé : l'adresse e-mail n'a pas été vérifiée. Validez le code reçu par e-mail avant de créer le compte.",
+            },
+            { status: 400 }
+          );
+        }
+      } else {
+        logger.warn("email_verification_disabled", {
+          email: normalizedEmail,
+          reason: "EMAIL_VERIFICATION_MODE=off et RESEND_API_KEY absente",
+        });
+      }
 
       // ⚠️ SÉCURITÉ : une adresse réservée à l'administration ne peut pas être
       // créée par l'inscription publique (sinon un visiteur s'attribuerait les
@@ -463,6 +474,22 @@ async function handlePost(request: NextRequest) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
+      // Limite par adresse ciblée, en plus de la limite par IP appliquée plus haut.
+      try {
+        await enforceRateLimit("authLoginEmail", request, `email:${normalizedEmail}`);
+      } catch (limitError) {
+        if (limitError instanceof AppError && limitError.status === 429) {
+          return NextResponse.json(
+            {
+              error:
+                "Trop de tentatives de connexion pour cette adresse. Réessayez dans quelques minutes.",
+              code: "RATE_LIMITED",
+            },
+            { status: 429 }
+          );
+        }
+        throw limitError;
+      }
       // Connexion via Supabase (Prisma + bcrypt)
       try {
         // Lecture résiliente : si le pool est saturé (P2039), on réessaie
@@ -715,17 +742,30 @@ async function handlePost(request: NextRequest) {
     }
 
     // ====== 2FA-SETUP (Google Authenticator) ======
-    // Génère la clé secrète TOTP à afficher dans les Paramètres (QR + clé à copier).
+    // Génère la clé secrète TOTP (QR + clé à copier) SANS jamais la transmettre
+    // à un service tiers : le QR est généré dans le navigateur à partir de
+    // l'URL otpauth. Si la 2FA est déjà active, aucun secret n'est renvoyé.
     if (body.action === "2fa-setup") {
       const current = await getCurrentUser(request);
       if (!current) {
         return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
       }
+
+      const alreadyEnabled = await isTwoFactorEnabled(current.id);
+      if (alreadyEnabled) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "La double authentification est déjà activée. Désactivez-la (un code Google Authenticator est requis) avant de la reconfigurer.",
+            twoFactorEnabled: true,
+          },
+          { status: 409 }
+        );
+      }
+
       const { secret, otpauthUrl } = await createTwoFactorSetup(current.id, current.email);
-      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-        otpauthUrl
-      )}`;
-      return NextResponse.json({ success: true, secret, otpauthUrl, qrCodeUrl });
+      return NextResponse.json({ success: true, secret, otpauthUrl });
     }
 
     // ====== TOGGLE-2FA (TOTP Google Authenticator) ======

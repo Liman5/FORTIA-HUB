@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,6 +13,7 @@ import {
   apiCheckEmailAvailability,
   apiSendOtp,
   apiVerifyOtp,
+  apiGetAuthConfig,
   SENDER_EMAIL_OFFICIAL,
 } from "@/services/api";
 import { useAuth } from "@/lib/store/domains/contexts";
@@ -33,17 +34,57 @@ export default function RegisterPage() {
   // OTP step
   const [step, setStep] = useState<"form" | "otp">("form");
   const [otpInput, setOtpInput] = useState("");
-  const [generatedOtp, setGeneratedOtp] = useState("");
+  const [verificationToken, setVerificationToken] = useState("");
   const [otpSender, setOtpSender] = useState(SENDER_EMAIL_OFFICIAL);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
+  // Vérification d'e-mail exigée ? (interrupteur temporaire de phase de test)
+  const [verificationRequired, setVerificationRequired] = useState(true);
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    apiGetAuthConfig()
+      .then((config) => {
+        if (!cancelled) setVerificationRequired(config.emailVerificationRequired);
+      })
+      .catch(() => {
+        if (!cancelled) setVerificationRequired(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const emailValidation = validateEmailFormat(email);
   const passwordValidation = validatePassword(password);
+
+  /** Crée le compte puis ouvre la session (jeton de vérification optionnel). */
+  const submitRegistration = async (token?: string) => {
+    setLoading(true);
+    const regRes = await apiRegisterUser({
+      email,
+      password,
+      name,
+      phone,
+      accountType,
+      verificationToken: token,
+    });
+    setLoading(false);
+
+    if (!regRes.success || !regRes.data?.user) {
+      setError(regRes.error || "Inscription refusée.");
+      return;
+    }
+
+    // Créer la session dans le store (compte réellement persisté en Supabase)
+    loginUser(regRes.data.user);
+    setSuccess("Compte créé avec succès ! Redirection vers votre espace membre...");
+    setTimeout(() => router.push("/member"), 1500);
+  };
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,17 +117,22 @@ export default function RegisterPage() {
       return;
     }
 
+    // Vérification par e-mail désactivée (phase de test) : inscription directe.
+    if (!verificationRequired) {
+      await submitRegistration();
+      return;
+    }
+
     setLoading(true);
     const otpRes = await apiSendOtp(email);
     setLoading(false);
 
-    if (otpRes.otpCode) {
-      setGeneratedOtp(otpRes.otpCode);
+    if (otpRes.success) {
       setOtpSender(otpRes.sender || SENDER_EMAIL_OFFICIAL);
       setStep("otp");
-      setSuccess(`Code de vérification envoyé à ${email}. Utilisez le code reçu pour confirmer votre compte.`);
+      setSuccess(`Code de vérification envoyé à ${email}. Saisissez le code reçu pour confirmer votre compte.`);
     } else {
-      setError("Impossible d'envoyer le code de vérification. Réessayez.");
+      setError(otpRes.message || "Impossible d'envoyer le code de vérification. Réessayez.");
     }
   };
 
@@ -95,31 +141,14 @@ export default function RegisterPage() {
     setError(null);
     setSuccess(null);
 
-    const verifyRes = await apiVerifyOtp(email, otpInput, generatedOtp);
-    if (!verifyRes.success) {
-      setError(verifyRes.error || "Code OTP invalide.");
+    const verifyRes = await apiVerifyOtp(email, otpInput);
+    if (!verifyRes.success || !verifyRes.verificationToken) {
+      setError(verifyRes.message || "Code de vérification invalide.");
       return;
     }
 
-    setLoading(true);
-    const regRes = await apiRegisterUser({
-      email,
-      password,
-      name,
-      phone,
-      accountType,
-    });
-    setLoading(false);
-
-    if (!regRes.success || !regRes.data?.user) {
-      setError(regRes.error || "Inscription refusée.");
-      return;
-    }
-
-    // Créer la session dans le store (compte réellement persisté en Supabase)
-    loginUser(regRes.data.user);
-    setSuccess("Compte créé avec succès ! Redirection vers votre espace membre...");
-    setTimeout(() => router.push("/member"), 1500);
+    setVerificationToken(verifyRes.verificationToken);
+    await submitRegistration(verifyRes.verificationToken);
   };
 
   return (
@@ -151,18 +180,6 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* 🔴 ZONE DÉVELOPPEMENT / DÉMO : Affiche le code généré tant que Resend n'est pas connecté */}
-          {generatedOtp && (
-            <div className="bg-amber-500/15 border border-amber-500/40 rounded-xl p-3 text-center space-y-1">
-              <p className="text-[10px] text-amber-300 font-bold uppercase tracking-wide">
-                🔧 Mode Développement — Votre code de vérification
-              </p>
-              <p className="text-2xl font-black text-amber-300 font-mono tracking-[0.3em]">{generatedOtp}</p>
-              <p className="text-[10px] text-amber-400/80">
-                (visible uniquement tant que l'envoi d'email Resend n'est pas configuré)
-              </p>
-            </div>
-          )}
 
           {step === "form" && (
             <form onSubmit={handleSendOtp} className="space-y-4">
@@ -229,7 +246,7 @@ export default function RegisterPage() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min 6 caractères, 1 majuscule, 1 chiffre, 1 symbole"
+                    placeholder="Min 10 caractères, 1 majuscule, 1 chiffre, 1 symbole"
                     className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 pl-10 pr-10 text-white focus:outline-none focus:border-[#D69E25]"
                   />
                   <button
@@ -310,8 +327,8 @@ export default function RegisterPage() {
                   onClick={async () => {
                     setIsResendingOtp(true);
                     const res = await apiSendOtp(email);
-                    if (res.otpCode) {
-                      setGeneratedOtp(res.otpCode);
+                    if (res.success) {
+                      setOtpSender(res.sender || SENDER_EMAIL_OFFICIAL);
                       setSuccess(`Nouveau code envoyé à ${email}.`);
                     }
                     setIsResendingOtp(false);

@@ -1,61 +1,96 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes, timingSafeEqual } from "crypto";
+import bcrypt from "bcryptjs";
+import { AppError } from "@/lib/server/errors";
+import { enforceRateLimit } from "@/lib/server/rateLimits";
+import { logger } from "@/lib/server/logger";
+
+/** Durée de validité d'une session administrateur : 8 heures. */
+const ADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+
+/** Applique les limites de connexion (IP puis adresse ciblée). */
+async function applyLoginRateLimits(req: NextRequest, email: string): Promise<NextResponse | null> {
+  try {
+    await enforceRateLimit("adminLogin", req);
+    await enforceRateLimit("adminLoginEmail", req, `email:${email}`);
+    return null;
+  } catch (error) {
+    if (error instanceof AppError && error.status === 429) {
+      return NextResponse.json(
+        { error: "Trop de tentatives de connexion. Réessayez dans quelques minutes." },
+        { status: 429 }
+      );
+    }
+    throw error;
+  }
+}
+
+/** Comparaison à temps constant de deux empreintes hexadécimales. */
+function safeEqualHex(left: string, right: string): boolean {
+  if (!/^[0-9a-f]+$/i.test(left) || !/^[0-9a-f]+$/i.test(right)) return false;
+  const leftBuffer = Buffer.from(left, "hex");
+  const rightBuffer = Buffer.from(right, "hex");
+  if (leftBuffer.length !== rightBuffer.length || leftBuffer.length === 0) return false;
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
 
 /**
  * POST /api/admin/auth
- * Authentifie un administrateur (email + mot de passe).
- * Retourne un token de session admin.
+ * Authentifie un administrateur (email + mot de passe) et retourne un token
+ * de session valable 8 heures.
  */
 export async function POST(req: NextRequest) {
   try {
     const { email, password } = await req.json();
 
     if (!email || !password) {
-      return NextResponse.json(
-        { error: "Email et mot de passe requis" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Email et mot de passe requis" }, { status: 400 });
     }
 
-    // Recherche de l'admin
-    const admin = await prisma.adminUser.findUnique({
-      where: { email: email.toLowerCase().trim() },
-    });
+    const normalizedEmail = String(email).toLowerCase().trim();
+
+    const limited = await applyLoginRateLimits(req, normalizedEmail);
+    if (limited) return limited;
+
+    const admin = await prisma.adminUser.findUnique({ where: { email: normalizedEmail } });
 
     if (!admin || !admin.isActive) {
-      return NextResponse.json(
-        { error: "Identifiants invalides" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Identifiants invalides" }, { status: 401 });
     }
 
-    // Vérification du mot de passe.
-    // Deux formats acceptés :
-    //   • bcrypt ($2a$/$2b$…) → recommandé
-    //   • SHA-256 hexadécimal (64 caractères) → compatibilité avec les
-    //     comptes créés avec l'ancien seed SQL.
+    // bcrypt uniquement. Compatibilité TEMPORAIRE avec les comptes historiques
+    // hachés en SHA-256 sans sel : si le mot de passe est correct, il est
+    // immédiatement re-haché en bcrypt et enregistré (chemin supprimable une
+    // fois tous les comptes migrés).
     const storedHash = String(admin.passwordHash || "");
     let passwordOk = false;
 
-    if (storedHash.startsWith("$2a$") || storedHash.startsWith("$2b$") || storedHash.startsWith("$2y$")) {
-      const bcrypt = (await import("bcryptjs")).default;
+    if (
+      storedHash.startsWith("$2a$") ||
+      storedHash.startsWith("$2b$") ||
+      storedHash.startsWith("$2y$")
+    ) {
       passwordOk = await bcrypt.compare(password, storedHash);
-    } else {
-      const legacyHash = createHash("sha256").update(password).digest("hex");
-      passwordOk = storedHash === legacyHash;
+    } else if (/^[0-9a-f]{64}$/i.test(storedHash)) {
+      const candidate = createHash("sha256").update(String(password)).digest("hex");
+      if (safeEqualHex(candidate, storedHash)) {
+        passwordOk = true;
+        const upgraded = await bcrypt.hash(String(password), 10);
+        await prisma.adminUser.update({
+          where: { id: admin.id },
+          data: { passwordHash: upgraded },
+        });
+        logger.info("admin_password_rehashed", { adminId: admin.id });
+      }
     }
 
     if (!passwordOk) {
-      return NextResponse.json(
-        { error: "Identifiants invalides" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Identifiants invalides" }, { status: 401 });
     }
 
-    // Création d'un token de session
     const token = randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 jours
+    const expiresAt = new Date(Date.now() + ADMIN_SESSION_TTL_MS);
 
     await prisma.session.create({
       data: {
@@ -67,7 +102,6 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Mise à jour du dernier login
     await prisma.adminUser.update({
       where: { id: admin.id },
       data: { lastLoginAt: new Date() },
@@ -84,12 +118,12 @@ export async function POST(req: NextRequest) {
       },
       expiresAt: expiresAt.toISOString(),
     });
-  } catch (error: any) {
-    console.error("Erreur d'authentification admin:", error);
-    return NextResponse.json(
-      { error: error?.message || "Erreur serveur" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.error("admin_auth_login_failed", {
+      message: (error as Error)?.message,
+      name: (error as Error)?.name,
+    });
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
 
@@ -124,12 +158,9 @@ export async function GET(req: NextRequest) {
         role: session.adminUser.role,
       },
     });
-  } catch (error: any) {
-    console.error("Erreur de vérification admin:", error);
-    return NextResponse.json(
-      { error: error?.message || "Erreur serveur" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.error("admin_auth_verify_failed", { message: (error as Error)?.message });
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
 
@@ -147,11 +178,9 @@ export async function DELETE(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error("Erreur de déconnexion admin:", error);
-    return NextResponse.json(
-      { error: error?.message || "Erreur serveur" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.error("admin_auth_logout_failed", { message: (error as Error)?.message });
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }
+

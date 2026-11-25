@@ -35,6 +35,7 @@ import { useCatalog } from "@/lib/store/domains/contexts";
 import { uploadCourseVideoDirect, uploadFileToR2, deleteFileFromR2, resolveStorageUrl } from "@/lib/services/clientUpload";
 import { hashSecret } from "@/lib/services/offlineVideo";
 import { SuccessConfirmationModal } from "./SuccessConfirmationModal";
+import { SellerOverview } from "./dashboard/SellerOverview";
 import { useAppStore } from "@/lib/store/AppStore";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 import { clearCache } from "@/lib/services/api/http";
@@ -695,22 +696,38 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-800">
-          <button onClick={() => setActiveTab("overview")} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeTab === "overview" ? "bg-[#D69E25] text-[#021231]" : "text-slate-300 hover:bg-slate-800"}`}>
-            Résumé
-          </button>
-          <button onClick={() => setActiveTab("lectures")} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeTab === "lectures" ? "bg-[#D69E25] text-[#021231]" : "text-slate-300 hover:bg-slate-800"}`}>
-            Mes Formations ({myCourses.length})
-          </button>
-          <button onClick={() => setActiveTab("storage")} className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeTab === "storage" ? "bg-[#D69E25] text-[#021231]" : "text-slate-300 hover:bg-slate-800"}`}>
-            Stockage & Vidéos
-          </button>
+        {/* Navigation (onglets) — même langage visuel que l'espace vendeur */}
+        <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-800 pb-2 [scrollbar-width:none]">
+          {[
+            { id: "overview" as const, label: "Tableau de bord", icon: TrendingUp },
+            { id: "lectures" as const, label: `Formations (${myCourses.length})`, icon: BookOpen },
+            { id: "storage" as const, label: "Stockage & vidéos", icon: HardDrive },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-[11px] font-bold transition-colors sm:text-xs ${
+                  isActive
+                    ? "bg-[#D69E25] text-[#021231]"
+                    : "border border-transparent text-slate-400 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon className={`h-4 w-4 ${isActive ? "text-[#021231]" : "text-[#D69E25]"}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Overview */}
         {activeTab === "overview" && (
           <div className="space-y-6">
+            {/* Vue d'ensemble : chiffres et courbes issus de la base */}
+            <SellerOverview role="instructor" />
+
             {!center.feePaid && (
               <div className="bg-amber-500/10 border border-amber-500/40 rounded-3xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
@@ -957,6 +974,33 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             <h3 className="font-bold text-base flex items-center gap-2">
               <Plus className="w-5 h-5 text-[#D69E25]" /> Publier une nouvelle Formation
             </h3>
+
+            {/* Mode d'emploi : l'ordre des étapes évite les blocages */}
+            <div className="rounded-2xl border border-[#D69E25]/30 bg-[#D69E25]/10 p-4 space-y-2">
+              <p className="text-xs font-black text-[#D69E25] flex items-center gap-2">
+                <Info className="w-4 h-4" /> Comment publier une formation (dans cet ordre)
+              </p>
+              <ol className="list-inside list-decimal space-y-1 text-[11px] text-slate-200">
+                <li>
+                  <strong>Informations</strong> : titre, catégorie, prix et image de couverture.
+                </li>
+                <li>
+                  <strong>Chapitre</strong> : créez d&apos;abord un chapitre (ex. « Fondamentaux »).
+                </li>
+                <li>
+                  <strong>Leçons</strong> : ajoutez ensuite les leçons (vidéo, PDF ou article)
+                  <em> à l&apos;intérieur de ce chapitre</em>.
+                </li>
+                <li>
+                  <strong>Publication</strong> : vérifiez le programme puis publiez — la formation
+                  apparaît dans l&apos;Académie.
+                </li>
+              </ol>
+              <p className="text-[10px] text-amber-200/90">
+                Une leçon ne peut pas être ajoutée sans chapitre : c&apos;est ce qui garantit un
+                programme clair pour les apprenants.
+              </p>
+            </div>
             <div>
               <label className="text-xs text-slate-300 block mb-1 font-bold">Titre de la formation *</label>
               <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex: Masterclass IA 2026" className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 text-white" />

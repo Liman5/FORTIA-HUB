@@ -1,9 +1,11 @@
+import { logger } from "@/lib/server/logger";
 import { NextRequest, NextResponse } from "next/server";
 import { getSignedDownloadUrl, existsInR2, isPrivateKey } from "@/lib/services/r2Storage";
 import {
   getStorageActor,
   parseStorageKey,
   canReadPrivateKey,
+  isFreePublicDeliverable,
 } from "@/lib/server/storageAccess";
 
 export const dynamic = "force-dynamic";
@@ -46,17 +48,22 @@ export async function POST(req: NextRequest) {
     if (isPrivate) {
       const actor = await getStorageActor(req);
       if (!actor) {
-        return NextResponse.json(
-          { error: "Authentification requise pour ce fichier." },
-          { status: 401 }
-        );
-      }
-      const allowed = await canReadPrivateKey(actor, parsed);
-      if (!allowed) {
-        return NextResponse.json(
-          { error: "Vous n'avez pas accès à ce fichier." },
-          { status: 403 }
-        );
+        // Contenu GRATUIT : le livrable d'un produit publié à 0 est ouvert.
+        const openToEveryone = await isFreePublicDeliverable(key, parsed);
+        if (!openToEveryone) {
+          return NextResponse.json(
+            { error: "Authentification requise pour ce fichier." },
+            { status: 401 }
+          );
+        }
+      } else {
+        const allowed = await canReadPrivateKey(actor, parsed);
+        if (!allowed) {
+          return NextResponse.json(
+            { error: "Vous n'avez pas accès à ce fichier." },
+            { status: 403 }
+          );
+        }
       }
     }
 
@@ -89,9 +96,10 @@ export async function POST(req: NextRequest) {
       private: isPrivate,
     });
   } catch (error: any) {
+    logger.error("storage_signed_url_failed", { message: (error as Error)?.message });
     console.error("[R2 Signed URL] Erreur:", error);
     return NextResponse.json(
-      { error: error?.message || "Erreur lors de la génération de l'URL signée" },
+      { error: "Impossible de générer le lien de téléchargement. Réessayez." },
       { status: 500 }
     );
   }

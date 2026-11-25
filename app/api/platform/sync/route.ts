@@ -464,6 +464,7 @@ export async function POST(req: NextRequest) {
               fileSize: product.fileSize || "10 MB",
               image: product.image,
               bannerImage: product.bannerImage || "",
+        images: Array.isArray(product.images) ? product.images : [],
               features: product.features || [],
               downloadUrl: product.downloadUrl || "#",
               isPublished: product.isPublished ?? true,

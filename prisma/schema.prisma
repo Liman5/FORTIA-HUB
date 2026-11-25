@@ -693,6 +693,8 @@ model Store {
   description     String       @default("")
   categories      String[]     @default([])
   status          StoreStatus  @default(pending)
+  /** Boutique ouverte aux ventes. false = vitrine visible mais achats suspendus. */
+  isOpen          Boolean      @default(true) @map("is_open")
   isVerified      Boolean      @default(false) @map("is_verified")
   salesCount      Int          @default(0) @map("sales_count")
   /** Donnee de demonstration (seed) - purgeable depuis l Admin. */
@@ -744,6 +746,8 @@ model Product {
   fileSize        String       @default("10 MB") @map("file_size")
   image           String       @default("")
   bannerImage     String       @default("") @map("banner_image")
+  /// Galerie : images supplémentaires (tableau JSON d'URL publiques).
+  images          Json         @default("[]")
   features        Json         @default("[]")
   downloadUrl     String       @default("#") @map("download_url")
   isPublished     Boolean      @default(false) @map("is_published")
@@ -832,6 +836,21 @@ model VendorApplication {
 /// Taux de commission de la plateforme (Frais FORTIA).
 /// Un taux par portée de vente ; `general` sert de repli.
 /// Statistiques produits : vue, clic, ajout au panier (voir /api/track).
+/// Favoris d'un membre : formations et produits numériques mis de côté.
+/// Table unique, aucun doublon possible (clé composite).
+model Favorite {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  /// « product » | « course »
+  resourceType String   @map("resource_type")
+  resourceId   String   @map("resource_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, resourceType, resourceId])
+  @@index([userId])
+  @@map("favorites")
+}
+
 model ProductEvent {
   id        String   @id @default(uuid())
   productId String?  @map("product_id")

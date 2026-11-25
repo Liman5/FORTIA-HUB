@@ -92,7 +92,7 @@ export function validateEmailFormat(email: string): EmailValidationResult {
  * - At least 1 symbol / special character (any non-alphanumeric character like !@#$%...)
  */
 export function validatePassword(password: string): PasswordValidationResult {
-  const hasMinLength = password.length >= 6;
+  const hasMinLength = password.length >= 10;
   const hasUppercase = /[A-Z]/.test(password);
   const hasDigit = /[0-9]/.test(password);
   const hasSymbol = /[^a-zA-Z0-9]/.test(password);
@@ -103,7 +103,7 @@ export function validatePassword(password: string): PasswordValidationResult {
 
   if (!isValid) {
     const missing: string[] = [];
-    if (!hasMinLength) missing.push("au moins 6 caractères");
+    if (!hasMinLength) missing.push("au moins 10 caractères");
     if (!hasUppercase) missing.push("1 lettre majuscule (A-Z)");
     if (!hasDigit) missing.push("1 chiffre (0-9)");
     if (!hasSymbol) missing.push("1 symbole ou caractère spécial (!@#$%...)");

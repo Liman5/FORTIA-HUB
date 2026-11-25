@@ -1,5 +1,6 @@
 "use client";
 
+import { QrCodeImage } from "@/components/ui/QrCodeImage";
 import React, { useState, useEffect, useRef } from 'react';
 import { Course, Lesson, Certificate } from '../types';
 import { generatePDFCertificate, triggerCelebrationConfetti } from '../utils/pdfGenerator';
@@ -476,9 +477,7 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
     courseId: course.id,
     issueDate: new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }),
     grade: "Mention Excellent (98%)",
-    qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-      `FORTIA-HUB-CERT:${certId}`
-    )}`,
+    qrCodeUrl: "",
     verified: true,
   } as Certificate & { courseId?: string };
 
@@ -1307,11 +1306,10 @@ export const CoursePlayerModal: React.FC<CoursePlayerModalProps> = ({
                     </div>
                   </div>
                   <div className="shrink-0 bg-white rounded-lg p-1.5 shadow-md">
-                    <img
-                      src={displayCertificate.qrCodeUrl}
+                    <QrCodeImage
+                      value={`FORTIA-HUB-CERT:${displayCertificate.id}`}
                       alt={`QR Code attestation ${displayCertificate.id}`}
-                      className="w-20 h-20 object-contain"
-                      loading="lazy"
+                      className="h-20 w-20"
                     />
                     <p className="text-[7px] text-slate-500 text-center font-bold mt-0.5">QR UNIQUE</p>
                   </div>

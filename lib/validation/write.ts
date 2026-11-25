@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { emailSchema, moneyAmountSchema, phoneSchema, shortText, uuidSchema } from "./common";
 
-const writeObject = z.object({ action: z.string().trim().min(1).max(80), data: z.record(z.unknown()) });
+const writeObject = z.object({ action: z.string().trim().min(1).max(80), data: z.record(z.string(), z.unknown()) });
 export const writeEnvelopeSchema = writeObject;
-export const writeDataSchema = z.record(z.unknown());
+export const writeDataSchema = z.record(z.string(), z.unknown());
 
 export const writeActionSchemas: Record<string, z.ZodTypeAny> = {
   /** Affichage des prix : taux FCFA (> 0) et activation de l'équivalent USD. */
@@ -24,8 +24,8 @@ export const writeActionSchemas: Record<string, z.ZodTypeAny> = {
   "sync-user-learning": z
     .object({
       userId: uuidSchema.optional(),
-      courseProgress: z.record(z.number()).optional(),
-      earnedCertificates: z.array(z.record(z.unknown())).max(200).optional(),
+      courseProgress: z.record(z.string(), z.number()).optional(),
+      earnedCertificates: z.array(z.record(z.string(), z.unknown())).max(200).optional(),
     })
     .passthrough(),
 

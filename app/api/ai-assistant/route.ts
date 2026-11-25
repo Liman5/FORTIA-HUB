@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, type Content, type Tool } from "@google/genai";
 import { AI_TOOL_DECLARATIONS, executeAiTool } from "@/lib/services/aiTools";
 import { getCurrentUser } from "@/lib/services/authSession";
+import { AppError } from "@/lib/server/errors";
+import { enforceRateLimit } from "@/lib/server/rateLimits";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -56,11 +58,12 @@ if (process.env.GEMINI_API_KEY) {
   }
 }
 
-const SYSTEM_INSTRUCTION = `Tu es le Conseiller Académique Officiel de la plateforme FORTIA HUB (https://fortia-hub.com).
+const SYSTEM_INSTRUCTION = `Tu es l'assistant virtuel (IA) de la plateforme FORTIA HUB (https://fortia-hub.com).
 RÈGLE OBLIGATOIRE ET STRICTE :
-- Ne révèle JAMAIS que tu es une Intelligence Artificielle, une IA, un modèle de langage, un robot ou un algorithme.
-- Présente-toi et exprime-toi TOUJOURS comme un conseiller humain membre de l'équipe académique et du service orientation de FORTIA HUB.
-- Si l'utilisateur te demande si tu es une IA ou un humain, réponds naturellement que tu es le conseiller dédié de FORTIA HUB.
+- Tu te présentes comme l'assistant virtuel (intelligence artificielle) de FORTIA HUB.
+- Tu ne prétends JAMAIS être un humain, un conseiller humain ou un membre de l'équipe.
+- Si l'utilisateur te demande si tu es une IA ou un humain, réponds honnêtement que tu es l'assistant virtuel (IA) de FORTIA HUB.
+- Reste bienveillant et professionnel : cette transparence n'empêche pas de rendre un service de qualité.
 
 À PROPOS DE FORTIA HUB :
 FORTIA HUB est la plateforme de référence pour l'apprentissage et les services professionnels d'élite.
@@ -275,6 +278,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Le paramètre 'prompt' est requis." }, { status: 400 });
     }
 
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+      return NextResponse.json({ error: "Le message ne peut pas être vide." }, { status: 400 });
+    }
+
+    // Longueur maximale : protège le quota du fournisseur et la facture.
+    const MAX_PROMPT_LENGTH = 2000;
+    if (trimmedPrompt.length > MAX_PROMPT_LENGTH) {
+      return NextResponse.json(
+        {
+          error: `Votre message est trop long (${trimmedPrompt.length} caractères). Maximum ${MAX_PROMPT_LENGTH} caractères.`,
+          code: "prompt_too_long",
+        },
+        { status: 400 }
+      );
+    }
+
     if (!process.env.GEMINI_API_KEY || !aiClient) {
       return NextResponse.json(
         {
@@ -287,15 +307,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    try {
-      // === Identité de l'utilisateur connecté (JWT HttpOnly, résolu côté serveur) ===
-      // Le cookie de session est la SEULE source d'identité : l'email éventuellement
-      // envoyé par le client dans le body n'est JAMAIS utilisé pour les données privées.
-      const sessionUser = await getCurrentUser(request);
+    // === Identité de l'utilisateur connecté (JWT HttpOnly, résolu côté serveur) ===
+    // Le cookie de session est la SEULE source d'identité : l'email éventuellement
+    // envoyé par le client dans le body n'est JAMAIS utilisé pour les données privées.
+    const sessionUser = await getCurrentUser(request).catch(() => null);
 
+    // Limitation de débit : 10 requêtes / minute, par utilisateur ou par IP.
+    try {
+      await enforceRateLimit("aiAssistant", request, sessionUser?.id ?? null);
+    } catch (limitError) {
+      if (limitError instanceof AppError && limitError.status === 429) {
+        return NextResponse.json(
+          {
+            error: "Trop de messages envoyés à l'assistant. Patientez une minute puis réessayez.",
+            code: "rate_limited",
+            isFallback: true,
+          },
+          { status: 429 }
+        );
+      }
+      throw limitError;
+    }
+
+    try {
       // === Appel Gemini avec function calling ===
       const tools = [{ functionDeclarations: AI_TOOL_DECLARATIONS }];
-      const contents: Content[] = [{ role: "user", parts: [{ text: prompt }] }];
+      const contents: Content[] = [{ role: "user", parts: [{ text: trimmedPrompt }] }];
 
       let { text, model, response } = await generateWithFallback(contents, { tools });
 

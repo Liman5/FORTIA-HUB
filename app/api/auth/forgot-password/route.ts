@@ -8,7 +8,7 @@ import {
 import { forgotPasswordSchema } from "@/lib/validation";
 import { parseOrThrow } from "@/lib/validation/common";
 import { logger } from "@/lib/server/logger";
-import { withApiRoute } from "@/lib/server/errors";
+import { AppError, withApiRoute } from "@/lib/server/errors";
 import { enforceRateLimit } from "@/lib/server/rateLimits";
 
 export const dynamic = "force-dynamic";
@@ -38,8 +38,25 @@ export const POST = withApiRoute(async (req: NextRequest) => {
       }
     }
 
-    const origin =
-      req.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    // ⚠️ SÉCURITÉ : l'URL de retour est construite UNIQUEMENT à partir de la
+    // configuration serveur. L'en-tête `Origin` est contrôlé par l'appelant :
+    // il ne doit jamais décider de la destination du lien de réinitialisation
+    // (risque de redirection du jeton vers un domaine hostile).
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/\/$/, "");
+    if (!appUrl) {
+      if (process.env.NODE_ENV === "production") {
+        logger.error("auth_forgot_password_missing_app_url", {
+          message: "NEXT_PUBLIC_APP_URL est absent : impossible de construire le lien de réinitialisation.",
+        });
+        throw new AppError(
+          503,
+          "APP_URL_MISSING",
+          "Service de réinitialisation momentanément indisponible. Contactez le support."
+        );
+      }
+      logger.warn("auth_forgot_password_dev_fallback", { message: "NEXT_PUBLIC_APP_URL absent : repli localhost." });
+    }
+    const origin = appUrl || "http://localhost:3000";
     try {
       await supabaseSendPasswordReset(body.email, `${origin}/reset-password`);
     } catch (error) {

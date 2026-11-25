@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { IbxLightbox } from "@/components/ui/IbxLightbox";
+import { FavoriteButton } from "@/components/ui/FavoriteButton";
 import { buildProductCategories, matchesProductCategory } from "@/lib/data/productCategories";
 import { formatFcfa, formatPricePair, resolveMoneyConfig } from "@/lib/data/currency";
 import { useAppStore } from "@/lib/store/AppStore";
@@ -291,6 +292,8 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
             {visibleProducts.map((prod, index) => {
               const prodStore = stores.find((item) => item.id === prod.storeId);
               const pricePair = formatPricePair(Number(prod.price) || 0, money);
+              /** Produit gratuit : aucun panier, aucun achat (accès direct). */
+              const isFreeProd = Number(prod.price) === 0;
               const productHref = `/product/${encodeURIComponent(
                 String((prod as { slug?: string }).slug || prod.id)
               )}`;
@@ -365,6 +368,26 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                         ★ Top
                       </span>
                     )}
+
+                    {/* Favori : cœur posé sur le visuel (hors du lien titre) */}
+                    <FavoriteButton
+                      resourceType="product"
+                      resourceId={prod.id}
+                      variant="overlay"
+                      className="!left-1.5 !right-auto !top-auto !bottom-1.5"
+                    />
+
+                    {/* Galerie : nombre d'images supplémentaires disponibles */}
+                    {Array.isArray((prod as { images?: string[] }).images) &&
+                      (prod as { images?: string[] }).images!.length > 0 && (
+                        <span
+                          className="absolute bottom-1.5 right-1.5 rounded px-1 py-0.5 text-[8px] font-bold"
+                          style={{ backgroundColor: "rgba(2, 18, 49, 0.82)", color: "#f2cd82" }}
+                        >
+                          +{(prod as { images?: string[] }).images!.length} photo
+                          {(prod as { images?: string[] }).images!.length > 1 ? "s" : ""}
+                        </span>
+                      )}
                   </div>
 
 
@@ -416,53 +439,75 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                       style={{ borderColor: "var(--ibx-border)" }}
                     >
                       <div className="min-w-0">
-                        <span className="ibx-price block !text-[12.5px]">{pricePair.primary}</span>
-                        {pricePair.secondary && (
-                          <span className="ibx-tiny block !text-[9px]">{pricePair.secondary}</span>
-                        )}
-                        {prod.originalPrice && Number(prod.originalPrice) > Number(prod.price) && (
-                          <span className="ibx-price-old block !text-[9px]">
-                            {formatFcfa(Number(prod.originalPrice), money.rate)}
+                        {isFreeProd ? (
+                          <span className="block text-[11px] font-bold" style={{ color: "var(--ibx-success)" }}>
+                            Gratuit
                           </span>
+                        ) : (
+                          <>
+                            <span className="ibx-price block !text-[12.5px]">{pricePair.primary}</span>
+                            {pricePair.secondary && (
+                              <span className="ibx-tiny block !text-[9px]">{pricePair.secondary}</span>
+                            )}
+                            {prod.originalPrice && Number(prod.originalPrice) > Number(prod.price) && (
+                              <span className="ibx-price-old block !text-[9px]">
+                                {formatFcfa(Number(prod.originalPrice), money.rate)}
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onAddToCart({
-                              id: prod.id,
-                              type: "product",
-                              title: prod.title,
-                              price: prod.price,
-                              image: prod.image,
-                              categoryLabel: prod.typeLabel,
-                            })
-                          }
-                          className="ibx-btn ibx-btn-outline !px-1.5 !py-1"
-                          title="Ajouter au panier"
-                          aria-label={`Ajouter ${prod.title} au panier`}
-                        >
-                          <ShoppingCart className="h-3 w-3" aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onInstantBuy({
-                              id: prod.id,
-                              type: "product",
-                              title: prod.title,
-                              price: prod.price,
-                              image: prod.image,
-                              categoryLabel: prod.typeLabel,
-                            })
-                          }
-                          className="ibx-btn ibx-btn-primary !px-1.5 !py-1 !text-[9.5px]"
-                          aria-label={`Acheter ${prod.title}`}
-                        >
-                          <Download className="h-2.5 w-2.5" aria-hidden="true" />
-                          Acheter
-                        </button>
+                        {isFreeProd ? (
+                          <Link
+                            href={productHref}
+                            prefetch
+                            className="ibx-btn ibx-btn-primary !px-1.5 !py-1 !text-[9.5px]"
+                            aria-label={`Ouvrir ${prod.title}`}
+                          >
+                            <Download className="h-2.5 w-2.5" aria-hidden="true" />
+                            Ouvrir
+                          </Link>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onAddToCart({
+                                  id: prod.id,
+                                  type: "product",
+                                  title: prod.title,
+                                  price: prod.price,
+                                  image: prod.image,
+                                  categoryLabel: prod.typeLabel,
+                                })
+                              }
+                              className="ibx-btn ibx-btn-outline !px-1.5 !py-1"
+                              title="Ajouter au panier"
+                              aria-label={`Ajouter ${prod.title} au panier`}
+                            >
+                              <ShoppingCart className="h-3 w-3" aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onInstantBuy({
+                                  id: prod.id,
+                                  type: "product",
+                                  title: prod.title,
+                                  price: prod.price,
+                                  image: prod.image,
+                                  categoryLabel: prod.typeLabel,
+                                })
+                              }
+                              className="ibx-btn ibx-btn-primary !px-1.5 !py-1 !text-[9.5px]"
+                              aria-label={`Acheter ${prod.title}`}
+                            >
+                              <Download className="h-2.5 w-2.5" aria-hidden="true" />
+                              Acheter
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

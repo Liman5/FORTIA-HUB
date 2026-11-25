@@ -34,6 +34,8 @@ import {
   FileCheck,
   AlertTriangle,
   X,
+  Share2,
+  QrCode,
   Info
 } from 'lucide-react';
 import { 
@@ -43,9 +45,12 @@ import {
   PayoutRequest, 
   DigitalProductType 
 } from '../types';
-import { VendorStatsPanel } from "./vendor/VendorStatsPanel";
 import { CategorySelect, buildCourseCategoryOptions, slugifyCategory } from './CategorySelect';
 import { useCatalog } from '@/lib/store/domains/contexts';
+import { SellerOverview } from "./dashboard/SellerOverview";
+import { ProductAnalyticsModal } from "./dashboard/ProductAnalyticsModal";
+import { StoreQrCode } from "./dashboard/StoreQrCode";
+import { storeHref } from "@/lib/data/storeSlug";
 import { ProductImageUploader } from './ProductImageUploader';
 import { ProductDeliverableUploader, DeliverableFile } from './ProductDeliverableUploader';
 import { StoreImageUploader } from './StoreImageUploader';
@@ -106,6 +111,30 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'analytics' | 'products' | 'orders' | 'settings'>('analytics');
   const [showSuccess, setShowSuccess] = useState(false);
+  /* Partage de la boutique publique : lien copié ou feuille de partage native. */
+  const [shareNotice, setShareNotice] = useState('');
+  /* QR code de la boutique (généré localement). */
+  const [showQr, setShowQr] = useState(false);
+
+  const handleShareStore = async () => {
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}${storeHref(store)}`;
+    try {
+      const navigatorWithShare = typeof navigator !== 'undefined' ? (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }) : null;
+      if (navigatorWithShare?.share) {
+        await navigatorWithShare.share({
+          title: store.name,
+          text: `Découvrez ${store.name} sur FORTIA HUB`,
+          url,
+        });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setShareNotice('Lien de la boutique copié !');
+    } catch {
+      setShareNotice('Partage indisponible sur cet appareil.');
+    }
+    window.setTimeout(() => setShareNotice(''), 2600);
+  };
   // Règles de publication (point d'information anti-abus)
   const [showRules, setShowRules] = useState(false);
 
@@ -116,6 +145,61 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   const storeOrders = (orders || []).filter(
     (o) => o.storeId === store?.id || o.storeName === store?.name
   );
+
+  /* ---- Catalogue : recherche, filtre de statut, sélection multiple, analyse ---- */
+  const [productQuery, setProductQuery] = useState('');
+  const [productStatus, setProductStatus] = useState<'all' | 'published' | 'draft'>('all');
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [analyticsProductId, setAnalyticsProductId] = useState<string | null>(null);
+  const [orderQuery, setOrderQuery] = useState('');
+  const [orderStatus, setOrderStatus] = useState<string>('all');
+
+  const filteredStoreProducts = storeProducts.filter((product) => {
+    const query = productQuery.trim().toLowerCase();
+    const matchesQuery =
+      !query ||
+      `${product.title} ${product.description} ${product.typeLabel}`.toLowerCase().includes(query);
+    const matchesStatus =
+      productStatus === 'all' ||
+      (productStatus === 'published' ? product.isPublished : !product.isPublished);
+    return matchesQuery && matchesStatus;
+  });
+
+  const filteredStoreOrders = storeOrders.filter((order) => {
+    const query = orderQuery.trim().toLowerCase();
+    const matchesQuery =
+      !query ||
+      `${order.orderNumber} ${order.buyerName} ${order.buyerEmail} ${order.productTitle}`
+        .toLowerCase()
+        .includes(query);
+    const matchesStatus = orderStatus === 'all' || order.status === orderStatus;
+    return matchesQuery && matchesStatus;
+  });
+
+  const orderStatuses = Array.from(new Set(storeOrders.map((order) => order.status)));
+
+  const toggleProductSelection = (id: string) =>
+    setSelectedProducts((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+
+  /** Publication / dépublication groupée (persistée produit par produit). */
+  /** État d'ouverture de la boutique (les ventes sont bloquées en pause). */
+  const isStoreOpen = store?.isOpen !== false;
+  const publishedCount = storeProducts.filter((product) => product.isPublished).length;
+
+  const handleToggleStoreOpen = () => {
+    onUpdateStore({ ...store, isOpen: !isStoreOpen });
+  };
+  const bulkSetPublished = (isPublished: boolean) => {
+    selectedProducts.forEach((id) => {
+      const product = storeProducts.find((item) => item.id === id);
+      if (product && product.isPublished !== isPublished) {
+        onUpdateProduct({ ...product, isPublished });
+      }
+    });
+    setSelectedProducts([]);
+  };
 
   // Financial Calculations
   const grossRevenueUsd = storeOrders.reduce((sum, o) => sum + (Number(o.amountUsd) || 0), Number(store?.totalRevenueUsd) || 0);
@@ -156,7 +240,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   const [prodPrice, setProdPrice] = useState<number>(25);
   const [prodFormat, setProdFormat] = useState('PDF');
   const [prodImage, setProdImage] = useState('');
-  const [prodBannerImage, setProdBannerImage] = useState('');
+  const [prodImages, setProdImages] = useState<string[]>([]);
   const [prodDesc, setProdDesc] = useState('');
   const [prodFeaturesStr, setProdFeaturesStr] = useState('Accès instantané 24/7\nMises à jour gratuites');
   const [prodIsPublished, setProdIsPublished] = useState(true);
@@ -215,7 +299,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     setProdPrice(25);
     setProdFormat('PDF');
     setProdImage('');
-    setProdBannerImage('');
+    setProdImages([]);
     setProdDesc('');
     setProdFeaturesStr('Accès instantané 24/7\nMises à jour gratuites');
     setProdIsPublished(true);
@@ -244,7 +328,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     setProdPrice(p.price);
     setProdFormat(p.fileFormat);
     setProdImage(p.image || '');
-    setProdBannerImage(p.bannerImage || '');
+    setProdImages(Array.isArray(p.images) ? p.images : []);
     setProdDesc(p.description);
     setProdFeaturesStr(p.features ? p.features.join('\n') : '');
     setProdIsPublished(p.isPublished);
@@ -276,7 +360,8 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         price: Number(prodPrice),
         fileFormat: prodFormat,
         image: prodImage,
-        bannerImage: prodBannerImage,
+        bannerImage: '',
+        images: prodImages,
         description: prodDesc,
         features: featuresList,
         isPublished: prodIsPublished
@@ -300,7 +385,8 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         fileFormat: prodFormat || 'PDF',
         fileSize: '15 MB',
         image: prodImage || '',
-        bannerImage: prodBannerImage || '',
+        bannerImage: '',
+        images: prodImages,
         features: featuresList.length > 0 ? featuresList : ['Accès instantané 24/7', 'Mises à jour gratuites'],
         downloadUrl: '#',
         isPublished: prodIsPublished,
@@ -367,99 +453,190 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
   return (
     <div className="bg-[#021231] text-white min-h-screen pb-16 space-y-8 fortia-flat">
-      {/* Top Banner & Header */}
-      <div className="vendor-header-banner relative bg-[#011D46] border-b border-[#D69E25]/30 overflow-hidden" style={{ backgroundColor: "#011D46" }}>
-        {/* Glow effects */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#D69E25]/50 to-transparent" />
-        <div className="absolute -top-20 right-20 w-64 h-64 rounded-full bg-[#D69E25]/5 blur-3xl" />
-        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+      {/* Analyse produit (fenêtre) */}
+      {analyticsProductId && (
+        <ProductAnalyticsModal
+          productId={analyticsProductId}
+          onClose={() => setAnalyticsProductId(null)}
+        />
+      )}
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10 space-y-6">
-          {/* Identité de la boutique + statut */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-            {/* Logo */}
-            <div className="relative shrink-0 self-center sm:self-auto">
-              {store.logo ? (
-                <motion.img
-                  src={store.logo}
-                  alt={store.name}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#D69E25]"
-                  animate={{ y: [0, -5, 0] }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                />
-              ) : (
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-[#D69E25] bg-[#021231] flex items-center justify-center">
-                  <Store className="w-7 h-7 sm:w-8 sm:h-8 text-[#D69E25]" />
-                </div>
-              )}
-            </div>
+      {showQr && (
+        <StoreQrCode
+          storeName={store.name}
+          path={storeHref(store)}
+          onClose={() => setShowQr(false)}
+        />
+      )}
+      {/* Bandeau boutique : couverture, identité, indicateurs, actions */}
+      <div className="relative border-b border-slate-800 bg-[#011D46]">
+        <div className="relative h-28 w-full overflow-hidden bg-[#021231] sm:h-36">
+          {store.banner ? (
+            <img src={store.banner} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="h-full w-full bg-[#021231]" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#011D46] via-[#011D46]/75 to-transparent" />
+          <div className="absolute right-3 top-3 flex flex-wrap items-center gap-1.5">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9.5px] font-black ${
+                store.status === 'active'
+                  ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200'
+                  : store.status === 'pending'
+                    ? 'border-amber-400/60 bg-amber-500/20 text-amber-200'
+                    : 'border-red-400/60 bg-red-500/20 text-red-200'
+              }`}
+            >
+              <CheckCircle2 className="h-2.5 w-2.5" />
+              {store.status === 'active'
+                ? 'Boutique active'
+                : store.status === 'pending'
+                  ? 'En validation'
+                  : 'Suspendue'}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9.5px] font-black ${
+                isStoreOpen
+                  ? 'border-white/25 bg-[#021231]/70 text-white'
+                  : 'border-amber-400/60 bg-[#021231]/80 text-amber-200'
+              }`}
+            >
+              {isStoreOpen ? 'Ventes ouvertes' : 'En pause'}
+            </span>
+          </div>
+        </div>
 
-            <div className="flex-1 min-w-0 text-center sm:text-left space-y-2">
-              <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-3">
-                <h1 className="text-xl sm:text-2xl font-black text-[#F8FAFC] leading-tight truncate">{store.name}</h1>
-                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2">
-                  <span className="inline-flex items-center gap-1.5 bg-[#D69E25]/15 text-[#D69E25] border border-[#D69E25]/40 text-[10px] font-extrabold px-2.5 py-1 rounded-full">
-                    <Award className="w-3 h-3" /> FORTIA Vendeur Pro
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="relative z-10 mt-3 flex flex-col gap-3 rounded-2xl border border-[#D69E25]/25 bg-[#011D46] p-3 shadow-lg sm:mt-5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4">
+            <div className="flex items-center gap-3">
+              <div className="shrink-0">
+                {store.logo ? (
+                  <img
+                    src={store.logo}
+                    alt={store.name}
+                    className="h-16 w-16 rounded-2xl border-2 border-[#D69E25] bg-[#021231] object-cover sm:h-20 sm:w-20"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-[#D69E25] bg-[#021231] sm:h-20 sm:w-20">
+                    <Store className="h-7 w-7 text-[#D69E25] sm:h-8 sm:w-8" />
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 space-y-1.5 pb-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="truncate text-lg font-black leading-tight text-white sm:text-2xl">
+                    {store.name}
+                  </h1>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#D69E25]/40 bg-[#D69E25]/15 px-2 py-0.5 text-[9.5px] font-extrabold text-[#D69E25]">
+                    <Award className="h-2.5 w-2.5" /> Vendeur Pro
                   </span>
-                  <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-[#021231] border border-emerald-300 text-[10px] font-black px-2.5 py-1 rounded-full">
-                    <CheckCircle2 className="w-3 h-3" /> Statut : Boutique Active
-                  </span>
-                  {/* Point d'information : icône vectorielle (lucide Info) */}
                   <button
                     onClick={() => setShowRules(true)}
                     title="Règles de publication (important)"
                     aria-label="Règles de publication"
-                    className="inline-flex items-center gap-1 rounded-full border border-[#D69E25]/60 bg-[#D69E25]/10 px-2 py-1 text-[10px] font-bold text-[#D69E25] hover:bg-[#D69E25] hover:text-[#021231] transition"
+                    className="inline-flex items-center gap-1 rounded-full border border-[#D69E25]/50 px-2 py-0.5 text-[9.5px] font-bold text-[#D69E25] transition hover:bg-[#D69E25] hover:text-[#021231]"
                   >
-                    <Info className="h-3.5 w-3.5" />
-                    Règles
+                    <Info className="h-3 w-3" /> Règles
                   </button>
                 </div>
+                <p className="truncate text-[11px] text-slate-400">
+                  {store.ownerName} · {store.ownerEmail}
+                </p>
               </div>
+            </div>
 
-              <p className="text-[11px] sm:text-xs text-[#CBD5E1] truncate max-w-full">
-                Propriétaire : <strong className="text-[#F8FAFC]">{store.ownerName}</strong> · {store.ownerEmail}
-              </p>
-
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-1 text-[11px] text-[#CBD5E1]">
-                <span>
-                  Commissions plateforme : <strong className="text-[#D69E25]">10%</strong>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {shareNotice && (
+                <span className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-300">
+                  {shareNotice}
                 </span>
-                <span className="hidden sm:inline text-slate-600">•</span>
-                <span className="flex items-center gap-1">
-                  <ShoppingBag className="w-3 h-3 text-[#D69E25]" />
-                  {storeProducts.length + (store.salesCount || 0)} produit{(storeProducts.length + (store.salesCount || 0)) > 1 ? "s" : ""}
-                </span>
-              </div>
+              )}
+              <button
+                onClick={() => setShowQr(true)}
+                title="QR code de la boutique (flyers, vitrine, réseaux sociaux)"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D69E25]/40 bg-[#D69E25]/10 px-3 py-2 text-[11px] font-bold text-[#D69E25] transition hover:bg-[#D69E25] hover:text-[#021231]"
+              >
+                <QrCode className="h-3.5 w-3.5" />
+                QR boutique
+              </button>
+              <button
+                onClick={handleShareStore}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-[11px] font-bold text-slate-200 transition hover:border-[#D69E25]/50 hover:bg-white/10"
+              >
+                <Share2 className="h-3.5 w-3.5 text-[#D69E25]" />
+                Partager
+              </button>
+              <button
+                onClick={onViewPublicStore}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-[11px] font-bold text-slate-200 transition hover:border-[#D69E25]/50 hover:bg-white/10"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-[#D69E25]" />
+                Voir la vitrine
+              </button>
+              <button
+                onClick={handleOpenAddProduct}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#D69E25] px-3.5 py-2 text-[11px] font-black text-[#021231] transition hover:bg-amber-400"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Nouveau produit
+              </button>
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-end">
-            <button
-              onClick={onViewPublicStore}
-              className="group relative w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/15 hover:border-[#D69E25]/50 font-bold text-xs rounded-xl transition-all duration-300 shadow overflow-hidden"
-            >
-              <ExternalLink className="w-4 h-4 text-[#D69E25]" />
-              <span>Voir ma Boutique Publique</span>
-            </button>
+          {/* Indicateurs clés de la boutique (données réelles) */}
+          <div className="grid grid-cols-2 gap-2 pb-3 sm:grid-cols-4">
+            {[
+              { label: 'Produits publiés', value: `${publishedCount}/${storeProducts.length}` },
+              { label: 'Commandes', value: String(storeOrders.length) },
+              {
+                label: 'Revenus nets',
+                value: `$${storeOrders
+                  .reduce((sum, order) => sum + (Number(order.vendorEarningsUsd) || 0), 0)
+                  .toFixed(0)}`,
+              },
+              { label: 'Note boutique', value: `${Number(store.rating || 0).toFixed(1)}/5` },
+            ].map((item) => (
+              <div key={item.label} className="rounded-xl border border-white/10 bg-[#021231]/60 px-3 py-2">
+                <p className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">{item.label}</p>
+                <p className="text-sm font-black text-white">{item.value}</p>
+              </div>
+            ))}
+          </div>
 
+          {/* Ouverture / pause des ventes */}
+          <div className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-[#021231]/40 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold text-white">
+                {isStoreOpen ? 'Votre boutique accepte les commandes' : 'Votre boutique est en pause'}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {isStoreOpen
+                  ? 'Les clients peuvent acheter vos produits. Mettez en pause à tout moment.'
+                  : 'La vitrine reste visible mais les achats sont bloqués.'}
+              </p>
+            </div>
             <button
-              onClick={handleOpenAddProduct}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#D69E25] hover:bg-amber-400 text-[#021231] font-black text-xs rounded-xl transition-colors"
+              type="button"
+              onClick={handleToggleStoreOpen}
+              aria-pressed={!isStoreOpen}
+              className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition ${
+                isStoreOpen
+                  ? 'border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
+                  : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
+              }`}
             >
-              <Plus className="w-4 h-4" />
-              <span>Nouveau Produit</span>
+              {isStoreOpen ? 'Mettre en pause' : 'Réouvrir les ventes'}
             </button>
           </div>
 
-        {/* Tab Navigation */}
-          <div className="flex items-center gap-1.5 mt-6 sm:mt-8 pt-4 border-t border-slate-800 overflow-x-auto scrollbar-none snap-x">
+          {/* Navigation */}
+          <div className="mt-3 flex items-center gap-1.5 overflow-x-auto border-t border-slate-800 pt-3 [scrollbar-width:none] snap-x">
             {[
-              { id: 'analytics' as const, label: 'Tableau de Bord', icon: TrendingUp },
-              { id: 'products' as const, label: `Mes Produits (${storeProducts.length})`, icon: ShoppingBag },
-              { id: 'orders' as const, label: `Ventes & Commandes (${storeOrders.length})`, icon: PackageCheck },
-              { id: 'settings' as const, label: 'Paramètres Boutique', icon: Settings },
+              { id: 'analytics' as const, label: 'Tableau de bord', icon: TrendingUp },
+              { id: 'products' as const, label: `Produits (${storeProducts.length})`, icon: ShoppingBag },
+              { id: 'orders' as const, label: `Ventes (${storeOrders.length})`, icon: PackageCheck },
+              { id: 'settings' as const, label: 'Paramètres', icon: Settings },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -467,13 +644,13 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative shrink-0 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${
+                  className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-[11px] font-bold transition-colors sm:text-xs ${
                     isActive
                       ? 'bg-[#D69E25] text-[#021231]'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+                      : 'border border-transparent text-slate-400 hover:bg-white/5 hover:text-white'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-[#021231]' : 'text-[#D69E25]'}`} />
+                  <Icon className={`h-4 w-4 ${isActive ? 'text-[#021231]' : 'text-[#D69E25]'}`} />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -488,54 +665,8 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         {/* TAB 1: ANALYTICS & REVENUE */}
         {activeTab === 'analytics' && (
           <div className="space-y-6">
-            {/* Stats Cards Grid */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-              className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
-            >
-              {[
-                { label: "Chiffre d'Affaires", icon: DollarSign, value: `$${grossRevenueUsd}`, sub: `≈ ${Math.round(grossRevenueUsd * 600).toLocaleString()} FCFA`, badge: "100% des ventes accumulées", badgeColor: "text-emerald-400", color: "#D69E25" },
-                { label: "Commissions (10%)", icon: CreditCard, value: `$${platformFeeUsd}`, sub: `≈ ${Math.round(platformFeeUsd * 600).toLocaleString()} FCFA`, badge: "Frais de gestion & infrastructure", badgeColor: "text-slate-400", color: "#F59E0B" },
-                { label: "Revenu Net", icon: TrendingUp, value: `$${netEarningsUsd}`, sub: `≈ ${netEarningsFcfa.toLocaleString()} FCFA`, badge: "Disponible pour retrait instantané", badgeColor: "text-emerald-300", color: "#D69E25", highlighted: true },
-                { label: "Ventes", icon: PackageCheck, value: `${storeOrders.length + (store.salesCount || 0)}`, sub: "", badge: "Produits numériques délivrés", badgeColor: "text-emerald-400", color: "#D69E25" },
-              ].map((stat, idx) => (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: idx * 0.1, ease: "easeOut" }}
-                  whileHover={{ y: -4 }}
-                                    className={`group relative rounded-2xl border p-3.5 sm:p-4 space-y-2 bg-[#011D46]/80 transition-colors ${
-                    stat.highlighted ? 'border-[#D69E25]/60' : 'border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide text-slate-400 leading-tight">
-                      {stat.label}
-                    </span>
-                    <span className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center ${
-                      stat.highlighted ? 'bg-[#D69E25] text-[#021231]' : 'bg-[#D69E25]/10 text-[#D69E25]'
-                    }`}>
-                      <stat.icon className="w-4 h-4" />
-                    </span>
-                  </div>
-                  <p className={`text-xl sm:text-2xl font-black truncate ${stat.highlighted ? 'text-[#D69E25]' : 'text-white'}`}>
-                    {stat.value}
-                  </p>
-                  <div className="min-w-0">
-                    {stat.sub && (
-                      <span className="text-[10px] text-slate-500 font-semibold block truncate">{stat.sub}</span>
-                    )}
-                    <span className={`text-[10px] font-bold block truncate ${stat.badgeColor}`}>{stat.badge}</span>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-
-            {/* Statistiques réelles : vues, clics, ajouts au panier, ventes */}
-            <VendorStatsPanel storeId={(store as { id?: string } | null)?.id} />
+            {/* Vue d'ensemble : chiffres et courbes issus de la base */}
+            <SellerOverview role="vendor" />
 
             {/* Withdraw Funds Box */}
             <div className="bg-[#011D46] border border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-5">
@@ -605,40 +736,136 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
         {/* TAB 2: PRODUCTS CATALOG */}
         {activeTab === 'products' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-black text-white">Catalogue des Produits de votre Boutique</h2>
-                <p className="text-xs text-slate-300">Gérez, modifiez ou publiez vos produits en temps réel.</p>
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-xl font-black text-white">Catalogue de votre boutique</h2>
+                <p className="text-xs text-slate-300">Gérez, modifiez, publiez ou analysez vos produits.</p>
               </div>
 
               <button
                 onClick={handleOpenAddProduct}
-                className="px-5 py-2.5 bg-[#D69E25] hover:bg-amber-400 text-[#021231] font-black text-xs rounded-xl transition shadow flex items-center gap-2"
+                className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-[#D69E25] px-4 py-2.5 text-xs font-black text-[#021231] transition hover:bg-amber-400"
               >
                 <Plus className="w-4 h-4" />
-                <span>Ajouter un Produit</span>
+                <span>Ajouter un produit</span>
               </button>
             </div>
 
-            {storeProducts.length === 0 ? (
-              <div className="bg-[#011D46] border border-slate-800 rounded-3xl p-12 text-center space-y-4">
-                <ShoppingBag className="w-12 h-12 text-slate-500 mx-auto" />
-                <h3 className="text-lg font-bold text-white">Votre boutique n'a pas encore de produit</h3>
-                <p className="text-xs text-slate-400 max-w-md mx-auto">
-                  Publiez votre premier e-book, modèle Canva, formation vidéo ou pack de prompts pour commencer à générer des ventes.
+            {/* Outils : recherche, filtre de statut, actions groupées */}
+            <div className="rounded-2xl border border-slate-800 bg-[#011D46] p-3 space-y-2.5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  type="search"
+                  value={productQuery}
+                  onChange={(event) => setProductQuery(event.target.value)}
+                  placeholder="Rechercher un produit (titre, description, catégorie)…"
+                  aria-label="Rechercher un produit"
+                  className="w-full flex-1 rounded-xl border border-slate-700 bg-[#021231] px-3 py-2 text-xs text-white focus:border-[#D69E25] focus:outline-none"
+                />
+                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                  {[
+                    { id: 'all' as const, label: 'Tous' },
+                    { id: 'published' as const, label: 'En ligne' },
+                    { id: 'draft' as const, label: 'Brouillons' },
+                  ].map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setProductStatus(option.id)}
+                      className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${
+                        productStatus === option.id
+                          ? 'bg-[#D69E25] text-[#021231]'
+                          : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-2">
+                <p className="text-[11px] text-slate-400">
+                  {filteredStoreProducts.length} produit{filteredStoreProducts.length > 1 ? 's' : ''} affiché
+                  {filteredStoreProducts.length > 1 ? 's' : ''}
+                  {selectedProducts.length > 0
+                    ? ` · ${selectedProducts.length} sélectionné${selectedProducts.length > 1 ? 's' : ''}`
+                    : ''}
                 </p>
-                <button
-                  onClick={handleOpenAddProduct}
-                  className="px-6 py-3 bg-[#D69E25] text-[#021231] font-extrabold text-xs rounded-xl hover:bg-amber-400 transition"
-                >
-                  Ajouter mon Premier Produit
-                </button>
+                {selectedProducts.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProducts(filteredStoreProducts.map((product) => product.id))}
+                      className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[10px] font-bold text-slate-300 hover:bg-white/10"
+                    >
+                      Tout sélectionner
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => bulkSetPublished(true)}
+                      className="rounded-lg border border-emerald-500/30 bg-emerald-500/20 px-2.5 py-1.5 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/30"
+                    >
+                      Publier
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => bulkSetPublished(false)}
+                      className="rounded-lg border border-amber-500/30 bg-amber-500/20 px-2.5 py-1.5 text-[10px] font-bold text-amber-300 hover:bg-amber-500/30"
+                    >
+                      Masquer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProducts([])}
+                      className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 hover:text-white"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {filteredStoreProducts.length === 0 ? (
+              <div className="rounded-2xl border border-slate-800 bg-[#011D46] p-10 text-center">
+                <ShoppingBag className="mx-auto h-10 w-10 text-slate-500" />
+                <h3 className="mt-3 text-base font-bold text-white">
+                  {storeProducts.length === 0
+                    ? "Votre boutique n'a pas encore de produit"
+                    : 'Aucun produit ne correspond à votre recherche'}
+                </h3>
+                <p className="mx-auto mt-1 max-w-md text-xs text-slate-400">
+                  {storeProducts.length === 0
+                    ? "Publiez votre premier e-book, modèle Canva, formation vidéo ou pack de prompts pour commencer à générer des ventes."
+                    : 'Modifiez le mot-clé ou le filtre de statut pour retrouver vos produits.'}
+                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  {storeProducts.length === 0 ? (
+                    <button
+                      onClick={handleOpenAddProduct}
+                      className="rounded-xl bg-[#D69E25] px-5 py-2.5 text-xs font-extrabold text-[#021231] transition hover:bg-amber-400"
+                    >
+                      Ajouter mon premier produit
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setProductQuery('');
+                        setProductStatus('all');
+                      }}
+                      className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-slate-200 transition hover:bg-white/10"
+                    >
+                      Réinitialiser les filtres
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="space-y-4 sm:space-y-6">
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
-                {storeProducts.map((prod) => (
+                {filteredStoreProducts.map((prod) => (
                   <div key={prod.id} className="bg-[#011D46] border border-slate-800 rounded-2xl p-3 sm:p-5 space-y-3 sm:space-y-4 flex flex-col justify-between">
                     <div className="space-y-3">
                       <div className="h-28 sm:h-40 w-full relative overflow-hidden rounded-xl sm:rounded-2xl bg-slate-900">
@@ -661,7 +888,16 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                         </span>
                       </div>
 
-                      <h3 className="font-bold text-sm sm:text-base text-white line-clamp-2">{prod.title}</h3>
+                      <div className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedProducts.includes(prod.id)}
+                          onChange={() => toggleProductSelection(prod.id)}
+                          className="mt-1 h-4 w-4 shrink-0 accent-[#D69E25]"
+                          aria-label={`Sélectionner ${prod.title}`}
+                        />
+                        <h3 className="line-clamp-2 text-sm font-bold text-white sm:text-base">{prod.title}</h3>
+                      </div>
                       <p className="hidden sm:block text-xs text-slate-300 line-clamp-2">{prod.description}</p>
                       <div className="flex items-center justify-between text-xs pt-1">
                         <span className="text-lg sm:text-2xl font-black text-[#D69E25]">${prod.price}</span>
@@ -670,6 +906,14 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                     </div>
 
                     <div className="pt-3 border-t border-slate-800 flex items-center gap-2">
+                      <button
+                        onClick={() => setAnalyticsProductId(prod.id)}
+                        className="rounded-xl border border-[#D69E25]/40 bg-[#D69E25]/15 p-2.5 text-[#D69E25] transition hover:bg-[#D69E25] hover:text-[#021231]"
+                        title="Statistiques du produit (vues, clics, paniers, ventes)"
+                        aria-label={`Statistiques de ${prod.title}`}
+                      >
+                        <TrendingUp className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleTogglePublish(prod)}
                         className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
@@ -707,45 +951,115 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
 
         {/* TAB 3: ORDERS */}
         {activeTab === 'orders' && (
-          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl p-6 space-y-4">
-            <h2 className="text-xl font-black text-white">Historique des Commandes de la Boutique</h2>
-            <p className="text-xs text-slate-300">Liste des clients ayant acheté des produits dans votre boutique.</p>
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-xl font-black text-white">Ventes &amp; commandes</h2>
+                <p className="text-xs text-slate-300">Suivi réel des achats effectués dans votre boutique.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 font-bold text-emerald-300">
+                  {storeOrders.filter((order) => order.status === 'Payé').length} payée(s)
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-bold text-slate-300">
+                  Total ${storeOrders.reduce((sum, order) => sum + (Number(order.amountUsd) || 0), 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
 
-            {storeOrders.length === 0 ? (
-              <p className="text-xs text-slate-400 italic py-6 text-center">Aucune commande enregistrée pour l'instant.</p>
+            <div className="rounded-2xl border border-slate-800 bg-[#011D46] p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  type="search"
+                  value={orderQuery}
+                  onChange={(event) => setOrderQuery(event.target.value)}
+                  placeholder="Rechercher (n° commande, client, produit)…"
+                  aria-label="Rechercher une commande"
+                  className="w-full flex-1 rounded-xl border border-slate-700 bg-[#021231] px-3 py-2 text-xs text-white focus:border-[#D69E25] focus:outline-none"
+                />
+                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                  <button
+                    type="button"
+                    onClick={() => setOrderStatus('all')}
+                    className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${
+                      orderStatus === 'all'
+                        ? 'bg-[#D69E25] text-[#021231]'
+                        : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                    }`}
+                  >
+                    Tous
+                  </button>
+                  {orderStatuses.map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => setOrderStatus(status)}
+                      className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${
+                        orderStatus === status
+                          ? 'bg-[#D69E25] text-[#021231]'
+                          : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {filteredStoreOrders.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-700 p-10 text-center">
+                <p className="text-sm font-bold text-white">Aucune commande à afficher</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Les ventes apparaîtront ici dès le premier achat de votre boutique.
+                </p>
+              </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-300">
-                  <thead className="bg-white/[0.03] text-slate-400 uppercase text-[10px]">
+              <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#011D46]">
+                <table className="w-full min-w-[760px] text-left text-xs text-slate-300">
+                  <thead className="bg-white/[0.03] text-[10px] uppercase text-slate-400">
                     <tr>
-                      <th className="p-3">N° Commande</th>
+                      <th className="p-3">N°</th>
                       <th className="p-3">Client</th>
-                      <th className="p-3">Produit Achete</th>
-                      <th className="p-3">Montant Total</th>
-                      <th className="p-3">Votre Gain (90%)</th>
-                      <th className="p-3">Passerelle</th>
+                      <th className="p-3">Produit</th>
+                      <th className="p-3 text-right">Montant</th>
+                      <th className="p-3 text-right">Votre gain</th>
+                      <th className="p-3">Paiement</th>
+                      <th className="p-3">Date</th>
                       <th className="p-3">Statut</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/10">
-                    {storeOrders.map((ord) => (
-                      <tr key={ord.id} className="hover:bg-white/5 transition">
-                        <td className="p-3 font-mono font-bold text-amber-400">{ord.orderNumber}</td>
-                        <td className="p-3">
-                          <p className="font-bold text-white">{ord.buyerName}</p>
-                          <p className="text-[10px] text-slate-400">{ord.buyerEmail}</p>
-                        </td>
-                        <td className="p-3 text-slate-200 line-clamp-1">{ord.productTitle}</td>
-                        <td className="p-3 font-bold text-white">${ord.amountUsd}</td>
-                        <td className="p-3 font-bold text-emerald-400">${ord.vendorEarningsUsd}</td>
-                        <td className="p-3 text-cyan-300 font-semibold">{ord.paymentGateway}</td>
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                            {ord.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                  <tbody>
+                    {filteredStoreOrders.map((ord) => {
+                      const created = (ord as { createdAt?: string }).createdAt;
+                      return (
+                        <tr key={ord.id} className="border-t border-slate-800 hover:bg-white/5">
+                          <td className="p-3 font-mono font-bold text-[#D69E25]">{ord.orderNumber}</td>
+                          <td className="p-3">
+                            <p className="font-bold text-white">{ord.buyerName}</p>
+                            <p className="text-[10px] text-slate-400">{ord.buyerEmail}</p>
+                          </td>
+                          <td className="max-w-[220px] truncate p-3 text-slate-200">{ord.productTitle}</td>
+                          <td className="p-3 text-right font-bold text-white">${ord.amountUsd}</td>
+                          <td className="p-3 text-right font-bold text-emerald-400">${ord.vendorEarningsUsd}</td>
+                          <td className="p-3 text-slate-300">{ord.paymentGateway}</td>
+                          <td className="p-3 text-[10px] text-slate-400">
+                            {created ? new Date(created).toLocaleDateString('fr-FR') : '—'}
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${
+                                ord.status === 'Payé'
+                                  ? 'border-emerald-500/30 bg-emerald-500/20 text-emerald-300'
+                                  : 'border-amber-500/30 bg-amber-500/20 text-amber-300'
+                              }`}
+                            >
+                              {ord.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -947,12 +1261,12 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                     />
                   </div>
 
-                  {/* Import Visuels Couverture & Bannière */}
+                  {/* Import : image de couverture + galerie */}
                   <ProductImageUploader
                     coverImage={prodImage}
-                    bannerImage={prodBannerImage}
+                    images={prodImages}
                     onCoverChange={setProdImage}
-                    onBannerChange={setProdBannerImage}
+                    onImagesChange={setProdImages}
                     entityId={editingProduct?.id || `new-${Date.now()}`}
                   />
 

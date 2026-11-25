@@ -371,7 +371,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newProdDesc, setNewProdDesc] = useState('');
   const [newProdFormat, setNewProdFormat] = useState('PDF');
   const [newProdImage, setNewProdImage] = useState('');
-  const [newProdBannerImage, setNewProdBannerImage] = useState('');
+  const [newProdImages, setNewProdImages] = useState<string[]>([]);
   const [adminProdFeatures, setAdminProdFeatures] = useState('Accès instantané 24/7\nMises à jour gratuites à vie');
 
   const [adminDeliverables, setAdminDeliverables] = useState<DeliverableFile[]>([]);
@@ -436,7 +436,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       fileFormat: newProdFormat || 'PDF',
       fileSize: '15 MB',
       image: newProdImage || '',
-      bannerImage: newProdBannerImage || '',
+      bannerImage: '',
+      images: newProdImages,
       features: feats.length > 0 ? feats : ['Accès instantané 24/7', 'Mises à jour gratuites à vie'],
       downloadUrl: adminDownloadUrl || '#',
       isPopular: true
@@ -945,12 +946,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       />
                     </div>
 
-                    {/* Import Visuels Couverture & Bannière */}
+                    {/* Import : image de couverture + galerie */}
                     <ProductImageUploader
                       coverImage={newProdImage}
-                      bannerImage={newProdBannerImage}
+                      images={newProdImages}
                       onCoverChange={setNewProdImage}
-                      onBannerChange={setNewProdBannerImage}
+                      onImagesChange={setNewProdImages}
                       entityId={adminNewProdEntityId}
                     />
 

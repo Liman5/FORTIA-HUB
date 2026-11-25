@@ -79,6 +79,29 @@ export function canReadWithoutSession(key: string): boolean {
 }
 
 /**
+ * Exception « contenu gratuit » : le livrable d'un produit PUBLIÉ vendu à 0
+ * est téléchargeable sans compte. La clé doit correspondre à un fichier
+ * réellement rattaché à ce produit (aucune autre clé privée n'est ouverte).
+ */
+export async function isFreePublicDeliverable(key: string, parsed: ParsedKey): Promise<boolean> {
+  if (parsed.isPublic || parsed.folder !== "product-files") return false;
+  if (!isUuid(parsed.entityId)) return false;
+
+  const product = await prisma.product.findUnique({
+    where: { id: parsed.entityId },
+    select: { price: true, isPublished: true },
+  });
+  if (!product || product.isPublished !== true) return false;
+  if (Number(product.price) !== 0) return false;
+
+  const file = await prisma.productFile.findFirst({
+    where: { productId: parsed.entityId, fileUrl: key },
+    select: { id: true },
+  });
+  return !!file;
+}
+
+/**
  * Construit l'identité de l'appelant à partir de la session serveur.
  * Retourne `null` si aucun utilisateur (ni administrateur) n'est authentifié.
  */
@@ -108,17 +131,15 @@ export async function canReadPrivateKey(actor: StorageActor, parsed: ParsedKey):
 
   switch (parsed.folder) {
     // Documents d'identité : uniquement le déposant du dossier KYC
+    // (l'adresse e-mail n'est JAMAIS une preuve d'accès : elle peut être
+    // partagée ou usurpée). Les administrateurs sont autorisés plus haut.
     case "kyc-documents": {
       const submission = await prisma.kycSubmission.findUnique({
         where: { id: parsed.entityId },
-        select: { applicantId: true, email: true },
+        select: { applicantId: true },
       });
       if (!submission) return false;
-      if (submission.applicantId && submission.applicantId === actor.userId) return true;
-      return (
-        !!submission.email &&
-        submission.email.toLowerCase() === String(actor.email || "").toLowerCase()
-      );
+      return !!submission.applicantId && !!actor.userId && submission.applicantId === actor.userId;
     }
 
     // Livrables produits : acheteur réel (ENTITLEMENT), vendeur, ou produit gratuit
@@ -234,14 +255,11 @@ export async function canWriteKey(actor: StorageActor, parsed: ParsedKey): Promi
 
       const submission = await prisma.kycSubmission.findUnique({
         where: { id: parsed.entityId },
-        select: { applicantId: true, email: true },
+        select: { applicantId: true },
       });
       if (!submission) return !!actor.userId; // dossier en cours de constitution
-      if (submission.applicantId && submission.applicantId === actor.userId) return true;
-      return (
-        !!submission.email &&
-        submission.email.toLowerCase() === String(actor.email || "").toLowerCase()
-      );
+      // Uniquement le déposant identifié par `applicantId` (jamais l'e-mail).
+      return !!submission.applicantId && !!actor.userId && submission.applicantId === actor.userId;
     }
 
     // Images éditoriales : administrateurs uniquement

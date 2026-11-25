@@ -44,17 +44,6 @@ function iso(v: any): string {
   return v ? new Date(v).toISOString() : "";
 }
 
-function jsonField(v: any): unknown {
-  if (typeof v === "string") {
-    try {
-      return JSON.parse(v);
-    } catch {
-      return v;
-    }
-  }
-  return v;
-}
-
 /** Message générique renvoyé à Gemini quand l'utilisateur n'est pas connecté. */
 function notAuthenticated() {
   return {
@@ -439,7 +428,12 @@ const getPlatformSettings: AiTool = {
     parameters: { type: Type.OBJECT, properties: {} },
   },
   handler: async () => {
-    const [siteContent, feeConfig, configs] = await Promise.all([
+    // ⚠️ SÉCURITÉ : aucune lecture de `platform_config` ici. Cette table
+    // contient les secrets 2FA (`2fa:user:*`) et les hash OTP (`otp:email:*`) ;
+    // un `findMany` global renvoyé à l'assistant IA (accessible sans connexion)
+    // exposait ces données. Seuls des réglages explicitement publics pourraient
+    // être ajoutés, via la liste blanche `PUBLIC_PLATFORM_CONFIG_KEYS`.
+    const [siteContent, feeConfig] = await Promise.all([
       prisma.siteContent.findFirst({
         select: {
           contactEmail: true,
@@ -460,10 +454,6 @@ const getPlatformSettings: AiTool = {
           buyerFeeUsd: true,
           feeEnabled: true,
         },
-      }),
-      prisma.platformConfig.findMany({
-        take: 50,
-        select: { key: true, value: true, description: true },
       }),
     ]);
 
@@ -493,7 +483,6 @@ const getPlatformSettings: AiTool = {
             enterpriseFeeFcfa: num(feeConfig.enterpriseFeeFcfa),
           }
         : null,
-      platformConfigs: configs.map((c) => ({ key: c.key, value: jsonField(c.value), description: c.description })),
     };
   },
 };

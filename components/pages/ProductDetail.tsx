@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -16,12 +17,16 @@ import {
   AlertCircle,
   ZoomIn,
 } from "lucide-react";
-import { useAuth, useCommerce } from "@/lib/store/domains/contexts";
+import { useAuth, useCommerce, useMarketplace } from "@/lib/store/domains/contexts";
 import { useAppStore } from "@/lib/store/AppStore";
 import { trackProductEvent } from "@/lib/services/track";
 import { apiWritePlatform } from "@/lib/services/platformWrite";
 import { requestSignedDownloadUrl } from "@/lib/services/paymentsClient";
 import { IbxLightbox } from "@/components/ui/IbxLightbox";
+import { FavoriteButton } from "@/components/ui/FavoriteButton";
+import { ContentCard } from "@/components/discovery/ContentCard";
+import { toProductItem, type ExplorerItem } from "@/lib/data/explorer";
+import { slugifyCategory } from "@/lib/data/courseCategories";
 import { formatFcfa, formatPricePair, resolveMoneyConfig } from "@/lib/data/currency";
 
 export interface ProductDetailData {
@@ -38,6 +43,8 @@ export interface ProductDetailData {
   salesCount: number;
   image: string;
   bannerImage: string;
+  /** Galerie : images supplémentaires (affichées sous l'image principale). */
+  images: string[];
   fileFormat: string;
   fileSize: string;
   features: string[];
@@ -62,7 +69,8 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
   const router = useRouter();
   const { addToCart } = useCommerce();
   const { isUserLoggedIn, userProfile } = useAuth();
-  const { siteContent } = useAppStore();
+  const { siteContent, refreshPlatformData } = useAppStore();
+  const { marketplaceProducts } = useMarketplace();
 
   /* Affichage : FCFA principal, équivalent USD facultatif (Admin). */
   const money = resolveMoneyConfig(siteContent);
@@ -72,8 +80,13 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
   const [downloadError, setDownloadError] = useState<string>("");
 
   const galleryImages = useMemo(
-    () => Array.from(new Set([product.bannerImage, product.image].filter(Boolean))) as string[],
-    [product.bannerImage, product.image]
+    () =>
+      Array.from(
+        new Set(
+          [product.image, ...(product.images || []), product.bannerImage].filter(Boolean)
+        )
+      ) as string[],
+    [product.image, product.images, product.bannerImage]
   );
   const [activeIndex, setActiveIndex] = useState(0);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -141,11 +154,30 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
     router.push("/cart?payer=1");
   };
 
+  /**
+   * Produit gratuit : on enregistre le contenu dans la bibliothèque du membre
+   * (droit serveur, idempotent) AVANT le téléchargement. Aucun panier.
+   */
+  const claimFreeProduct = async () => {
+    if (!isFree || !isUserLoggedIn) return;
+    try {
+      const response = await fetch("/api/products/claim-free", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: product.id }),
+      });
+      if (response.ok) void refreshPlatformData?.();
+    } catch {
+      /* silencieux : le téléchargement reste possible */
+    }
+  };
+
   /** Téléchargement sécurisé : le serveur délivre une URL signée temporaire. */
   const handleDownload = async (file: ProductDetailData["files"][number]) => {
     setDownloadError("");
     setDownloading(file.id);
     try {
+      await claimFreeProduct();
       const result = await requestSignedDownloadUrl(file.fileUrl);
       if (!result.ok || !result.url) {
         setDownloadError(
@@ -166,6 +198,22 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
   };
 
   const lightboxImages = galleryImages.map((src) => ({ src, alt: product.title }));
+
+  /* Produits recommandés : même catégorie (typeLabel) d'abord, puis complément
+     avec d'autres produits publiés pour ne jamais laisser la section vide. */
+  const categorySlug = slugifyCategory(product.typeLabel);
+  const recommendations = useMemo<ExplorerItem[]>(() => {
+    const wanted = String(product.typeLabel || "").toLowerCase().trim();
+    const others = (marketplaceProducts || []).filter(
+      (item: any) => item && String(item.id) !== String(product.id) && item.isPublished !== false
+    );
+    const same = wanted
+      ? others.filter((item: any) => String(item.typeLabel || "").toLowerCase().trim() === wanted)
+      : [];
+    const seen = new Set(same.map((item: any) => String(item.id)));
+    const complement = others.filter((item: any) => !seen.has(String(item.id)));
+    return [...same, ...complement].slice(0, 8).map(toProductItem);
+  }, [marketplaceProducts, product.id, product.typeLabel]);
 
   return (
     <div className="ibx-page">
@@ -307,9 +355,15 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
             </div>
 
             <div className="flex flex-wrap items-end gap-3">
-              <span className="ibx-price !text-2xl">{pricePair.primary}</span>
-              {pricePair.secondary && <span className="ibx-small">{pricePair.secondary}</span>}
-              {product.originalPrice && Number(product.originalPrice) > Number(product.price) && (
+              {isFree ? (
+                <span className="text-2xl font-extrabold" style={{ color: "var(--ibx-success)" }}>
+                  Gratuit
+                </span>
+              ) : (
+                <span className="ibx-price !text-2xl">{pricePair.primary}</span>
+              )}
+              {!isFree && pricePair.secondary && <span className="ibx-small">{pricePair.secondary}</span>}
+              {!isFree && product.originalPrice && Number(product.originalPrice) > Number(product.price) && (
                 <span className="ibx-price-old">
                   {formatFcfa(Number(product.originalPrice), money.rate)}
                 </span>
@@ -335,17 +389,42 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
             )}
 
             <div className="flex flex-wrap gap-2.5 pt-1">
-              <button type="button" onClick={() => addToCart(cartItem)} className="ibx-btn ibx-btn-outline">
-                <ShoppingCart className="h-4 w-4" aria-hidden="true" />
-                Ajouter au panier
-              </button>
-              {!isFree && (
-                <button type="button" onClick={handleBuyNow} className="ibx-btn ibx-btn-primary">
-                  Acheter maintenant
-                </button>
-              )}
-              {isFree && (
-                <span className="ibx-badge ibx-badge-success">Produit gratuit — accès immédiat</span>
+              {isFree ? (
+                <>
+                  {/* Produit gratuit : AUCUN panier, aucun achat.
+                      Le fichier est téléchargeable immédiatement. */}
+                  {product.files.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(product.files[0])}
+                      disabled={downloading === product.files[0]?.id}
+                      className="ibx-btn ibx-btn-primary"
+                    >
+                      {downloading === product.files[0]?.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Download className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      Télécharger gratuitement
+                    </button>
+                  ) : (
+                    <span className="ibx-badge ibx-badge-success">
+                      Produit gratuit — accès immédiat
+                    </span>
+                  )}
+                  <FavoriteButton resourceType="product" resourceId={product.id} variant="inline" />
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => addToCart(cartItem)} className="ibx-btn ibx-btn-outline">
+                    <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+                    Ajouter au panier
+                  </button>
+                  <button type="button" onClick={handleBuyNow} className="ibx-btn ibx-btn-primary">
+                    Acheter maintenant
+                  </button>
+                  <FavoriteButton resourceType="product" resourceId={product.id} variant="inline" />
+                </>
               )}
             </div>
 
@@ -412,6 +491,32 @@ export function ProductDetail({ product }: { product: ProductDetailData }) {
           <section className="ibx-card mt-6 p-5 sm:p-6">
             <h2 className="ibx-h2">Description complète</h2>
             <p className="ibx-body mt-3 whitespace-pre-line">{product.fullDescription}</p>
+          </section>
+        )}
+
+        {/* Recommandé pour vous : produits de la même catégorie */}
+        {recommendations.length > 0 && (
+          <section className="mt-8">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+              <div className="min-w-0">
+                <h2 className="ibx-h2">Recommandé pour vous</h2>
+                <p className="ibx-small mt-0.5">
+                  D&apos;autres produits numériques de la catégorie {product.typeLabel}.
+                </p>
+              </div>
+              <Link
+                href={`/marketplace?categorie=${encodeURIComponent(categorySlug || product.typeLabel)}`}
+                prefetch
+                className="ibx-btn ibx-btn-ghost !px-2 !py-1 !text-[10px]"
+              >
+                Voir la catégorie
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+              {recommendations.map((item) => (
+                <ContentCard key={item.key} item={item} money={money} />
+              ))}
+            </div>
           </section>
         )}
       </div>
