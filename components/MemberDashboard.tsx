@@ -1,5 +1,6 @@
 "use client";
 
+import { QrCodeImage } from "@/components/ui/QrCodeImage";
 import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
@@ -48,8 +49,10 @@ import {
   Smartphone,
   Check,
   Library,
+  Heart,
 } from 'lucide-react';
 import { ProfileHeader } from '@/components/member/ProfileHeader';
+import { useFavorites } from '@/lib/store/favoritesStore';
 import { ProfilePersonalCard } from '@/components/member/ProfilePersonalCard';
 import { useTheme } from '../lib/store/ThemeProvider';
 
@@ -98,6 +101,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 }) => {
   const { isDarkMode } = useTheme();
   const router = useRouter();
+  /* Favoris : compteur partagé avec la page /favorites (même store). */
+  const { count: favoritesCount } = useFavorites();
   const [activeTab, setActiveTab] = useState<'payments' | 'settings'>(initialTab || 'settings');
   const [isProviderFormOpen, setIsProviderFormOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -135,7 +140,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const [twofaMessage, setTwofaMessage] = useState<string | null>(null);
   const [twofaError, setTwofaError] = useState<string | null>(null);
   const [twofaOtpSent, setTwofaOtpSent] = useState(false);
-  const [twofaSetup, setTwofaSetup] = useState<{ secret: string; otpauthUrl: string; qrCodeUrl: string } | null>(null);
+  const [twofaSetup, setTwofaSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
 
   // Charger l'état 2FA depuis le serveur
   React.useEffect(() => {
@@ -207,7 +212,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       setTwofaError(res.error || "Impossible de générer la clé 2FA.");
       return;
     }
-    setTwofaSetup({ secret: res.secret, otpauthUrl: res.otpauthUrl || "", qrCodeUrl: res.qrCodeUrl || "" });
+    setTwofaSetup({ secret: res.secret, otpauthUrl: res.otpauthUrl || "" });
   };
 
   const copyTwoFactorSecret = async () => {
@@ -630,6 +635,22 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 </button>
               );
             })}
+
+            {/* Accès direct à la page des favoris (même rangée que les onglets) */}
+            <button
+              type="button"
+              onClick={() => router.push('/favorites')}
+              title="Voir mes favoris"
+              className="relative px-4 py-3 text-xs font-bold rounded-t-xl transition flex items-center gap-2 whitespace-nowrap shrink-0 text-slate-400 hover:text-slate-200 border-b-2 border-transparent"
+            >
+              <Heart className="w-4 h-4 text-rose-400" />
+              <span>Favoris</span>
+              {favoritesCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-white/10 text-slate-400">
+                  {favoritesCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
@@ -1058,9 +1079,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 </button>
               ) : twofaModal === 'enable' && twofaSetup ? (
                 <div className="space-y-4">
-                  {twofaSetup.qrCodeUrl && (
+                  {twofaSetup.otpauthUrl && (
                     <div className="flex justify-center">
-                      <img src={twofaSetup.qrCodeUrl} alt="QR Code Google Authenticator" className="w-40 h-40 rounded-xl bg-white p-2" />
+                      <QrCodeImage
+                        value={twofaSetup.otpauthUrl}
+                        alt="QR Code Google Authenticator"
+                        className="h-40 w-40 rounded-xl p-2"
+                      />
                     </div>
                   )}
                   <div>

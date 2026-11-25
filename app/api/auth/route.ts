@@ -703,17 +703,30 @@ async function handlePost(request: NextRequest) {
     }
 
     // ====== 2FA-SETUP (Google Authenticator) ======
-    // Génère la clé secrète TOTP à afficher dans les Paramètres (QR + clé à copier).
+    // Génère la clé secrète TOTP (QR + clé à copier) SANS jamais la transmettre
+    // à un service tiers : le QR est généré dans le navigateur à partir de
+    // l'URL otpauth. Si la 2FA est déjà active, aucun secret n'est renvoyé.
     if (body.action === "2fa-setup") {
       const current = await getCurrentUser(request);
       if (!current) {
         return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
       }
+
+      const alreadyEnabled = await isTwoFactorEnabled(current.id);
+      if (alreadyEnabled) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "La double authentification est déjà activée. Désactivez-la (un code Google Authenticator est requis) avant de la reconfigurer.",
+            twoFactorEnabled: true,
+          },
+          { status: 409 }
+        );
+      }
+
       const { secret, otpauthUrl } = await createTwoFactorSetup(current.id, current.email);
-      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-        otpauthUrl
-      )}`;
-      return NextResponse.json({ success: true, secret, otpauthUrl, qrCodeUrl });
+      return NextResponse.json({ success: true, secret, otpauthUrl });
     }
 
     // ====== TOGGLE-2FA (TOTP Google Authenticator) ======

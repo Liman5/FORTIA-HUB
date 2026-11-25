@@ -325,13 +325,13 @@ export async function apiGetTwoFactorStatus(): Promise<{ enabled: boolean }> {
 
 /**
  * Génère la clé secrète TOTP (Google Authenticator) pour le compte connecté.
- * Retourne la clé à copier + l'URL otpauth + l'image du QR Code.
+ * Retourne la clé à copier et l'URL otpauth : le QR code est généré
+ * localement dans le navigateur (aucun service tiers).
  */
 export async function apiTwoFactorSetup(): Promise<{
   success: boolean;
   secret?: string;
   otpauthUrl?: string;
-  qrCodeUrl?: string;
   error?: string;
 }> {
   try {
@@ -348,7 +348,6 @@ export async function apiTwoFactorSetup(): Promise<{
       success: true,
       secret: data.secret,
       otpauthUrl: data.otpauthUrl || "",
-      qrCodeUrl: data.qrCodeUrl || "",
     };
   } catch (err) {
     return { success: false, error: "Impossible de générer la clé 2FA. Vérifiez votre connexion." };

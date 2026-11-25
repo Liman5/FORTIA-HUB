@@ -1,5 +1,6 @@
 "use client";
 
+import { QrCodeImage } from "@/components/ui/QrCodeImage";
 import React, { useState } from 'react';
 import { Certificate } from '../types';
 import { generatePDFCertificate, triggerCelebrationConfetti } from '../utils/pdfGenerator';
@@ -120,12 +121,12 @@ export const CertificateVerifier: React.FC = () => {
                 </div>
               </div>
 
-              {/* QR Code & Emblem */}
+              {/* QR Code & Emblem — généré localement, aucune requête externe */}
               <div className="md:col-span-4 flex flex-col items-center justify-center p-4 bg-slate-50 rounded-xl border border-slate-200 text-center space-y-2">
-                <img
-                  src={foundCert.qrCodeUrl}
+                <QrCodeImage
+                  value={`FORTIA-HUB-CERT:${foundCert.id}`}
                   alt="QR Code Vérification"
-                  className="w-24 h-24 border-2 border-[#D69E25] p-1 bg-white rounded-lg shadow-sm"
+                  className="h-24 w-24 rounded-lg border-2 border-[#D69E25] p-1 shadow-sm"
                 />
                 <span className="text-[10px] text-slate-500 font-mono">Scanner pour vérifier</span>
               </div>

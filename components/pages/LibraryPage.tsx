@@ -13,6 +13,7 @@
 // le profil, les paramètres et les paiements).
 // ============================================================
 
+import { QrCodeImage } from "@/components/ui/QrCodeImage";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -445,16 +446,13 @@ export function LibraryPage() {
                         </p>
                         <p className="text-[10px] font-mono text-[#D69E25] mt-1">{cert.id}</p>
                       </div>
-                      {cert.qrCodeUrl && (
-                        <span className="shrink-0 bg-white rounded-lg p-1">
-                          <img
-                            src={cert.qrCodeUrl}
-                            alt={`QR de vérification ${cert.id}`}
-                            className="w-14 h-14 object-contain"
-                            loading="lazy"
-                          />
-                        </span>
-                      )}
+                      <span className="shrink-0 bg-white rounded-lg p-1">
+  <QrCodeImage
+    value={`FORTIA-HUB-CERT:${cert.id}`}
+    alt={`QR de vérification ${cert.id}`}
+    className="h-14 w-14"
+  />
+</span>
                     </div>
 
                     <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 border-t border-slate-700/60 pt-3">

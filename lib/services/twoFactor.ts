@@ -96,7 +96,14 @@ interface EncryptedPayload {
 }
 
 function masterKey(): Buffer {
-  const secret = process.env.JWT_SECRET || "fortia-2fa-fallback-secret-change-me";
+  // Aucune valeur de secours : sans JWT_SECRET, le chiffrement des secrets
+  // TOTP ne doit jamais se rabattre sur une clé publique/connaue.
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      "JWT_SECRET est manquant ou trop court : le chiffrement des secrets 2FA est indisponible."
+    );
+  }
   return createHash("sha256").update(secret).digest();
 }
 
