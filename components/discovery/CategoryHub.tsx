@@ -2,8 +2,12 @@
 
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, ArrowRight, BookOpen, ShoppingBag, FileText } from "lucide-react";
-import { COURSE_CATEGORY_FAMILIES } from "@/lib/data/courseCategories";
+import { Search, ArrowRight, BookOpen, ShoppingBag, FileText, Gift } from "lucide-react";
+import {
+  COURSE_CATEGORY_FAMILIES,
+  FREE_COURSE_CATEGORY_LABEL,
+  FREE_COURSE_CATEGORY_SLUG,
+} from "@/lib/data/courseCategories";
 import { REFERENCE_PRODUCT_CATEGORIES } from "@/components/CategorySelect";
 import { buildProductCategories } from "@/lib/data/productCategories";
 import { useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
@@ -21,19 +25,41 @@ export function CategoryHub({ kind }: { kind: Kind }) {
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (kind === "course") {
-      const dbByCode = new Map((courseCategories || []).map((c: any) => [String(c.code || ""), c]));
-      return COURSE_CATEGORY_FAMILIES.filter((family) => !q || family.label.toLowerCase().includes(q))
-        .map((family) => ({
-          id: family.slug,
-          label: family.label,
-          description: "Formations de cette catégorie",
-          count: (courses || []).filter((course: any) => {
-            const code = String(course?.category?.code || course?.categoryCode || course?.categoryId || "");
-            return family.codes.includes(code) || String(course?.categoryLabel || "").toLowerCase() === family.label.toLowerCase();
-          }).length,
-          href: `/academy?categorie=${encodeURIComponent(family.slug)}`,
-          icon: family.icon,
-        }));
+      const families = COURSE_CATEGORY_FAMILIES.filter(
+        (family) => !q || family.label.toLowerCase().includes(q)
+      ).map((family) => ({
+        id: family.slug,
+        label: family.label,
+        description: "Formations de cette catégorie",
+        count: (courses || []).filter((course: any) => {
+          const code = String(course?.category?.code || course?.categoryCode || course?.categoryId || "");
+          return family.codes.includes(code) || String(course?.categoryLabel || "").toLowerCase() === family.label.toLowerCase();
+        }).length,
+        href: `/academy?categorie=${encodeURIComponent(family.slug)}`,
+        icon: family.icon,
+      }));
+
+      // Catégorie transversale « Gratuit » : ajoutée en tête du répertoire.
+      const freeCount = (courses || []).filter(
+        (course: any) =>
+          course?.isPublished !== false &&
+          course?.price !== null &&
+          course?.price !== undefined &&
+          Number(course?.price) === 0
+      ).length;
+      const freeMatches = !q || FREE_COURSE_CATEGORY_LABEL.toLowerCase().includes(q) || "gratuit".includes(q);
+      if (freeCount > 0 && freeMatches) {
+        families.unshift({
+          id: FREE_COURSE_CATEGORY_SLUG,
+          label: FREE_COURSE_CATEGORY_LABEL,
+          description: "Formations accessibles sans paiement",
+          count: freeCount,
+          href: `/academy?categorie=${encodeURIComponent(FREE_COURSE_CATEGORY_SLUG)}`,
+          icon: Gift,
+        });
+      }
+
+      return families;
     }
     const products = (marketplaceProducts || []).filter((p: any) => p?.isPublished !== false);
 

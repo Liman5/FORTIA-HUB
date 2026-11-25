@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -22,6 +23,10 @@ import {
   BookOpen,
   Download,
   ZoomIn,
+  Gift,
+  Compass,
+  ShoppingBag,
+  Store,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store/AppStore";
 import { useCatalog, useMarketplace } from "@/lib/store/domains/contexts";
@@ -31,6 +36,16 @@ import { OptimizedImage } from "@/components/OptimizedImage";
 import { IbxLightbox } from "@/components/ui/IbxLightbox";
 import { buildProductCategories, type ProductCategoryOption } from "@/lib/data/productCategories";
 import { formatFcfa, formatPricePair, resolveMoneyConfig, type MoneyConfig } from "@/lib/data/currency";
+import { ContentCard } from "@/components/discovery/ContentCard";
+import { storeHref } from "@/lib/data/storeSlug";
+import {
+  buildMixedFeed,
+  listFreeCourses,
+  listFreeProducts,
+  toCourseItem,
+  toProductItem,
+  type ExplorerItem,
+} from "@/lib/data/explorer";
 
 /* =====================================================================
    FORTIA HUB — Interface d'accueil (routes "/" et "/home")
@@ -484,6 +499,7 @@ function Thumb({ src, alt, className = "" }: { src?: string; alt: string; classN
 function CourseCard({
   course,
   onOpen,
+  onPrefetch,
   isFavorite,
   onToggleFavorite,
   money,
@@ -502,6 +518,8 @@ function CourseCard({
     instructor?: { name?: string; avatar?: string };
   };
   onOpen: () => void;
+  /** Précharge la fiche au survol : navigation quasi instantanée. */
+  onPrefetch?: () => void;
   isFavorite: boolean;
   onToggleFavorite: () => void;
   money: MoneyConfig;
@@ -511,6 +529,8 @@ function CourseCard({
   return (
     <article
       onClick={onOpen}
+      onMouseEnter={onPrefetch}
+      onTouchStart={onPrefetch}
       className="ibx-card-flat ibx-interactive group relative w-[196px] shrink-0 snap-start cursor-pointer overflow-hidden text-left sm:w-[214px]"
     >
       {/* Texture douce : léger dégradé doré en haut, sans surcharger la carte */}
@@ -651,6 +671,7 @@ function CenterCard({
 function ProductCard({
   product,
   onOpen,
+  onPrefetch,
   money,
 }: {
   product: {
@@ -664,6 +685,8 @@ function ProductCard({
     reviewsCount?: number;
   };
   onOpen: () => void;
+  /** Précharge la fiche au survol : navigation quasi instantanée. */
+  onPrefetch?: () => void;
   money: MoneyConfig;
 }) {
   const price = Number(product.price) || 0;
@@ -672,7 +695,11 @@ function ProductCard({
   const pricePair = formatPricePair(price, money);
 
   return (
-    <article className="ibx-card-flat ibx-interactive relative flex w-[168px] shrink-0 snap-start flex-col overflow-hidden sm:w-[188px]">
+    <article
+      onMouseEnter={onPrefetch}
+      onTouchStart={onPrefetch}
+      className="ibx-card-flat ibx-interactive relative flex w-[168px] shrink-0 snap-start flex-col overflow-hidden sm:w-[188px]"
+    >
       {/* Texture : voile doré très léger, distinct de la carte formation */}
       <span
         aria-hidden="true"
@@ -1007,7 +1034,7 @@ function ProductCategoryRail({
             }}
           />
           <span className="relative min-w-0">
-            <span className="ibx-h3 line-clamp-2 block !text-[10.5px] leading-[1.25] md:!text-[12.5px]">
+            <span className="ibx-h3 line-clamp-2 !text-[10.5px] leading-[1.25] md:!text-[12.5px]">
               {category.label}
             </span>
             <span className="ibx-tiny mt-0.5 block !text-[8.5px] md:!text-[9.5px]">
@@ -1025,9 +1052,109 @@ function ProductCategoryRail({
   );
 }
 
+/** Accès rapide : quatre raccourcis visuels vers les univers de la plateforme. */
+const QUICK_LINKS = [
+  { href: "/gratuit", label: "Gratuit", description: "Accès libre", icon: Gift, tone: "success" },
+  { href: "/academy", label: "Formations", description: "Se certifier", icon: GraduationCap, tone: "accent" },
+  { href: "/marketplace", label: "Produits", description: "Télécharger", icon: ShoppingBag, tone: "info" },
+  { href: "/decouvrir", label: "À découvrir", description: "Explorer", icon: Compass, tone: "accent" },
+] as const;
+
+const QUICK_TONES: Record<string, { bg: string; fg: string }> = {
+  success: { bg: "var(--ibx-success-soft)", fg: "var(--ibx-success)" },
+  accent: { bg: "var(--ibx-accent-soft)", fg: "var(--ibx-accent-strong)" },
+  info: { bg: "var(--ibx-info-soft)", fg: "var(--ibx-info)" },
+};
+
+function QuickAccessRow() {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {QUICK_LINKS.map((link) => {
+        const Icon = link.icon;
+        const tone = QUICK_TONES[link.tone];
+        return (
+          <Link
+            key={link.href}
+            href={link.href}
+            prefetch
+            className="ibx-card-flat ibx-interactive flex items-center gap-2.5 p-2.5"
+          >
+            <span
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--ibx-radius-sm)]"
+              style={{ backgroundColor: tone.bg, color: tone.fg }}
+              aria-hidden="true"
+            >
+              <Icon className="h-4 w-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="ibx-h3 block truncate !text-[12px]">{link.label}</span>
+              <span className="ibx-tiny block truncate !text-[9px]">{link.description}</span>
+            </span>
+            <ChevronRight
+              className="ml-auto h-3.5 w-3.5 shrink-0"
+              style={{ color: "var(--ibx-fg-subtle)" }}
+              aria-hidden="true"
+            />
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ======================= CARTE BOUTIQUE ======================= */
+/** Boutique d'un créateur : bannière, logo, nom, ventes et description. */
+function StoreCard({ store }: { store: any }) {
+  const sales = Number(store?.salesCount) || 0;
+  return (
+    <Link
+      href={storeHref(store)}
+      prefetch
+      className="ibx-card-flat ibx-interactive group flex w-[228px] shrink-0 snap-start flex-col overflow-hidden"
+    >
+      <span className="ibx-media block h-20 shrink-0">
+        {store?.banner ? (
+          <img
+            src={store.banner}
+            alt={store.name || "Boutique"}
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+        ) : null}
+      </span>
+
+      <span className="flex items-end gap-2 px-3 pt-1">
+        <span
+          className="flex h-11 w-11 shrink-0 -translate-y-3 items-center justify-center overflow-hidden rounded-[var(--ibx-radius-sm)] border"
+          style={{ borderColor: "var(--ibx-border)", backgroundColor: "var(--ibx-surface)" }}
+          aria-hidden="true"
+        >
+          {store?.logo ? (
+            <img src={store.logo} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <Store className="h-4 w-4" style={{ color: "var(--ibx-accent-strong)" }} />
+          )}
+        </span>
+        <span className="min-w-0 pb-0.5">
+          <span className="ibx-h3 line-clamp-1 !text-[12px]">{store?.name || "Boutique"}</span>
+          <span className="ibx-tiny block !text-[9px]">
+            {sales} vente{sales > 1 ? "s" : ""}
+          </span>
+        </span>
+      </span>
+
+      <span className="block px-3 pb-2.5 pt-1">
+        <span className="ibx-tiny line-clamp-2 h-[26px] !text-[9.5px] leading-[1.35]">
+          {store?.description || "Ressources numériques de ce créateur."}
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 export function HomePage() {
   const router = useRouter();
-  const { marketplaceProducts, freelances } = useMarketplace();
+  const { marketplaceProducts, freelances, stores } = useMarketplace();
   const { courses, trainingCenters } = useCatalog();
   const { platformLoaded, siteContent } = useAppStore();
 
@@ -1040,6 +1167,25 @@ export function HomePage() {
 
   /* Formations populaires : tri sur données réelles (note puis apprenants). */
   const popularCourses = useMemo(() => sortByPopularity(courses || []).slice(0, 15), [courses]);
+
+  /* Contenus gratuits : deux univers séparés (formations / produits). */
+  const freeCourses = useMemo(() => listFreeCourses(courses).map(toCourseItem), [courses]);
+  const freeProducts = useMemo(
+    () => listFreeProducts(marketplaceProducts).map(toProductItem),
+    [marketplaceProducts]
+  );
+
+  /* Boutiques réellement ouvertes (actives) : rail « créateurs ». */
+  const activeStores = useMemo(
+    () => (stores || []).filter((store: any) => store && store.status === "active"),
+    [stores]
+  );
+
+  /* Flux « à découvrir » : 25 contenus mixtes (formations + produits). */
+  const mixedFeed: ExplorerItem[] = useMemo(
+    () => buildMixedFeed(courses, marketplaceProducts, 25),
+    [courses, marketplaceProducts]
+  );
 
   /* Produits digitaux publiés — jamais de formations ni de services ici. */
   const shopProducts = useMemo(
@@ -1131,6 +1277,9 @@ export function HomePage() {
         {/* Bannière : image pleine, aucun texte superposé */}
         <HeroBanner />
 
+        {/* Accès rapide aux quatre univers */}
+        <QuickAccessRow />
+
         {/* Catégories de FORMATION : ne jamais confondre avec la boutique */}
         <section>
           <SectionHeader
@@ -1170,6 +1319,9 @@ export function HomePage() {
                   onOpen={() =>
                     router.push(`/course/${encodeURIComponent(String((course as { slug?: string }).slug || course.id))}`)
                   }
+                  onPrefetch={() =>
+                    router.prefetch(`/course/${encodeURIComponent(String((course as { slug?: string }).slug || course.id))}`)
+                  }
                   isFavorite={favorites.includes(course.id)}
                   onToggleFavorite={() => toggleFavorite(course.id)}
                   money={money}
@@ -1178,6 +1330,77 @@ export function HomePage() {
             </CarouselRow>
           )}
         </section>
+
+        {/* Espace gratuit : formations et produits sans paiement */}
+        {!isLoading && (freeCourses.length > 0 || freeProducts.length > 0) && (
+          <section className="ibx-card p-3 sm:p-4">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h2 className="ibx-h2 flex items-center gap-2">
+                  <Gift className="h-4 w-4 shrink-0" style={{ color: "var(--ibx-success)" }} aria-hidden="true" />
+                  Espace gratuit
+                </h2>
+                <p className="ibx-small mt-0.5">
+                  Formations et ressources accessibles sans aucun paiement.
+                </p>
+              </div>
+              <Link
+                href="/gratuit"
+                prefetch
+                className="ibx-btn ibx-btn-ghost shrink-0 !px-2 !py-1 !text-[10px]"
+              >
+                Tout l&apos;espace gratuit
+                <ChevronRight className="h-3 w-3" aria-hidden="true" />
+              </Link>
+            </div>
+
+            <div className="space-y-4">
+              {freeCourses.length > 0 && (
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="ibx-label">Formations gratuites</p>
+                    <Link
+                      href="/gratuit/formations"
+                      prefetch
+                      className="ibx-btn ibx-btn-ghost !px-1.5 !py-0.5 !text-[9.5px]"
+                    >
+                      Voir tout
+                    </Link>
+                  </div>
+                  <CarouselRow ariaLabel="les formations gratuites" className="pb-1">
+                    {freeCourses.slice(0, 10).map((item) => (
+                      <div key={item.key} className="w-[196px] shrink-0 snap-start">
+                        <ContentCard item={item} money={money} />
+                      </div>
+                    ))}
+                  </CarouselRow>
+                </div>
+              )}
+
+              {freeProducts.length > 0 && (
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="ibx-label">Produits numériques gratuits</p>
+                    <Link
+                      href="/gratuit/produits"
+                      prefetch
+                      className="ibx-btn ibx-btn-ghost !px-1.5 !py-0.5 !text-[9.5px]"
+                    >
+                      Voir tout
+                    </Link>
+                  </div>
+                  <CarouselRow ariaLabel="les produits numériques gratuits" className="pb-1">
+                    {freeProducts.slice(0, 10).map((item) => (
+                      <div key={item.key} className="w-[196px] shrink-0 snap-start">
+                        <ContentCard item={item} money={money} />
+                      </div>
+                    ))}
+                  </CarouselRow>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Boutique de produits digitaux : séparée des formations */}
         {!isLoading && shopProducts.length > 0 && (
@@ -1195,6 +1418,9 @@ export function HomePage() {
                   onOpen={() =>
                     router.push(`/product/${encodeURIComponent(String((product as { slug?: string }).slug || product.id))}`)
                   }
+                  onPrefetch={() =>
+                    router.prefetch(`/product/${encodeURIComponent(String((product as { slug?: string }).slug || product.id))}`)
+                  }
                   money={money}
                 />
               ))}
@@ -1203,6 +1429,44 @@ export function HomePage() {
         )}
 
         {!isLoading && <ProductShowcaseBanner products={shopProducts} money={money} />}
+
+        {/* Boutiques des créateurs : rail horizontal de vendeurs actifs */}
+        {!isLoading && activeStores.length > 0 && (
+          <section>
+            <SectionHeader
+              title="Boutiques des créateurs"
+              actionLabel="Toutes les boutiques"
+              onAction={() => router.push("/marketplace")}
+            />
+            <p className="ibx-small -mt-2 mb-3">
+              Les vendeurs et créateurs qui publient leurs ressources sur la plateforme.
+            </p>
+            <CarouselRow ariaLabel="les boutiques des créateurs" className="pb-2">
+              {activeStores.slice(0, 12).map((store: any) => (
+                <StoreCard key={store.id} store={store} />
+              ))}
+            </CarouselRow>
+          </section>
+        )}
+
+        {/* Autres formations & produits : flux mixte de découverte */}
+        {!isLoading && mixedFeed.length > 0 && (
+          <section>
+            <SectionHeader
+              title="Autres formations & produits"
+              actionLabel="Tout découvrir"
+              onAction={() => router.push("/decouvrir")}
+            />
+            <p className="ibx-small -mt-2 mb-3">
+              {mixedFeed.length} contenus à explorer, toutes catégories confondues.
+            </p>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {mixedFeed.map((item) => (
+                <ContentCard key={item.key} item={item} money={money} />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Catégories de PRODUITS : univers distinct de l'académie */}
         {!isLoading && productCategories.length > 0 && (

@@ -25,7 +25,22 @@ import {
   Bitcoin,
   Clapperboard,
   LayoutGrid,
+  Gift,
 } from "lucide-react";
+
+/** Slug d'URL de la catégorie transversale « Gratuit ». */
+export const FREE_COURSE_CATEGORY_SLUG = "gratuit";
+/** Libellé affiché de la catégorie « Gratuit » (formations). */
+export const FREE_COURSE_CATEGORY_LABEL = "Formations gratuites";
+
+/** Une formation gratuite est publiée et vendue au prix de 0 (prix explicite). */
+function isFreeCoursePrice(course: any): boolean {
+  if (!course || course.isPublished === false) return false;
+  const raw = course?.price;
+  if (raw === null || raw === undefined || raw === "") return false;
+  const price = Number(raw);
+  return Number.isFinite(price) && price === 0;
+}
 
 export interface CourseCategoryFamily {
   /** Identifiant stable utilisé dans l'URL : /academy?categorie=<slug> */
@@ -215,6 +230,11 @@ export function filterCoursesByCategoryParam(courses: any[], categoryParam: stri
   const list = courses || [];
   if (!categoryParam || categoryParam === "all") return list;
 
+  // Catégorie transversale « Gratuit » : accès libre, aucune catégorie en base.
+  if (normalizeText(categoryParam) === FREE_COURSE_CATEGORY_SLUG) {
+    return list.filter(isFreeCoursePrice);
+  }
+
   const family = getFamilyBySlug(categoryParam);
   if (family) return list.filter((course) => courseMatchesFamily(course, family));
 
@@ -232,6 +252,9 @@ export function getCategoryLabel(
   dbCategories: { id?: string; code?: string; label?: string }[] = []
 ): string {
   if (!categoryParam || categoryParam === "all") return "Toutes les formations";
+  if (normalizeText(categoryParam) === FREE_COURSE_CATEGORY_SLUG) {
+    return FREE_COURSE_CATEGORY_LABEL;
+  }
   const family = getFamilyBySlug(categoryParam);
   if (family) return family.label;
   const found = (dbCategories || []).find(
@@ -263,6 +286,18 @@ export function buildCategoryOptions(
   const options: { id: string; label: string; icon?: React.ElementType; count: number }[] = [
     { id: "all", label: "Toutes les formations", icon: ALL_CATEGORY_ICON, count: list.length },
   ];
+
+  // Catégorie transversale « Gratuit » : accès libre, proposée en premier dès
+  // qu'au moins une formation est gratuite (ou si elle est sélectionnée).
+  const freeCount = list.filter(isFreeCoursePrice).length;
+  if (freeCount > 0 || selectedId === FREE_COURSE_CATEGORY_SLUG) {
+    options.push({
+      id: FREE_COURSE_CATEGORY_SLUG,
+      label: FREE_COURSE_CATEGORY_LABEL,
+      icon: Gift,
+      count: freeCount,
+    });
+  }
 
   const coveredCodes = new Set(COURSE_CATEGORY_FAMILIES.flatMap((family) => family.codes));
 

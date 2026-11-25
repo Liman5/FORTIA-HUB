@@ -64,6 +64,16 @@ const COURSES = [
 ];
 
 
+const MORE_COURSES = [
+  { slug: "demo-gratuit-productivite", title: "Productivité : organiser sa semaine", category: "demo-business", level: "Debutant", price: 0, hours: 2, image: IMG("1504384308090-c894fdcc538d"), description: "Formation gratuite : méthode simple pour planifier et tenir ses priorités.", full: "Choisir trois priorités par semaine, bloquer des créneaux réalistes et faire un point rapide chaque vendredi." },
+  { slug: "demo-gratuit-canva-bases", title: "Canva : créer son premier visuel", category: "demo-design", level: "Debutant", price: 0, hours: 1, image: IMG("1503676260728-1c00da094a0b"), description: "Formation gratuite : les bases pour produire un visuel propre en 15 minutes.", full: "Choisir un format, poser une grille simple, limiter les polices et exporter au bon format." },
+  { slug: "demo-gratuit-decouvrir-ia", title: "Découvrir l'IA générative", category: "demo-ia", level: "Debutant", price: 0, hours: 2, image: IMG("1516321318423-f06f85e504b3"), description: "Formation gratuite : ce que l'IA sait faire, et ce qu'elle ne sait pas.", full: "Panorama des usages utiles, limites à connaître et bonnes pratiques pour vérifier les réponses." },
+  { slug: "demo-gratuit-cv-lettre", title: "CV et lettre de motivation efficaces", category: "demo-business", level: "Debutant", price: 0, hours: 1, image: IMG("1497633762265-9d179a990aa6"), description: "Formation gratuite : structurer un CV lisible et une lettre convaincante.", full: "Hiérarchie des informations, formulations concrètes, adaptation à l'offre et relecture finale." },
+  { slug: "demo-gratuit-securite-en-ligne", title: "Sécurité en ligne : les réflexes", category: "demo-dev", level: "Debutant", price: 0, hours: 1, image: IMG("1498050108023-c5249f4df085"), description: "Formation gratuite : protéger ses comptes et reconnaître les arnaques.", full: "Mots de passe, double authentification, vérification des liens et sauvegarde des données importantes." },
+  { slug: "demo-gratuit-excel-bases", title: "Excel : les bases en 60 minutes", category: "demo-finance", level: "Debutant", price: 0, hours: 1, image: IMG("1461749280684-dccba630e2f6"), description: "Formation gratuite : tableaux, formules simples et mise en forme lisible.", full: "Saisie propre, formules de base, références absolues et impression d'un tableau clair." },
+];
+
+const ALL_COURSES = [...COURSES, ...MORE_COURSES];
 const STORES = [
   { slug: "demo-atelier-digital", name: "Atelier Digital (démo)", owner: "Atelier Digital", email: "demo.atelier@fortia-hub.test", logo: IMG("1521737604893-d14cc237f11d", 400), banner: IMG("1497366216548-37526070297c"), description: "Ressources professionnelles prêtes à l'emploi." },
   { slug: "demo-studio-creatif", name: "Studio Créatif (démo)", owner: "Studio Créatif", email: "demo.studio@fortia-hub.test", logo: IMG("1556761175-b413da4baf72", 400), banner: IMG("1517048676732-d65bc937f952"), description: "Templates, visuels et kits de communication." },
@@ -89,6 +99,12 @@ const MORE_PRODUCTS = [
   { slug: "demo-prompts-seo", store: 1, type: "ai_prompts", label: "Marketing digital", title: "100 prompts de rédaction SEO", price: 13, original: null, format: "PDF", size: "1,8 Mo", image: IMG("1499750310107-5fef28a66643", 800), description: "Structurer titres, plans et contenus utiles pour le référencement.", features: ["100 prompts classés", "Modèles de plans d'articles", "Bonnes pratiques éditoriales"] },
   { slug: "demo-modele-notion-projet", store: 2, type: "template", label: "Développement web", title: "Modèle de gestion de projet", price: 17, original: null, format: "Notion", size: "Lien Notion", image: IMG("1523240795612-9a054b0db644", 800), description: "Tâches, échéances et suivi d'avancement dans un espace unique.", features: ["Tableau de suivi", "Vues par échéance", "Modèle de compte-rendu"] },
   { slug: "demo-ebook-financer-projet", store: 2, type: "ebook", label: "Finance & Gestion", title: "Financer son projet : les bases", price: 0, original: null, format: "PDF", size: "2,2 Mo", image: IMG("1454165804606-c3d57bc86b40", 800), description: "Ressource gratuite : sources de financement et préparation du dossier.", features: ["Panorama des financements", "Trame de dossier", "Erreurs à éviter"] },
+  { slug: "demo-gratuit-checklist-lancement", store: 0, type: "ebook", label: "Business & Entrepreneuriat", title: "Checklist de lancement en 30 points", price: 0, original: null, format: "PDF", size: "1,1 Mo", image: IMG("1504384308090-c894fdcc538d", 800), description: "Ressource gratuite : les 30 vérifications à faire avant de publier une offre.", features: ["30 points de contrôle", "Version imprimable", "Priorités de lancement"] },
+  { slug: "demo-gratuit-modeles-facture", store: 2, type: "template", label: "Finance & Gestion", title: "3 modèles de facture prêts à l'emploi", price: 0, original: null, format: "Excel + PDF", size: "620 Ko", image: IMG("1554224155-6726b3ff858f", 800), description: "Ressource gratuite : factures conformes, numérotation et mentions utiles.", features: ["3 modèles modifiables", "Calcul automatique des totaux", "Mentions obligatoires"] },
+  { slug: "demo-gratuit-guide-seo-express", store: 1, type: "ebook", label: "Marketing digital", title: "Guide SEO express (10 pages)", price: 0, original: null, format: "PDF", size: "1,4 Mo", image: IMG("1499750310107-5fef28a66643", 800), description: "Ressource gratuite : les bases du référencement naturel, sans jargon.", features: ["10 pages synthétiques", "Checklist par page", "Exemples concrets"] },
+  { slug: "demo-gratuit-prompts-ia-debutant", store: 1, type: "ai_prompts", label: "Intelligence artificielle", title: "10 prompts IA pour bien démarrer", price: 0, original: null, format: "PDF", size: "480 Ko", image: IMG("1516321318423-f06f85e504b3", 800), description: "Ressource gratuite : dix prompts simples et réutilisables au quotidien.", features: ["10 prompts prêts à copier", "Conseils de reformulation", "Usages recommandés"] },
+  { slug: "demo-gratuit-planning-etude", store: 1, type: "canva_template", label: "Business & Entrepreneuriat", title: "Planning d'étude sur 4 semaines", price: 0, original: null, format: "Canva", size: "Lien Canva", image: IMG("1524178232363-1fb2b075b655", 800), description: "Ressource gratuite : organiser un apprentissage régulier sur un mois.", features: ["Modèle Canva éditable", "Vue semaine et mois", "Suivi des objectifs"] },
+  { slug: "demo-gratuit-pack-icones", store: 0, type: "premium_pack", label: "Design & Création", title: "Pack 40 icônes gratuites", price: 0, original: null, format: "SVG + PNG", size: "3,2 Mo", image: IMG("1519389950473-47ba0277781c", 800), description: "Ressource gratuite : quarante icônes sobres pour vos supports.", features: ["40 icônes vectorielles", "Formats SVG et PNG", "Licence commerciale"] },
 ];
 
 const ALL_PRODUCTS = [...PRODUCTS, ...MORE_PRODUCTS];
@@ -158,7 +174,7 @@ try {
   }
 
   /* --------------- 2. Formations + chapitres + leçons --------------- */
-  for (const course of COURSES) {
+  for (const course of ALL_COURSES) {
     const res = await client.query(
       `INSERT INTO courses (
          title, slug, category_id, category_label, description, full_description,

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import type { NextRequest } from "next/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { ProductDetail } from "@/components/pages/ProductDetail";
@@ -20,9 +21,7 @@ export const dynamic = "force-dynamic";
  */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const product = await prisma.product
-    .findFirst({ where: { slug }, select: { title: true, description: true } })
-    .catch(() => null);
+  const product = await findProduct(slug);
 
   return {
     title: product ? `${product.title} | FORTIA HUB` : "Produit | FORTIA HUB",
@@ -30,9 +29,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-
+/**
+ * Lecture unique par requête (`cache`) : les métadonnées et la page
+ * partagent la même requête, au lieu d'en lancer deux.
+ */
+const findProduct = cache(async (slug: string) => {
   // Les slugs réels peuvent contenir « & », « : » ou des accents : selon le
   // navigateur, le paramètre arrive encodé ou décodé. On teste les deux formes.
   const candidates = Array.from(
@@ -59,12 +60,17 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const uuids = candidates.filter(looksLikeUuid);
   if (uuids.length > 0) filters.push({ id: { in: uuids } });
 
-  const product = await prisma.product
+  return prisma.product
     .findFirst({
       where: { OR: filters },
       include: { files: { orderBy: { displayOrder: "asc" } } },
     })
     .catch(() => null);
+});
+
+export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const product = await findProduct(slug);
 
   if (!product) {
     notFound();

@@ -166,11 +166,14 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
 
   const visibleCourses = filteredCourses.slice(0, visibleCount);
 
+  const categoryTitle = getCategoryLabel(selectedCategory, dbCategories);
   const title = centerParam
     ? `Formations – ${centerName || "Centre de formation"}`
     : selectedCategory === "all"
     ? "Toutes les formations"
-    : `Formations en ${getCategoryLabel(selectedCategory, dbCategories).toLowerCase()}`;
+    : /^formations?\b/i.test(categoryTitle)
+    ? categoryTitle
+    : `Formations en ${categoryTitle.toLowerCase()}`;
 
   const hasActiveFilters =
     selectedCategory !== "all" ||

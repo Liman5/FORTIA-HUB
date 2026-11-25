@@ -8,11 +8,7 @@ import { DigitalShop } from "@/components/DigitalShop";
 import { FreelanceMarketplace } from "@/components/FreelanceMarketplace";
 import { EnterpriseDirectory } from "@/components/EnterpriseDirectory";
 import { ShoppingBag, Users, Building2, Loader2, LayoutGrid, Plus } from "lucide-react";
-
-function getStoreSlug(store: { slug?: string; name?: string }): string {
-  const base = store.slug && store.slug.trim() ? store.slug : (store.name || "boutique");
-  return base.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "boutique";
-}
+import { getStoreSlug } from "@/lib/data/storeSlug";
 
 export function MarketplacePage() {
   const router = useRouter();

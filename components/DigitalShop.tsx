@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import { motion } from "motion/react";
 import { trackProductEvent } from "@/lib/services/track";
 import { CartItem, VendorStore, MarketplaceProduct } from "@/lib/types";
@@ -396,8 +397,9 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                       )}
                     </div>
 
-                    <a
+                    <Link
                       href={productHref}
+                      prefetch
                       onClick={() =>
                         trackProductEvent("click", prod.id, (prod as { storeId?: string }).storeId)
                       }
@@ -405,7 +407,7 @@ export const DigitalShop: React.FC<DigitalShopProps> = ({
                       style={{ color: "var(--ibx-fg)" }}
                     >
                       {prod.title}
-                    </a>
+                    </Link>
 
                     <p className="ibx-tiny line-clamp-2 !text-[9.5px]">{prod.description}</p>
 

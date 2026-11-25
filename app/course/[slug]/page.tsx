@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import type { NextRequest } from "next/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { CourseDetail } from "@/components/pages/CourseDetail";
@@ -17,9 +18,7 @@ export const dynamic = "force-dynamic";
  */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const course = await prisma.course
-    .findFirst({ where: { slug }, select: { title: true, description: true } })
-    .catch(() => null);
+  const course = await findCourse(slug);
 
   return {
     title: course ? `${course.title} | Académie FORTIA HUB` : "Formation | FORTIA HUB",
@@ -27,9 +26,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-
+/**
+ * Lecture unique par requête (`cache`) : les métadonnées et la page
+ * partagent la même requête, au lieu d'en lancer deux.
+ */
+const findCourse = cache(async (slug: string) => {
   // Le slug peut arriver encodé (accents, « & », espaces) : on teste les deux.
   const candidates = Array.from(
     new Set([
@@ -47,7 +48,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   const uuids = candidates.filter(looksLikeUuid);
 
-  const course = await prisma.course
+  return prisma.course
     .findFirst({
       where: uuids.length > 0 ? { OR: [{ slug: { in: candidates } }, { id: { in: uuids } }] } : { slug: { in: candidates } },
       include: {
@@ -59,6 +60,11 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       },
     })
     .catch(() => null);
+});
+
+export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const course = await findCourse(slug);
 
   if (!course) notFound();
 
