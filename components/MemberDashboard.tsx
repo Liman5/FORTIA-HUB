@@ -425,7 +425,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             certificates: earnedCertificates.length,
             purchases: purchasedProducts.length,
           }}
-          onEdit={() => setActiveTab('settings')}
           onOpenKyc={onOpenKyc}
         />
 

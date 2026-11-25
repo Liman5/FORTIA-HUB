@@ -9,7 +9,6 @@ import {
   Users,
   ShoppingCart,
   Play,
-  Search,
   Star,
   RotateCcw,
   X,
@@ -231,39 +230,12 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
             </span>
           </div>
 
-          {/* Recherche (uniquement < lg : l'en-tête global la fournit sur desktop) */}
+          {/* Recherche globale : puce retirable + filtres avancés */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex min-w-[190px] flex-1 items-center lg:hidden">
-              <Search
-                className="pointer-events-none absolute left-3 h-4 w-4"
-                style={{ color: "var(--ibx-fg-subtle)" }}
-                aria-hidden="true"
-              />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => onSearchChange?.(e.target.value)}
-                placeholder="Rechercher une formation…"
-                aria-label="Rechercher une formation"
-                className="ibx-input pl-9 pr-9"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => onSearchChange?.("")}
-                  className="absolute right-2 inline-flex h-6 w-6 items-center justify-center rounded-full"
-                  style={{ color: "var(--ibx-fg-muted)" }}
-                  aria-label="Effacer la recherche"
-                >
-                  <X className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-
             {searchQuery && (
               <button
                 type="button"
-                className="ibx-chip hidden lg:inline-flex"
+                className="ibx-chip"
                 data-active="true"
                 onClick={() => onSearchChange?.("")}
                 aria-label={`Retirer la recherche ${searchQuery}`}

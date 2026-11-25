@@ -1,19 +1,18 @@
 "use client";
 
 import React from "react";
-import { BadgeCheck, BookOpen, Award, ShoppingBag, ShieldCheck, Pencil } from "lucide-react";
+import { BadgeCheck, BookOpen, Award, ShoppingBag, ShieldCheck } from "lucide-react";
 import type { UserProfile } from "@/lib/types";
-import { IbxBadge, IbxButton } from "@/components/ui/Ibx";
+import { IbxBadge } from "@/components/ui/Ibx";
 
 export function ProfileHeader({
-  user, badgeType, kycStatus, isProviderApproved, stats, onEdit, onOpenKyc,
+  user, badgeType, kycStatus, isProviderApproved, stats, onOpenKyc,
 }: {
   user: UserProfile;
   badgeType?: "green" | "gold" | "none";
   kycStatus: string;
   isProviderApproved: boolean;
   stats: { courses: number; certificates: number; purchases: number };
-  onEdit: () => void;
   onOpenKyc?: () => void;
 }) {
   const isGold = badgeType === "gold";
@@ -23,7 +22,7 @@ export function ProfileHeader({
 
   return (
     <section className="ibx-surface overflow-hidden rounded-[var(--ibx-radius-lg)]">
-      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div className="flex flex-col gap-4 p-5 sm:p-6">
         <div className="flex min-w-0 items-center gap-4">
           {user.avatar ? (
             <img src={user.avatar} alt={user.name || "Membre"} className="h-16 w-16 shrink-0 rounded-[var(--ibx-radius-md)] object-cover sm:h-20 sm:w-20" />
@@ -55,10 +54,6 @@ export function ProfileHeader({
             </p>
           </div>
         </div>
-
-        <IbxButton type="button" variant="primary" onClick={onEdit} className="shrink-0 self-start sm:self-auto">
-          <Pencil className="h-3.5 w-3.5" /> Modifier mon profil
-        </IbxButton>
       </div>
 
       <div className="ibx-divider flex flex-wrap gap-x-8 gap-y-3 px-5 py-4 sm:px-6">

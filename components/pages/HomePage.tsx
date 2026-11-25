@@ -204,7 +204,7 @@ function HeroBanner() {
     return (
       <section className="relative" aria-hidden="true">
         <div
-          className="ibx-card-muted flex h-40 items-center justify-center sm:h-64 lg:h-80"
+          className="ibx-card-muted flex aspect-[2.3/1] items-center justify-center sm:aspect-[3/1] lg:aspect-[4/1]"
           role="presentation"
         >
           <span className="ibx-small inline-flex items-center gap-2">
@@ -228,7 +228,7 @@ function HeroBanner() {
   return (
     <section className="relative">
       <div
-        className={`ibx-media group relative overflow-hidden rounded-[var(--ibx-radius-lg)] border border-[var(--ibx-border)] ${
+        className={`ibx-media group relative aspect-[2.3/1] overflow-hidden rounded-[var(--ibx-radius-lg)] border border-[var(--ibx-border)] sm:aspect-[3/1] lg:aspect-[4/1] ${
           slide?.link ? "cursor-pointer" : ""
         }`}
         style={{
@@ -247,7 +247,7 @@ function HeroBanner() {
             alt={slide.alt}
             {...variantsFor(slide.animation)}
             transition={{ duration: 0.6, ease: "easeInOut" }}
-            className="block h-40 w-full object-cover sm:h-64 lg:h-80"
+            className="block h-full w-full object-cover"
             style={{ objectPosition: slide.position }}
             draggable={false}
           />

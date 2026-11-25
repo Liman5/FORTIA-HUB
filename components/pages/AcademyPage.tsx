@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/lib/store/AppStore";
 import { useCatalog, useCommerce, useUi } from "@/lib/store/domains/contexts";
 import { CourseCatalog } from "@/components/CourseCatalog";
 import type { CourseCatalogFilters } from "@/components/CourseCatalog";
-import { buildCategoryOptions } from "@/lib/data/courseCategories";
 import {
   ArrowRight,
   Sparkles,
@@ -16,17 +15,15 @@ import {
   BadgeCheck,
   Layers,
   Loader2,
-  LayoutGrid,
   Award,
 } from "lucide-react";
 
 /**
  * Page Académie.
  *
- * Objectif UI : rendre immédiatement lisibles « où je suis », « ce que je peux
- * apprendre », « comment filtrer » et « comment ouvrir une formation ».
- * Le catalogue (recherche, filtres, tri, chargement progressif) reste assuré
- * par `CourseCatalog` : aucune logique métier n'est dupliquée ici.
+ * Le catalogue (recherche, filtres, tri, chargement progressif) assure à lui
+ * seul l'en-tête de la rubrique : titre, compteur réel, catégories et tri.
+ * Aucune logique métier n'est dupliquée ici.
  *
  * Thème : les surfaces de cette page utilisent les tokens IBX (clair/sombre).
  * Le scope `ibx-catalogue` harmonise en plus les grilles historiques.
@@ -108,103 +105,8 @@ export function AcademyPage() {
     );
   }
 
-  const totalLabel = catalogTotal ?? (courses || []).length;
-  const categoryCount = (courseCategories || []).length;
-  const centersCount = (trainingCenters || []).length;
-
-  /** Catégories réellement disponibles (familles + catégories en base). */
-  const quickCategories = useMemo(
-    () =>
-      buildCategoryOptions(courses || [], courseCategories || [], categoryParam)
-        .filter((category) => category.id !== "all" && category.count > 0)
-        .slice(0, 10),
-    [courses, courseCategories, categoryParam]
-  );
-
   return (
     <div className="ibx-page ibx-catalogue">
-      {/* ---------------------------- EN-TÊTE ---------------------------- */}
-      <header className="border-b" style={{ borderColor: "var(--ibx-border)" }}>
-        <div className="ibx-container py-5 sm:py-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="min-w-0 space-y-2">
-              <p className="ibx-label">Académie certifiante</p>
-              <h1 className="ibx-h1">Apprenez des compétences concrètes</h1>
-              <p className="ibx-body max-w-2xl">
-                Formations en vidéo et en PDF, du niveau débutant à expert. Filtrez par catégorie,
-                niveau et prix, puis ouvrez la formation qui vous correspond.
-              </p>
-              <div className="ibx-toolbar pt-1">
-                <span className="ibx-badge">
-                  {totalLabel} formation{totalLabel > 1 ? "s" : ""}
-                </span>
-                {categoryCount > 0 && (
-                  <span className="ibx-badge">
-                    {categoryCount} catégorie{categoryCount > 1 ? "s" : ""}
-                  </span>
-                )}
-                {centersCount > 0 && (
-                  <span className="ibx-badge">
-                    {centersCount} centre{centersCount > 1 ? "s" : ""}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => router.push("/academy/categories")}
-                className="ibx-btn ibx-btn-outline"
-              >
-                <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
-                Toutes les catégories
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenFirstCourse}
-                disabled={(courses || []).length === 0}
-                className="ibx-btn ibx-btn-primary"
-              >
-                Commencer une formation
-                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-
-          {/* Accès rapide aux catégories réelles (compteurs réels) */}
-          {quickCategories.length > 0 && (
-            <div
-              className="ibx-scroll-x mt-4 border-t pt-3"
-              style={{ borderColor: "var(--ibx-border)" }}
-              role="group"
-              aria-label="Catégories de formations"
-            >
-              <button
-                type="button"
-                className="ibx-chip"
-                data-active={!categoryParam ? "true" : "false"}
-                onClick={() => handleFiltersChange({ categorie: null, centre: null })}
-              >
-                Toutes
-              </button>
-              {quickCategories.map((category) => (
-                <button
-                  key={category.id}
-                  type="button"
-                  className="ibx-chip"
-                  data-active={categoryParam === category.id ? "true" : "false"}
-                  onClick={() => handleFiltersChange({ categorie: category.id, centre: null })}
-                >
-                  {category.label}
-                  <span className="ibx-tiny">{category.count}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </header>
-
       {/* --------------------------- CATALOGUE --------------------------- */}
       <div id="academy-courses">
         <CourseCatalog
