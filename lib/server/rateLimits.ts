@@ -26,6 +26,8 @@ export const RATE_LIMITS = {
   adminLogin: { limit: 5, windowMs: 15 * 60_000 },
   /** Connexion administrateur : 5 tentatives / 15 minutes (par adresse ciblée). */
   adminLoginEmail: { limit: 5, windowMs: 15 * 60_000 },
+  /** Assistant IA : 10 requêtes / minute (par utilisateur connecté ou par IP). */
+  aiAssistant: { limit: 10, windowMs: 60_000 },
   checkout: { limit: 20, windowMs: 60_000 },
   paymentCancel: { limit: 20, windowMs: 60_000 },
   refund: { limit: 10, windowMs: 60_000 },
