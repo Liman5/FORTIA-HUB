@@ -12,7 +12,7 @@
 // ============================================================
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/services/authSession";
+import { getCurrentUser, SESSION_COOKIE_NAME } from "@/lib/services/authSession";
 
 export interface AdminContext {
   id: string;
@@ -89,6 +89,27 @@ export function isSuperAdminRole(role?: unknown): boolean {
 }
 
 /**
+ * Vérifie STRICTEMENT en base que la session utilisateur existe encore
+ * (non expirée). `getCurrentUser` tolère un mode dégradé quand la base est
+ * inaccessible ; les droits ADMINISTRATEUR, eux, exigent cette preuve.
+ */
+async function isUserSessionVerifiedInDb(req: NextRequest): Promise<boolean> {
+  const token = req.cookies?.get?.(SESSION_COOKIE_NAME)?.value;
+  if (!token) return false;
+  try {
+    const session = await prisma.session.findUnique({
+      where: { token },
+      select: { userId: true, expiresAt: true },
+    });
+    if (!session || !session.userId) return false;
+    return session.expiresAt.getTime() > Date.now();
+  } catch {
+    // Base indisponible → on refuse l'accès administrateur (échec fermé).
+    return false;
+  }
+}
+
+/**
  * Retourne le contexte admin de la requête, ou `null` si l'appelant
  * n'est ni un administrateur authentifié, ni un utilisateur de rôle `admin`.
  */
@@ -101,6 +122,12 @@ export async function requireAdmin(req: NextRequest): Promise<AdminContext | nul
   const user = await getCurrentUser(req).catch(() => null);
 
   if (user) {
+    // ⚠️ Les droits administrateur ne sont jamais accordés sur la seule foi
+    // du JWT (mode dégradé) : la session doit être confirmée en base, sinon
+    // une session révoquée continuerait de donner les pleins pouvoirs.
+    const sessionVerified = await isUserSessionVerifiedInDb(req);
+    if (!sessionVerified) return null;
+
     const email = String(user.email || "").trim().toLowerCase();
 
     // a) Rôle d'administration porté par le compte
