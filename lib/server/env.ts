@@ -25,6 +25,10 @@ const envSchema = z.object({
   R2_BUCKET_NAME: optionalSecret,
   R2_PRIVATE_BUCKET_NAME: optionalSecret,
 
+  /** Origines utilisées par la CSP (images/connections) — cf. next.config.mjs. */
+  CLOUDFLARE_BUCKET_PUBLIC_URL: optionalUrl,
+  SUPABASE_URL: optionalUrl,
+
   STRIPE_SECRET_KEY: z.string().startsWith("sk_").optional().or(z.literal("")),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_").optional().or(z.literal("")),
   PAYSTACK_SECRET_KEY: optionalSecret,
