@@ -27,8 +27,12 @@ export const authActionSchema = z.discriminatedUnion("action", [
     name: shortText(2, 120),
     phone: phoneSchema,
     accountType: z.enum(["buyer", "freelance", "enterprise"]).optional(),
-    /** Jeton signé renvoyé par verify-otp (preuve de vérification de l'e-mail). */
-    verificationToken: z.string().trim().min(20, "Jeton de vérification requis.").max(4096),
+    /**
+     * Jeton signé renvoyé par verify-otp (preuve de vérification de l'e-mail).
+     * Facultatif : exigé par la route uniquement lorsque la vérification
+     * d'adresse e-mail est active (voir isEmailVerificationRequired()).
+     */
+    verificationToken: z.string().trim().min(20, "Jeton de vérification requis.").max(4096).optional(),
   }),
   z.object({
     action: z.literal("login"),

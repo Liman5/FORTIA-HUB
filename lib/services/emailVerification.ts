@@ -36,6 +36,22 @@ export function normalizeEmail(email: string): string {
   return String(email || "").trim().toLowerCase();
 }
 
+/**
+ * La vérification d'adresse e-mail (code OTP) est-elle EXIGÉE ?
+ *
+ * Interrupteur TEMPORAIRE de phase de test, sans modifier le reste du code :
+ *   • `EMAIL_VERIFICATION_MODE="off"` **et** aucune `RESEND_API_KEY` → désactivée ;
+ *   • dès qu'une clé Resend est présente, la vérification redevient
+ *     obligatoire, même si le mode vaut "off" (impossible d'oublier de la
+ *     réactiver après le branchement du domaine) ;
+ *   • valeur absente, vide ou inconnue → obligatoire (comportement sûr).
+ */
+export function isEmailVerificationRequired(): boolean {
+  const mode = String(process.env.EMAIL_VERIFICATION_MODE || "").trim().toLowerCase();
+  if (mode !== "off") return true;
+  return !!String(process.env.RESEND_API_KEY || "").trim();
+}
+
 function otpKey(email: string): string {
   return OTP_KEY_PREFIX + normalizeEmail(email);
 }

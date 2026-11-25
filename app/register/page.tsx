@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,6 +13,7 @@ import {
   apiCheckEmailAvailability,
   apiSendOtp,
   apiVerifyOtp,
+  apiGetAuthConfig,
   SENDER_EMAIL_OFFICIAL,
 } from "@/services/api";
 import { useAuth } from "@/lib/store/domains/contexts";
@@ -36,14 +37,54 @@ export default function RegisterPage() {
   const [verificationToken, setVerificationToken] = useState("");
   const [otpSender, setOtpSender] = useState(SENDER_EMAIL_OFFICIAL);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
+  // Vérification d'e-mail exigée ? (interrupteur temporaire de phase de test)
+  const [verificationRequired, setVerificationRequired] = useState(true);
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    apiGetAuthConfig()
+      .then((config) => {
+        if (!cancelled) setVerificationRequired(config.emailVerificationRequired);
+      })
+      .catch(() => {
+        if (!cancelled) setVerificationRequired(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const emailValidation = validateEmailFormat(email);
   const passwordValidation = validatePassword(password);
+
+  /** Crée le compte puis ouvre la session (jeton de vérification optionnel). */
+  const submitRegistration = async (token?: string) => {
+    setLoading(true);
+    const regRes = await apiRegisterUser({
+      email,
+      password,
+      name,
+      phone,
+      accountType,
+      verificationToken: token,
+    });
+    setLoading(false);
+
+    if (!regRes.success || !regRes.data?.user) {
+      setError(regRes.error || "Inscription refusée.");
+      return;
+    }
+
+    // Créer la session dans le store (compte réellement persisté en Supabase)
+    loginUser(regRes.data.user);
+    setSuccess("Compte créé avec succès ! Redirection vers votre espace membre...");
+    setTimeout(() => router.push("/member"), 1500);
+  };
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +117,12 @@ export default function RegisterPage() {
       return;
     }
 
+    // Vérification par e-mail désactivée (phase de test) : inscription directe.
+    if (!verificationRequired) {
+      await submitRegistration();
+      return;
+    }
+
     setLoading(true);
     const otpRes = await apiSendOtp(email);
     setLoading(false);
@@ -101,27 +148,7 @@ export default function RegisterPage() {
     }
 
     setVerificationToken(verifyRes.verificationToken);
-
-    setLoading(true);
-    const regRes = await apiRegisterUser({
-      email,
-      password,
-      name,
-      phone,
-      accountType,
-      verificationToken: verifyRes.verificationToken,
-    });
-    setLoading(false);
-
-    if (!regRes.success || !regRes.data?.user) {
-      setError(regRes.error || "Inscription refusée.");
-      return;
-    }
-
-    // Créer la session dans le store (compte réellement persisté en Supabase)
-    loginUser(regRes.data.user);
-    setSuccess("Compte créé avec succès ! Redirection vers votre espace membre...");
-    setTimeout(() => router.push("/member"), 1500);
+    await submitRegistration(verifyRes.verificationToken);
   };
 
   return (

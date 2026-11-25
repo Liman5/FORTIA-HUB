@@ -23,7 +23,13 @@ import { enforceRateLimit } from "@/lib/server/rateLimits";
 import { isAdminEmailAllowlisted } from "@/lib/server/requireAdmin";
 import { requestAccountDeletion } from "@/lib/modules/admin/platformDeletion";
 import { AppError, requestIdOf, toErrorResponse, withApiRoute } from "@/lib/server/errors";
-import { issueEmailOtp, verifyEmailOtp, verifyEmailVerificationToken } from "@/lib/services/emailVerification";
+import {
+  isEmailVerificationRequired,
+  issueEmailOtp,
+  verifyEmailOtp,
+  verifyEmailVerificationToken,
+} from "@/lib/services/emailVerification";
+import { logger } from "@/lib/server/logger";
 import { authActionSchema } from "@/lib/validation";
 import { parseOrThrow } from "@/lib/validation/common";
 import bcrypt from "bcryptjs";
@@ -188,6 +194,10 @@ async function handlePost(request: NextRequest) {
     // n'est JAMAIS renvoyé dans la réponse. Tout code envoyé par le navigateur
     // est ignoré. Le hash salé est stocké dans platformConfig (10 min, 5 essais).
     if (body.action === "send-otp") {
+      // Mode test : vérification désactivée (EMAIL_VERIFICATION_MODE=off sans RESEND_API_KEY).
+      if (!isEmailVerificationRequired()) {
+        return NextResponse.json({ success: true, verificationDisabled: true });
+      }
       const { email } = body;
       const formatResult = validateEmailFormat(email);
       if (!formatResult.isValid) {
@@ -243,6 +253,9 @@ async function handlePost(request: NextRequest) {
     // Vérification à temps constant côté serveur. Message générique : on ne
     // distingue jamais « code inconnu », « expiré » ou « trop d'essais ».
     if (body.action === "verify-otp") {
+      if (!isEmailVerificationRequired()) {
+        return NextResponse.json({ success: true, verificationDisabled: true });
+      }
       const { email, otp } = body;
       if (!email || !otp) {
         return NextResponse.json(
@@ -314,19 +327,29 @@ async function handlePost(request: NextRequest) {
 
       // ⚠️ SÉCURITÉ : l'inscription exige un jeton signé prouvant que le code
       // reçu par e-mail a bien été validé pour CETTE adresse (30 min max).
-      const verificationToken =
-        typeof (body as { verificationToken?: unknown }).verificationToken === "string"
-          ? String((body as { verificationToken?: unknown }).verificationToken)
-          : "";
-      const verifiedEmail = await verifyEmailVerificationToken(verificationToken, normalizedEmail);
-      if (!verifiedEmail) {
-        return NextResponse.json(
-          {
-            error:
-              "Refusé : l'adresse e-mail n'a pas été vérifiée. Validez le code reçu par e-mail avant de créer le compte.",
-          },
-          { status: 400 }
-        );
+      // Interrupteur TEMPORAIRE de phase de test : si la vérification par
+      // e-mail est désactivée (EMAIL_VERIFICATION_MODE=off sans RESEND_API_KEY),
+      // le jeton n'est pas exigé — comportement journalisé à chaque inscription.
+      if (isEmailVerificationRequired()) {
+        const verificationToken =
+          typeof (body as { verificationToken?: unknown }).verificationToken === "string"
+            ? String((body as { verificationToken?: unknown }).verificationToken)
+            : "";
+        const verifiedEmail = await verifyEmailVerificationToken(verificationToken, normalizedEmail);
+        if (!verifiedEmail) {
+          return NextResponse.json(
+            {
+              error:
+                "Refusé : l'adresse e-mail n'a pas été vérifiée. Validez le code reçu par e-mail avant de créer le compte.",
+            },
+            { status: 400 }
+          );
+        }
+      } else {
+        logger.warn("email_verification_disabled", {
+          email: normalizedEmail,
+          reason: "EMAIL_VERIFICATION_MODE=off et RESEND_API_KEY absente",
+        });
       }
 
       // ⚠️ SÉCURITÉ : une adresse réservée à l'administration ne peut pas être

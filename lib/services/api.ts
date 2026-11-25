@@ -17,6 +17,26 @@ export interface OtpVerifyResponse {
   verificationToken?: string;
 }
 
+/**
+ * Configuration publique du parcours d'authentification.
+ * Sert uniquement à savoir si la vérification d'e-mail est exigée
+ * (interrupteur temporaire de phase de test).
+ */
+export async function apiGetAuthConfig(): Promise<{ emailVerificationRequired: boolean }> {
+  try {
+    const response = await fetch("/api/auth/config", { cache: "no-store" });
+    if (!response.ok) throw new Error("config indisponible");
+    const data = await response.json();
+    if (typeof data?.emailVerificationRequired === "boolean") {
+      return { emailVerificationRequired: data.emailVerificationRequired };
+    }
+    return { emailVerificationRequired: true };
+  } catch {
+    // Échec réseau/serveur : on conserve le comportement sûr (vérification exigée).
+    return { emailVerificationRequired: true };
+  }
+}
+
 /** Réponse de login : peut exiger une étape 2FA avant de créer la session. */
 export interface LoginResult {
   user?: Partial<UserProfile>;

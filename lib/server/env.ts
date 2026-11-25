@@ -40,6 +40,12 @@ const envSchema = z.object({
 
   RESEND_API_KEY: optionalSecret,
   SENDER_EMAIL: optionalSecret,
+  /**
+   * Interrupteur TEMPORAIRE de la vérification d'adresse e-mail.
+   * "required" (défaut) ou "off" — ignoré si RESEND_API_KEY est configurée.
+   * Voir lib/services/emailVerification.ts (isEmailVerificationRequired).
+   */
+  EMAIL_VERIFICATION_MODE: optionalSecret,
   CRON_SECRET: optionalSecret,
   ADMIN_EMAILS: optionalSecret,
   GEMINI_API_KEY: optionalSecret,
