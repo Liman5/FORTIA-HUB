@@ -123,27 +123,6 @@ function generateOtpEmailHtml(otpCode: string, recipientEmail: string) {
   `;
 }
 
-// GET /api/auth/users - list registered users (Supabase / Prisma)
-export async function GET() {
-  try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        phone: true,
-        accountType: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    return NextResponse.json({ count: users.length, users });
-  } catch (err: any) {
-    console.warn("[AUTH] Base inaccessible pour la liste des utilisateurs:", err?.message);
-    return NextResponse.json({ count: 0, users: [] });
-  }
-}
-
 // POST /api/auth - unified auth endpoint (action-based routing)
 async function handlePost(request: NextRequest) {
   try {
