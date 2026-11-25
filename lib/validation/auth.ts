@@ -3,7 +3,7 @@ import { emailSchema, phoneSchema, shortText } from "./common";
 
 const strongPassword = z
   .string()
-  .min(6, "Au moins 6 caractères.")
+  .min(10, "Au moins 10 caractères.")
   .max(72, "72 caractères maximum.")
   .regex(/[A-Z]/, "Une majuscule est requise.")
   .regex(/[0-9]/, "Un chiffre est requis.")

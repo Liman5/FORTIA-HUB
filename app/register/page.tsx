@@ -219,7 +219,7 @@ export default function RegisterPage() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min 6 caractères, 1 majuscule, 1 chiffre, 1 symbole"
+                    placeholder="Min 10 caractères, 1 majuscule, 1 chiffre, 1 symbole"
                     className="w-full bg-[#021231] border border-slate-700 text-xs rounded-xl p-3 pl-10 pr-10 text-white focus:outline-none focus:border-[#D69E25]"
                   />
                   <button

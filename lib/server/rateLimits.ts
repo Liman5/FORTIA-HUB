@@ -28,6 +28,8 @@ export const RATE_LIMITS = {
   adminLoginEmail: { limit: 5, windowMs: 15 * 60_000 },
   /** Assistant IA : 10 requêtes / minute (par utilisateur connecté ou par IP). */
   aiAssistant: { limit: 10, windowMs: 60_000 },
+  /** Connexion : 10 tentatives / 15 minutes par adresse ciblée (anti-bourrage distribué). */
+  authLoginEmail: { limit: 10, windowMs: 15 * 60_000 },
   checkout: { limit: 20, windowMs: 60_000 },
   paymentCancel: { limit: 20, windowMs: 60_000 },
   refund: { limit: 10, windowMs: 60_000 },
